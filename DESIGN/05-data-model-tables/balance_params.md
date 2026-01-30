@@ -49,3 +49,4 @@ WHERE :is_admin = true;
 
 ## 비고
 - 밸런싱 파라미터.
+- balance_epoch 키로 버전 관리, 변경 시 클라이언트 재로드.

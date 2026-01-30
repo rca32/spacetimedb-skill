@@ -62,8 +62,9 @@
 
 ## 거래/경제
 - TradeSessionState: 직접 거래 세션과 잠금.
-- AuctionListingState: 매수/매도 주문 상태.
-- ClosedListingState: 체결/환불 기록.
+- market_order: 매수/매도 주문 상태(기준 용어).
+- order_fill: 체결/환불 기록(기준 용어).
+- AuctionListingState/ClosedListingState는 과거 별칭으로만 유지.
 - TradeOrderState: 바터 스톨 주문 상태.
 
 ## 클레임/엠파이어
@@ -71,3 +72,4 @@
 - ClaimTechState: 클레임 기술/제한치.
 - EmpireNodeState: 엠파이어 영향력 노드.
 - SiegeState: 공성 진행 상태.
+- v0 범위: 엠파이어 전용 테이블은 미도입, 길드/클레임 조합으로 표현.

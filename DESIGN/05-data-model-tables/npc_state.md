@@ -71,3 +71,4 @@ WHERE :is_admin = true;
 
 ## 비고
 - 행동/쿨다운은 공개 범위 제한 가능.
+- npc_id는 entity_core.entity_id와 동일하게 사용.

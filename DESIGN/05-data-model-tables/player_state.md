@@ -14,8 +14,8 @@
 - PublicView: entity_id, region_id, level
 - PartyView: entity_id, region_id, level, last_login
 - GuildView: entity_id, region_id, level
-- SelfView: entity_id, identity, region_id, level, last_login
-- AdminView: entity_id, identity, region_id, level, last_login
+- SelfView: entity_id, identity, region_id, level, last_login, is_bot
+- AdminView: entity_id, identity, region_id, level, last_login, is_bot
 
 ## 필드 마스킹 규칙
 - MASK.ID_HASH for identity (Public/Party/Guild).
@@ -31,6 +31,7 @@ pub struct PlayerState {
   pub region_id: u64,
   pub level: u32,
   pub last_login: u64,
+  pub is_bot: bool,
 }
 ```
 
@@ -55,13 +56,13 @@ WHERE EXISTS (SELECT 1 FROM guild_member gm WHERE gm.entity_id = player_state.en
 
 -- SelfView
 CREATE VIEW player_state_selfview AS
-SELECT entity_id, identity, region_id, level, last_login
+SELECT entity_id, identity, region_id, level, last_login, is_bot
 FROM player_state
 WHERE identity = :viewer_identity;
 
 -- AdminView
 CREATE VIEW player_state_adminview AS
-SELECT entity_id, identity, region_id, level, last_login
+SELECT entity_id, identity, region_id, level, last_login, is_bot
 FROM player_state
 WHERE :is_admin = true;
 ```
@@ -71,3 +72,4 @@ WHERE :is_admin = true;
 
 ## 비고
 - 필드 레벨 뷰 분리 권장.
+- is_bot은 Self/Admin에서만 확인.

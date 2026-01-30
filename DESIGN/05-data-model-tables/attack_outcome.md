@@ -71,3 +71,4 @@ WHERE :is_admin = true;
 
 ## 비고
 - 데미지 로그는 요약/지연 전송.
+- 보관: 원본 7일 유지 후 combat_metric으로 집계/요약.

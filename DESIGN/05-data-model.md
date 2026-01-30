@@ -49,7 +49,7 @@
 
 | Table | Access | PK | 주요 컬럼 | 인덱스/비고 |
 |---|---|---|---|---|
-| player_state | public/RLS | entity_id | identity, region_id, level, last_login | identity, region_id |
+| player_state | public/RLS | entity_id | identity, region_id, level, last_login, is_bot | identity, region_id |
 | character_stats | private/RLS | entity_id | stats_blob, derived_stats | entity_id |
 | resource_state | public/RLS | entity_id | hp, stamina, satiation, regen_ts | entity_id |
 | action_state | public/RLS | entity_id | action_type, progress, cooldown_ts | action_type |
@@ -65,13 +65,13 @@
 |---|---|---|---|---|
 | region_state | public | region_id | name, status, shard_load | status |
 | instance_state | public | instance_id | type, region_id, ttl | region_id |
-| entity_core | public | entity_id | entity_type, region_id, instance_id | entity_type, region_id |
+| entity_core | public | entity_id | entity_type, region_id, instance_id, visibility | entity_type, region_id |
 | transform_state | public | entity_id | position, rotation | (region_id, position) btree |
 | terrain_chunk | public | (region_id, chunk_x, chunk_y) | biome_id, seed | (region_id, chunk_x, chunk_y) |
 | resource_node | public | entity_id | resource_type, amount, respawn_ts | resource_type |
 | building_state | public | entity_id | owner_id, durability, state | owner_id |
 | claim_state | public | claim_id | owner_id, region_id, tier | owner_id, region_id |
-| permission_state | private/RLS | (target_id, subject_id) | flags | target_id |
+| permission_state | private/RLS | (target_id, subject_type, subject_id) | flags | target_id |
 
 **관심영역**: region/instance 기준 구독 필터 필수.
 
@@ -289,6 +289,8 @@
 - 채팅/LLM 로그: 기본 90일, 요약 후 장기 보관.
 - 거래/경제 로그: 180일, 핵심 지표는 영구 보관.
 - 감사 로그: 최소 1년 보관.
+- 전투 로그(attack_outcome): 7일 보관 후 combat_metric으로 요약.
+- 위협 상태(threat_state): 전투 종료 시 즉시 삭제 + 미접촉 30초 TTL.
 
 ## DESIGN 문서 연계
 - 밸런싱: `balance_params`, `resource_state`, `combat_metric`.

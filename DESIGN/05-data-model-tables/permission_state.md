@@ -1,11 +1,11 @@
 # permission_state
 
 - Access: private/RLS
-- Primary Key: (target_id, subject_id)
+- Primary Key: (target_id, subject_type, subject_id)
 
 ## RLS 규칙
-- 기본: 소유자/대상자만 조회.
-- 파티 예외: 클레임/길드 권한 플래그가 있을 때만 조회.
+- 기본: 대상 소유자 또는 subject에 해당하는 본인/그룹만 조회.
+- 파티 예외: 파티 권한 플래그가 있을 때만 조회.
 - 길드 예외: Officer 이상 권한 보유 시 조회.
 - 운영자/GM 예외: 운영자 전체 조회 가능.
 
@@ -14,8 +14,8 @@
 - PublicView: (none)
 - PartyView: (none)
 - GuildView: (none)
-- SelfView: target_id, subject_id, flags
-- AdminView: target_id, subject_id, flags
+- SelfView: target_id, subject_type, subject_id, flags
+- AdminView: target_id, subject_type, subject_id, flags
 
 ## 비트별 허용 액션 매핑
 | Flag | Bit | 허용 액션 | 예시 |
@@ -35,6 +35,8 @@ pub struct PermissionState {
   #[primary_key]
   pub target_id: u64,
   #[primary_key]
+  pub subject_type: u8,
+  #[primary_key]
   pub subject_id: u64,
   pub flags: u64,
 }
@@ -49,13 +51,15 @@ pub struct PermissionState {
 
 -- SelfView
 CREATE VIEW permission_state_selfview AS
-SELECT target_id, subject_id, flags
+SELECT target_id, subject_type, subject_id, flags
 FROM permission_state
-WHERE subject_id = :viewer_entity_id;
+WHERE (subject_type = 1 AND subject_id = :viewer_entity_id)
+  OR (subject_type = 2 AND subject_id IN (SELECT party_id FROM party_member WHERE entity_id = :viewer_entity_id))
+  OR (subject_type = 3 AND subject_id IN (SELECT guild_id FROM guild_member WHERE entity_id = :viewer_entity_id));
 
 -- AdminView
 CREATE VIEW permission_state_adminview AS
-SELECT target_id, subject_id, flags
+SELECT target_id, subject_type, subject_id, flags
 FROM permission_state
 WHERE :is_admin = true;
 ```
@@ -65,3 +69,4 @@ WHERE :is_admin = true;
 
 ## 비고
 - RLS에서 role/flag 조합 평가.
+- subject_type: 1=Player, 2=Party, 3=Guild, 4=Empire, 5=Public.
