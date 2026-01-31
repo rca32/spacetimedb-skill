@@ -1,0 +1,252 @@
+project:
+  name: Cozy MMO Game
+  description: MVP cozy survival/crafting MMO with AI NPCs using SpacetimeDB
+  created: 2026-01-31T00:00:00Z
+  fire_version: 0.1.8
+workspace:
+  type: greenfield
+  structure: monolith
+  autonomy_bias: balanced
+  run_scope_preference: wide
+  run_scope_history:
+    - choice: wide
+      items_count: 6
+      timestamp: 2026-01-31T05:30:00Z
+intents:
+  - id: cozy-mmo-game
+    title: Build MVP cozy survival MMO with AI NPCs
+    status: in_progress
+    work_items:
+      - id: setup-project-structure
+        title: Setup Project Structure
+        status: completed
+        complexity: low
+        mode: autopilot
+        depends_on: []
+        run_id: run-001
+        completed_at: 2026-01-30T18:22:12.008Z
+      - id: core-data-models
+        title: Core Data Models
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - setup-project-structure
+        run_id: run-001
+        completed_at: 2026-01-30T18:22:12.008Z
+      - id: authentication-system
+        title: Authentication System
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - core-data-models
+        run_id: run-001
+        completed_at: 2026-01-30T18:22:12.008Z
+      - id: player-movement-system
+        title: Player Movement System
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - authentication-system
+        run_id: run-001
+        completed_at: 2026-01-30T18:22:12.008Z
+      - id: inventory-system
+        title: Inventory System
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - core-data-models
+        run_id: run-001
+        completed_at: 2026-01-30T18:22:12.008Z
+      - id: crafting-system
+        title: Crafting System
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - inventory-system
+        run_id: run-001
+        completed_at: 2026-01-30T18:22:12.008Z
+      - id: npc-core-system
+        title: NPC Core System
+        status: completed
+        complexity: low
+        mode: autopilot
+        depends_on:
+          - core-data-models
+        run_id: run-001
+        completed_at: 2026-01-30T18:22:12.008Z
+      - id: npc-conversation-system
+        title: NPC Conversation System
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - npc-core-system
+          - player-movement-system
+        run_id: run-001
+        completed_at: 2026-01-30T18:22:12.008Z
+      - id: web-client-foundation
+        title: Web Client Foundation
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - setup-project-structure
+        run_id: run-001
+        completed_at: 2026-01-30T18:22:12.008Z
+      - id: integration-testing
+        title: Integration and Testing
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - web-client-foundation
+          - authentication-system
+          - player-movement-system
+          - inventory-system
+          - crafting-system
+          - npc-conversation-system
+        run_id: run-001
+        completed_at: 2026-01-30T18:22:12.008Z
+  - id: fix-server-build-errors
+    title: Fix Server Build Compilation Errors
+    status: completed
+    work_items:
+      - id: fix-server-build-errors-main
+        title: Fix All Server Build Errors
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on: []
+        run_id: run-002
+        completed_at: 2026-01-31T02:46:00.518Z
+  - id: spacetime-dev-guide
+    title: Create SpacetimeDB Korean Educational Guide
+    status: completed
+    work_items:
+      - id: intro-project-overview
+        title: 01. Introduction and Project Overview
+        status: completed
+        complexity: low
+        mode: autopilot
+        depends_on: []
+        run_id: run-003
+        completed_at: 2026-01-31T08:00:20.512Z
+      - id: dev-environment-setup
+        title: 02. Development Environment Setup
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - intro-project-overview
+        run_id: run-003
+        completed_at: 2026-01-31T08:00:20.512Z
+      - id: core-concepts-tables-reducers
+        title: 03. Core Concepts - Tables and Reducers
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - dev-environment-setup
+        run_id: run-003
+        completed_at: 2026-01-31T08:00:20.512Z
+      - id: authentication-movement-guide
+        title: 04. Authentication and Player Movement System
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - core-concepts-tables-reducers
+        run_id: run-003
+        completed_at: 2026-01-31T08:00:20.512Z
+      - id: inventory-crafting-guide
+        title: 05. Inventory and Crafting System
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - authentication-movement-guide
+        run_id: run-003
+        completed_at: 2026-01-31T08:00:20.512Z
+      - id: npc-client-integration-guide
+        title: 06. NPC, AI, Web Client and Deployment
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - inventory-crafting-guide
+        run_id: run-003
+        completed_at: 2026-01-31T08:00:20.512Z
+runs:
+  active: []
+  completed:
+    - id: run-001
+      scope: wide
+      work_items:
+        - id: setup-project-structure
+          intent: cozy-mmo-game
+          mode: autopilot
+        - id: core-data-models
+          intent: cozy-mmo-game
+          mode: confirm
+        - id: authentication-system
+          intent: cozy-mmo-game
+          mode: confirm
+        - id: player-movement-system
+          intent: cozy-mmo-game
+          mode: confirm
+        - id: inventory-system
+          intent: cozy-mmo-game
+          mode: confirm
+        - id: crafting-system
+          intent: cozy-mmo-game
+          mode: confirm
+        - id: npc-core-system
+          intent: cozy-mmo-game
+          mode: autopilot
+        - id: npc-conversation-system
+          intent: cozy-mmo-game
+          mode: validate
+        - id: web-client-foundation
+          intent: cozy-mmo-game
+          mode: confirm
+        - id: integration-testing
+          intent: cozy-mmo-game
+          mode: confirm
+      started: 2026-01-30T18:08:28.261Z
+      completed: 2026-01-30T18:22:12.008Z
+    - id: run-002
+      scope: wide
+      work_items:
+        - id: fix-server-build-errors-main
+          intent: fix-server-build-errors
+          mode: validate
+      started: 2026-01-31T01:52:03.080Z
+      completed: 2026-01-31T02:46:00.518Z
+    - id: run-003
+      scope: wide
+      work_items:
+        - id: intro-project-overview
+          intent: spacetime-dev-guide
+          mode: autopilot
+        - id: dev-environment-setup
+          intent: spacetime-dev-guide
+          mode: confirm
+        - id: core-concepts-tables-reducers
+          intent: spacetime-dev-guide
+          mode: confirm
+        - id: authentication-movement-guide
+          intent: spacetime-dev-guide
+          mode: confirm
+        - id: inventory-crafting-guide
+          intent: spacetime-dev-guide
+          mode: confirm
+        - id: npc-client-integration-guide
+          intent: spacetime-dev-guide
+          mode: validate
+      started: 2026-01-31T07:29:22.675Z
+      completed: 2026-01-31T08:00:20.512Z

@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""Fix update calls to remove the key argument."""
+
+import re
+
+
+def fix_update_calls(content):
+    """Fix update calls that have 2 arguments to have only 1."""
+    # Pattern: .update(\n                &key_var,\n                RowType {
+    # Should be: .update(\n                RowType {
+
+    # Match .update( followed by &something, followed by StructName {
+    pattern = r"(\.update\(\s*\n\s*)&\w+,\s*\n\s*(\w+\s*\{)"
+    replacement = r"\1\2"
+    content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
+
+    return content
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) != 2:
+        print("Usage: python fix_update_calls.py <file>")
+        sys.exit(1)
+
+    filepath = sys.argv[1]
+
+    with open(filepath, "r") as f:
+        content = f.read()
+
+    fixed_content = fix_update_calls(content)
+
+    with open(filepath, "w") as f:
+        f.write(fixed_content)
+
+    print(f"Fixed update calls in {filepath}")

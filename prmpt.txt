@@ -1,0 +1,105 @@
+아래 BitCraft 의 환경 생성 분석을 상세하게 찾조 하고
+BitCraftPublic/BitCraftServer 의 구현 소스 알고리즘을을 세밀하게 살펴서
+DESIGN/DETAIL 폴더 밑에 Stitch(가칭) 게임의 세계 구축의 상세 구현 설계를 해줘
+
+BitCraftPublicDoc/5-hex-grid-coordinate-system.md
+BitCraftPublicDoc/6-world-generator-architecture.md
+BitCraftPublicDoc/7-noise-based-terrain-elevation.md
+BitCraftPublicDoc/8-biome-and-resource-distribution.md
+BitCraftPublicDoc/9-resource-deposit-generation.md
+
+
+========
+
+
+BitCraftPublic 문서에 있는 Agent Architecture 를 상세하게 분석하고
+BitCraftServer 의 구현 소스 알고리즘을을 세밀하게 살펴서
+
+DESIGN/DETAIL 폴더 밑에 Stitch(가칭) 게임의 시스템에도 가능하게 하고 싶어
+필요하다면 table의 변경이나 추가 도 가능해 상세 구현 설계를 해줘
+
+
+
+========
+
+
+BitCraftPublic 문서에 있는 player 관련기능들을 상세하게 분석하고
+BitCraftServer 의 구현 소스 알고리즘을을 세밀하게 살펴서
+
+DESIGN/DETAIL 폴더 밑에 Stitch(가칭) 게임의 시스템에도 가능하게 하고 싶어
+필요하다면 table의 변경이나 추가 도 가능해 상세 구현 설계를 해줘
+
+BitCraftPublicDoc/11-player-regeneration-and-stamina-systems.md
+BitCraftPublicDoc/15-player-state-management.md  등등
+
+
+========
+
+
+BitCraftPublic 문서에 있는 building system 를 상세하게 분석하고
+BitCraftServer 의 구현 소스 알고리즘을을 세밀하게 살펴서
+
+DESIGN/DETAIL 폴더 밑에 Stitch(가칭) 게임의 시스템에도 가능하게 하고 싶어
+필요하다면 table의 변경이나 추가 도 가능해 상세 구현 설계를 해줘
+
+
+========
+
+
+BitCraftPublic 문서에 있는 building system 를 상세하게 분석하고
+BitCraftServer 의 구현 소스 알고리즘을을 세밀하게 살펴서
+
+DESIGN/DETAIL 폴더 밑에 Stitch(가칭) 게임의 시스템에도 가능하게 하고 싶어
+필요하다면 table의 변경이나 추가 도 가능해 상세 구현 설계를 해줘
+
+
+========
+
+
+BitCraftPublic 문서에 있는 environment-debuffs-and-status-effects system 를 상세하게 분석하고
+BitCraftServer 의 구현 소스 알고리즘을을 세밀하게 살펴서
+
+DESIGN/DETAIL 폴더 밑에 Stitch(가칭) 게임의 시스템에도 가능하게 하고 싶어
+필요하다면 table의 변경이나 추가 도 가능해 상세 구현 설계를 해줘
+
+BitCraftPublicDoc/14-environment-debuffs-and-status-effects.md
+
+========
+
+
+BitCraftPublic 문서에 있는
+BitCraftPublicDoc/17-inventory-and-item-stacks.md
+BitCraftPublicDoc/18-combat-and-enemy-state.md
+BitCraftPublicDoc/19-trade-and-auction-systems.md
+BitCraftPublicDoc/29-housing-and-interior-systems.md
+BitCraftPublicDoc/23-claim-and-empire-management.md
+BitCraftPublicDoc/25-combat-and-pvp-systems.md
+ 를 상세하게 분석하고
+BitCraftServer 의 구현 소스 알고리즘을을 세밀하게 살펴서
+
+DESIGN,DESIGN/DETAIL 폴더 밑에 Stitch(가칭) 게임의 시스템에도 가능하게 하고 싶어
+필요하다면 table의 변경이나 추가 도 가능해 상세 구현 설계를 해줘
+
+
+ ========
+
+
+BitCraftPublic 문서에 있는
+BitCraftPublicDoc/26-pathfinding-algorithm.md
+BitCraftPublicDoc/27-permission-and-access-control.md
+BitCraftPublicDoc/28-quest-and-achievement-system.md
+BitCraftPublicDoc/29-housing-and-interior-systems.md
+ 를 상세하게 분석하고
+BitCraftServer 의 구현 소스 알고리즘을을 세밀하게 살펴서
+
+DESIGN,DESIGN/DETAIL 폴더 밑에 Stitch(가칭) 게임의 시스템에도 가능하게 하고 싶어
+필요하다면 table의 변경이나 추가 도 가능해 상세 구현 설계를 해줘
+
+
+  ========
+
+
+BitCraftPublic  상세하게 분석해서
+DESIGN 에서 디자인한 게임을
+DESIGN/DETAIL 폴더 밑에 Stitch(가칭) 게임의 시스템을 상세 설계를 했는데
+부족하거나 빠진 부분이 있으면 찾아서 추가 해죠
