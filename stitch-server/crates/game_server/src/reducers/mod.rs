@@ -1,0 +1,15 @@
+pub mod admin;
+pub mod auth;
+pub mod building;
+pub mod claim;
+pub mod combat;
+pub mod empire;
+pub mod housing;
+pub mod inventory;
+pub mod npc;
+pub mod permission;
+pub mod player;
+pub mod quest;
+pub mod skill;
+pub mod trade;
+pub mod worldgen;
