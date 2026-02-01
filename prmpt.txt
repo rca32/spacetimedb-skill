@@ -103,3 +103,100 @@ BitCraftPublic  상세하게 분석해서
 DESIGN 에서 디자인한 게임을
 DESIGN/DETAIL 폴더 밑에 Stitch(가칭) 게임의 시스템을 상세 설계를 했는데
 부족하거나 빠진 부분이 있으면 찾아서 추가 해죠
+
+
+========
+현재 MVP 게임을 만들었어 테스트를 했는데 이걸
+DESIGN/DETAIL 밑에 상세 설계를 했어 이걸 실제 게임으로 만들고 싶어
+서버 부터 만들고 싶어
+
+======== 
+
+DESIGN/DETAIL 밑에 상세 계획으로 만들어진 소스가 stitch-server 인데 
+stitch-server/crates/game_server/src/agents/auto_logout_agent.rs
+stitch-server/crates/game_server/src/agents/building_decay_agent.rs 처럼
+DESIGN/DETAIL/stitch-server-folder-structure.md 에 계획만 세워서 파일만 생성되고 실제로 구현 안된게 많아..
+실제 구현이 되지 않은 파일 목록을 작성하고, 상세 구현 계획을 세워 보자
+
+
+stitch-server/crates/game_server/src/reducers/trade/auction_cancel.rs
+stitch-server/crates/data_loader/src/csv_loader.rs
+stitch-server/crates/data_loader/src/json_loader.rs
+
+======== 
+publish 된 stitch-server를   
+reducer 나 sql,subscribe 등등  spacetime Commands로 직접 실행 해서 AI가 게임의 구현 및 현재 상태 들을 점검하고 테스트 하게 할려고 해
+
+1.필요한 sql 과 reducer, 문서화를 해야 할것 같아
+stitch-server/docs 밑에 작성해줘 
+
+DESIGN/DETAIL/stitch-server-folder-structure.md 폴더 구조가 기록되어 있고
+DESIGN/DETAIL 밑에는 필요한 상세 개념들이 들어가 있어
+
+
+Commands:
+  publish    Create and update a SpacetimeDB database
+  delete     Deletes a SpacetimeDB database
+  logs       Prints logs from a SpacetimeDB database
+  call       Invokes a function (reducer or procedure) in a database. WARNING: This command is UNSTABLE and subject to breaking changes.
+  describe   Describe the structure of a database or entities within it. WARNING: This command is UNSTABLE and subject to breaking changes.
+  dev        Start development mode with auto-regenerate client module bindings, auto-rebuild, and auto-publish on file changes.
+  energy     Invokes commands related to database budgets. WARNING: This command is UNSTABLE and subject to breaking changes.
+  sql        Runs a SQL query on the database. WARNING: This command is UNSTABLE and subject to breaking changes.
+  rename     Rename a database
+  generate   Generate client files for a spacetime module.
+  list       Lists the databases attached to an identity. WARNING: This command is UNSTABLE and subject to breaking changes.
+  login      Manage your login to the SpacetimeDB CLI
+  logout
+  init       Initializes a new spacetime project. WARNING: This command is UNSTABLE and subject to breaking changes.
+  build      Builds a spacetime module.
+  server     Manage the connection to the SpacetimeDB server. WARNING: This command is UNSTABLE and subject to breaking changes.
+  subscribe  Subscribe to SQL queries on the database. WARNING: This command is UNSTABLE and subject to breaking changes.
+  start      Start a local SpacetimeDB instance
+  version    Manage installed spacetime versions
+  help       Print this message or the help of the given subcommand(s)
+  
+spacetime call --help
+Invokes a function (reducer or procedure) in a database. WARNING: This command is UNSTABLE and subject to breaking changes.
+
+Usage: spacetime call [OPTIONS] <database> <function_name> [arguments]...
+
+Arguments:
+  <database>       The database name or identity to use to invoke the call
+  <function_name>  The name of the function to call
+  [arguments]...   arguments formatted as JSON
+
+Options:
+  -s, --server <server>  The nickname, host name or URL of the server hosting the database
+      --anonymous        Perform this action with an anonymous identity
+  -y, --yes              Run non-interactively wherever possible. This will answer "yes" to almost all prompts, but will sometimes answer
+                         "no" to preserve non-interactivity (e.g. when prompting whether to log in with spacetimedb.com).
+  -h, --help             Print help
+  
+rca32:~$ spacetime sql --help
+Runs a SQL query on the database. WARNING: This command is UNSTABLE and subject to breaking changes.
+
+Usage: spacetime sql [OPTIONS] <database> <query>
+
+Arguments:
+  <database>  The name or identity of the database you would like to query
+  <query>     The SQL query to execute
+
+Options:
+      --interactive      Instead of using a query, run an interactive command prompt for `SQL` expressions
+      --confirmed        Instruct the server to deliver only updates of confirmed transactions
+      --anonymous        Perform this action with an anonymous identity
+  -s, --server <server>  The nickname, host name or URL of the server hosting the database
+  -y, --yes              Run non-interactively wherever possible. This will answer "yes" to almost all prompts, but will sometimes answer
+                         "no" to preserve non-interactivity (e.g. when prompting whether to log in with spacetimedb.com).
+  -h, --help             Print help
+  
+  
+publish 된 stitch-server를   
+reducer 나 sql,subscribe 등등  spacetime Commands로 직접 실행 해서 AI가 게임의 구현 및 현재 상태 들을 점검하고 테스트 하게 할려고 해
+아래 문서를 스킬로 만들어죠
+stitch-server/docs/ai-testing/README.md
+stitch-server/docs/ai-testing/reducer-reference.md
+stitch-server/docs/ai-testing/sql-reference.md
+stitch-server/docs/ai-testing/subscription-guide.md
+stitch-server/docs/ai-testing/test-scenarios.md
