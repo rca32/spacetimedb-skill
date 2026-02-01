@@ -2,7 +2,6 @@ pub mod agents;
 pub mod auth;
 pub mod config;
 pub mod errors;
-pub mod init;
 pub mod module;
 pub mod reducers;
 pub mod services;

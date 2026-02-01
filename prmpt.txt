@@ -110,9 +110,9 @@ DESIGN/DETAIL 폴더 밑에 Stitch(가칭) 게임의 시스템을 상세 설계�
 DESIGN/DETAIL 밑에 상세 설계를 했어 이걸 실제 게임으로 만들고 싶어
 서버 부터 만들고 싶어
 
-======== 
+========
 
-DESIGN/DETAIL 밑에 상세 계획으로 만들어진 소스가 stitch-server 인데 
+DESIGN/DETAIL 밑에 상세 계획으로 만들어진 소스가 stitch-server 인데
 stitch-server/crates/game_server/src/agents/auto_logout_agent.rs
 stitch-server/crates/game_server/src/agents/building_decay_agent.rs 처럼
 DESIGN/DETAIL/stitch-server-folder-structure.md 에 계획만 세워서 파일만 생성되고 실제로 구현 안된게 많아..
@@ -123,12 +123,12 @@ stitch-server/crates/game_server/src/reducers/trade/auction_cancel.rs
 stitch-server/crates/data_loader/src/csv_loader.rs
 stitch-server/crates/data_loader/src/json_loader.rs
 
-======== 
-publish 된 stitch-server를   
+========
+publish 된 stitch-server를
 reducer 나 sql,subscribe 등등  spacetime Commands로 직접 실행 해서 AI가 게임의 구현 및 현재 상태 들을 점검하고 테스트 하게 할려고 해
 
 1.필요한 sql 과 reducer, 문서화를 해야 할것 같아
-stitch-server/docs 밑에 작성해줘 
+stitch-server/docs 밑에 작성해줘
 
 DESIGN/DETAIL/stitch-server-folder-structure.md 폴더 구조가 기록되어 있고
 DESIGN/DETAIL 밑에는 필요한 상세 개념들이 들어가 있어
@@ -155,7 +155,7 @@ Commands:
   start      Start a local SpacetimeDB instance
   version    Manage installed spacetime versions
   help       Print this message or the help of the given subcommand(s)
-  
+
 spacetime call --help
 Invokes a function (reducer or procedure) in a database. WARNING: This command is UNSTABLE and subject to breaking changes.
 
@@ -172,7 +172,7 @@ Options:
   -y, --yes              Run non-interactively wherever possible. This will answer "yes" to almost all prompts, but will sometimes answer
                          "no" to preserve non-interactivity (e.g. when prompting whether to log in with spacetimedb.com).
   -h, --help             Print help
-  
+
 rca32:~$ spacetime sql --help
 Runs a SQL query on the database. WARNING: This command is UNSTABLE and subject to breaking changes.
 
@@ -190,9 +190,9 @@ Options:
   -y, --yes              Run non-interactively wherever possible. This will answer "yes" to almost all prompts, but will sometimes answer
                          "no" to preserve non-interactivity (e.g. when prompting whether to log in with spacetimedb.com).
   -h, --help             Print help
-  
-  
-publish 된 stitch-server를   
+
+
+publish 된 stitch-server를
 reducer 나 sql,subscribe 등등  spacetime Commands로 직접 실행 해서 AI가 게임의 구현 및 현재 상태 들을 점검하고 테스트 하게 할려고 해
 아래 문서를 스킬로 만들어죠
 stitch-server/docs/ai-testing/README.md
@@ -200,3 +200,36 @@ stitch-server/docs/ai-testing/reducer-reference.md
 stitch-server/docs/ai-testing/sql-reference.md
 stitch-server/docs/ai-testing/subscription-guide.md
 stitch-server/docs/ai-testing/test-scenarios.md
+
+
+
+아래 내용을 .opencode/skills/stitch-server-ai-tester 스킬에 포함 시켜죠
+
+spacetime call에서 여러 개의 인자를 어떻게 전달하나요?
+
+
+기본 문법:
+
+spacetime call <database_name> <reducer_name> "\"arg1\"" "\"arg2\"" "\"arg3\""
+주의사항:
+
+문자열 인자 - 큰따옴표로 감싸고, 셸에서도 이스케이프 처리 필요:
+
+spacetime call mydb my_reducer "\"Alice\"" 25 "\"true\""
+숫자/불린 인자 - 따옴표 없이 입력:
+
+spacetime call mydb add_numbers 42 100
+문자열 자동 처리 - 따옴표로 감싸지 않은 문자열은 자동으로 따옴표 추가됩니다 (하지만 명시적으로 """" 쓰는 것이 권장됨)
+
+인자 순서 - Reducer 함수의 파라미터 순서대로 전달해야 합니다.
+
+실제 예시:
+
+# 두 개의 문자열 인자
+spacetime call chatdb send_message "\"Hello\"" "\"Alice\""
+
+# 문자열 + 숫자 인자
+spacetime call userdb set_age "\"Bob\"" 30
+
+# 여러 개의 인자
+spacetime call gamedb create_player "\"play

@@ -43,6 +43,39 @@ Invoke reducers to trigger actions. See [references/reducer-reference.md](refere
 - Pre-conditions and expected effects
 - Error handling patterns
 
+#### Multiple Arguments Syntax
+
+**Basic Syntax:**
+```bash
+spacetime call <database_name> <reducer_name> "\"arg1\"" "\"arg2\"" "\"arg3\""
+```
+
+**Important Notes:**
+
+- **String arguments**: Wrap in double quotes, escape for shell:
+  ```bash
+  spacetime call mydb my_reducer "\"Alice\"" 25 "\"true\""
+  ```
+- **Number/Boolean arguments**: No quotes needed:
+  ```bash
+  spacetime call mydb add_numbers 42 100
+  ```
+- **String auto-handling**: Unquoted strings get quotes auto-added, but explicit `""""` is recommended
+- **Argument order**: Must match reducer function parameter order
+
+**Examples:**
+
+```bash
+# Two string arguments
+spacetime call chatdb send_message "\"Hello\"" "\"Alice\""
+
+# String + number argument
+spacetime call userdb set_age "\"Bob\"" 30
+
+# Multiple arguments
+spacetime call gamedb create_player "\"player1\"" "\"Human\"" 100
+```
+
 ### spacetime subscribe
 Monitor real-time changes. See [references/subscription-guide.md](references/subscription-guide.md) for:
 - Subscription patterns by domain

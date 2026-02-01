@@ -118,3 +118,132 @@ pub fn roll_item_list(ctx: &ReducerContext, item_list_id: u64) -> Result<ItemLis
         .find(&item_list_id)
         .ok_or("Item list not found".to_string())
 }
+
+/// Add items to a container, handling partial stack merging
+/// This function tries to merge with existing stacks first, then fills empty slots
+/// Returns the quantity that was successfully added (may be partial if container is full)
+pub fn add_partial(
+    ctx: &ReducerContext,
+    container: &InventoryContainer,
+    item_def_id: u64,
+    quantity: i32,
+    durability: Option<i32>,
+    bound: bool,
+) -> Result<i32, String> {
+    if quantity <= 0 {
+        return Ok(0);
+    }
+
+    let item_def = find_item_def(ctx, item_def_id)?;
+
+    // Handle auto-collect items
+    if item_def.auto_collect {
+        return Ok(quantity);
+    }
+
+    let mut remaining = quantity;
+
+    // Phase 1: Try to merge with existing stacks of the same item
+    for mut slot in ctx
+        .db
+        .inventory_slot()
+        .container_id()
+        .filter(&container.container_id)
+    {
+        if remaining <= 0 {
+            break;
+        }
+
+        if slot.locked || slot.item_instance_id == 0 {
+            continue;
+        }
+
+        let instance = match find_item_instance(ctx, slot.item_instance_id) {
+            Ok(inst) => inst,
+            Err(_) => continue,
+        };
+
+        // Check if item matches (same def_id, type, durability, and bound status)
+        if instance.item_def_id != item_def.item_def_id
+            || instance.item_type != item_def.item_type
+            || instance.durability != durability
+            || instance.bound != bound
+        {
+            continue;
+        }
+
+        let stack = match find_item_stack(ctx, instance.item_instance_id) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        let pocket = pocket_volume(container, slot.slot_index);
+        let max_per_slot = max_stack_for_slot(&item_def, pocket);
+        let capacity = max_per_slot - stack.quantity;
+
+        if capacity <= 0 {
+            continue;
+        }
+
+        let to_add = remaining.min(capacity);
+        let new_qty = stack.quantity + to_add;
+
+        ctx.db.item_stack().item_instance_id().update(ItemStackRow {
+            item_instance_id: stack.item_instance_id,
+            quantity: new_qty,
+        });
+
+        update_slot_volume(&mut slot, &item_def, new_qty);
+        ctx.db.inventory_slot().slot_id().update(slot);
+
+        remaining -= to_add;
+    }
+
+    // Phase 2: Fill empty slots
+    for slot_index in 0..(container.slot_count as u32) {
+        if remaining <= 0 {
+            break;
+        }
+
+        let mut slot = ensure_slot(ctx, container, slot_index)?;
+        if slot.locked || slot.item_instance_id != 0 {
+            continue;
+        }
+
+        if slot_item_type(container, slot_index) != item_def.item_type {
+            continue;
+        }
+
+        let pocket = pocket_volume(container, slot_index);
+        let max_per_slot = max_stack_for_slot(&item_def, pocket);
+
+        if max_per_slot <= 0 {
+            continue;
+        }
+
+        let to_add = remaining.min(max_per_slot);
+        let instance_id = ctx.random();
+
+        ctx.db.item_instance().insert(ItemInstance {
+            item_instance_id: instance_id,
+            item_def_id: item_def.item_def_id,
+            item_type: item_def.item_type,
+            durability,
+            bound,
+        });
+
+        ctx.db.item_stack().insert(ItemStackRow {
+            item_instance_id: instance_id,
+            quantity: to_add,
+        });
+
+        slot.item_instance_id = instance_id;
+        update_slot_volume(&mut slot, &item_def, to_add);
+        ctx.db.inventory_slot().slot_id().update(slot);
+
+        remaining -= to_add;
+    }
+
+    // Return how many were actually added
+    Ok(quantity - remaining)
+}

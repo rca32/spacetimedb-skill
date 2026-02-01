@@ -5,6 +5,7 @@ pub mod claim;
 pub mod combat;
 pub mod empire;
 pub mod housing;
+pub mod init;
 pub mod inventory;
 pub mod npc;
 pub mod permission;
