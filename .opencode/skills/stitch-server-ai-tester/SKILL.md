@@ -109,12 +109,64 @@ See [references/test-scenarios.md](references/test-scenarios.md) for:
 | Economy | trade_session, auction_order, barter_order |
 | World | terrain_chunk, resource_node |
 
+## Testing Without Authentication
+
+### --anonymous Mode
+
+For testing reducer logic without authentication, use the `--anonymous` flag:
+
+```bash
+# Anonymous mode - bypasses RLS for testing
+spacetime call --anonymous <database_name> <reducer_name> <arg1> <arg2> ...
+```
+
+**When to use --anonymous mode:**
+
+1. **Testing reducer logic directly** - No pre-existing player entities needed
+2. **Testing RLS policies** - Verify access control mechanisms
+3. **Testing "chicken vs egg" scenarios** - Test reducers without prerequisite data
+4. **Unit testing reducers** - Isolate and test individual reducer logic
+
+**Examples:**
+
+```bash
+# Test claim placement without player authentication
+spacetime call --anonymous stitch-server claim_totem_place 1 1 "Test Claim" 100 200 1
+
+# Test claim expansion
+spacetime call --anonymous stitch-server claim_expand 1 101 201 1
+
+# Test permission edit with null claim_id
+spacetime call --anonymous stitch-server permission_edit_simple 1 2 0 5 null
+
+# Test empire rank setting with null permissions
+spacetime call --anonymous stitch-server empire_rank_set_simple 1 1 "Noble" null
+
+# Test empire rank setting with specific permissions
+spacetime call --anonymous stitch-server empire_rank_set_simple 1 1 "Noble" "true,false,true,false"
+```
+
+**Why --anonymous is needed:**
+
+- **RLS bypass**: SpacetimeDB's Row Level Security requires valid authentication for most operations
+- **No prerequisite data**: Can test reducers without creating player accounts first
+- **Faster testing**: No account creation/sign-in steps required
+- **Isolated testing**: Test reducer logic independently of auth flows
+
+### Testing Workflow with --anonymous
+
+1. **Test reducer logic** with --anonymous mode
+2. **Verify state changes** with SQL queries
+3. **Test RLS** by re-running with authenticated user
+4. **Integration test** with real authentication
+
 ## Common Pitfalls
 
 - **Identity format**: Use `"\u0001\u0002..."` for Identity types
 - **JSON arrays**: Wrap in single quotes: `'["arg1", "arg2"]'`
 - **Timestamps**: Use millisecond epoch (e.g., `1700000000000`)
 - **Private tables**: Cannot query directly from CLI
+- **Missing authentication**: Use --anonymous for reducer testing without auth
 
 ## Server Info
 

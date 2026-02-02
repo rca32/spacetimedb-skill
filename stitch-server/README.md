@@ -23,3 +23,6 @@ cargo test -p game_server --tests
 # Run the test pipeline script
 ./scripts/run_test_pipeline.sh
 ```
+
+cd /home/rca32/workspaces/spacetimedb-skill/stitch-server/crates/game_server
+spacetime publish stitch-server

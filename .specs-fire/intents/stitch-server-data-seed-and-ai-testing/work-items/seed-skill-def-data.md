@@ -3,9 +3,11 @@ id: seed-skill-def-data
 intent: stitch-server-data-seed-and-ai-testing
 complexity: low
 mode: autopilot
-status: pending
+status: completed
 depends_on: []
 created: 2026-02-01T22:05:00Z
+run_id: run-007
+completed_at: 2026-02-01T14:21:38.518Z
 ---
 
 # Work Item: Seed skill_def table with sample data

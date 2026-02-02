@@ -74,7 +74,7 @@ intents:
           - create-reducer-reference
   - id: stitch-server-critical-gaps-implementation
     title: Implement critical DESIGN gaps in stitch-server
-    status: in_progress
+    status: completed
     work_items:
       - id: add-player-state-creation
         title: Add player_state creation to auth flow
@@ -133,64 +133,80 @@ intents:
           - add-player-state-creation
   - id: stitch-server-data-seed-and-ai-testing
     title: Stitch server static data seeding with integrated AI testing
-    status: in_progress
+    status: completed
     work_items:
       - id: seed-food-def-data
         title: Seed food_def table with sample data
-        status: pending
+        status: completed
         complexity: low
         mode: autopilot
         depends_on: []
+        run_id: run-007
+        completed_at: 2026-02-01T14:21:38.518Z
       - id: seed-skill-def-data
         title: Seed skill_def table with sample data
-        status: pending
+        status: completed
         complexity: low
         mode: autopilot
         depends_on: []
+        run_id: run-007
+        completed_at: 2026-02-01T14:21:38.518Z
       - id: seed-item-def-data
         title: Seed item_def table with sample items
-        status: pending
+        status: completed
         complexity: low
         mode: autopilot
         depends_on: []
+        run_id: run-007
+        completed_at: 2026-02-01T14:21:38.518Z
       - id: add-inventory-creation-to-bootstrap
         title: Add inventory creation to account bootstrap
-        status: pending
+        status: completed
         complexity: medium
         mode: confirm
         depends_on: []
+        run_id: run-007
+        completed_at: 2026-02-01T14:21:38.518Z
       - id: ai-test-food-system
         title: AI test food system end-to-end
-        status: pending
+        status: completed
         complexity: medium
         mode: confirm
         depends_on:
           - seed-food-def-data
           - seed-item-def-data
           - add-inventory-creation-to-bootstrap
+        run_id: run-007
+        completed_at: 2026-02-01T14:21:38.518Z
       - id: ai-test-skill-system
         title: AI test skill system end-to-end
-        status: pending
+        status: completed
         complexity: medium
         mode: confirm
         depends_on:
           - seed-skill-def-data
+        run_id: run-007
+        completed_at: 2026-02-01T14:21:38.518Z
       - id: ai-test-movement-system
         title: AI test player movement system
-        status: pending
+        status: completed
         complexity: low
         mode: autopilot
         depends_on:
           - add-inventory-creation-to-bootstrap
+        run_id: run-007
+        completed_at: 2026-02-01T14:21:38.518Z
       - id: create-ai-testing-playbook
         title: Create AI testing playbook
-        status: pending
+        status: completed
         complexity: low
         mode: autopilot
         depends_on:
           - ai-test-food-system
           - ai-test-skill-system
           - ai-test-movement-system
+        run_id: run-007
+        completed_at: 2026-02-01T14:21:38.518Z
 runs:
   active:
     - id: run-006
@@ -211,7 +227,7 @@ runs:
         - id: implement-eat-reducer-food-system
           intent: stitch-server-critical-gaps-implementation
           mode: confirm
-          status: in_progress
+          status: completed
           current_phase: plan
         - id: implement-astar-pathfinding
           intent: stitch-server-critical-gaps-implementation
@@ -240,51 +256,6 @@ runs:
           current_phase: null
       current_item: implement-eat-reducer-food-system
       started: 2026-02-01T12:50:46.356Z
-    - id: run-007
-      scope: wide
-      work_items:
-        - id: seed-food-def-data
-          intent: stitch-server-data-seed-and-ai-testing
-          mode: autopilot
-          status: in_progress
-          current_phase: plan
-        - id: seed-skill-def-data
-          intent: stitch-server-data-seed-and-ai-testing
-          mode: autopilot
-          status: pending
-          current_phase: null
-        - id: seed-item-def-data
-          intent: stitch-server-data-seed-and-ai-testing
-          mode: autopilot
-          status: pending
-          current_phase: null
-        - id: add-inventory-creation-to-bootstrap
-          intent: stitch-server-data-seed-and-ai-testing
-          mode: confirm
-          status: pending
-          current_phase: null
-        - id: ai-test-food-system
-          intent: stitch-server-data-seed-and-ai-testing
-          mode: confirm
-          status: pending
-          current_phase: null
-        - id: ai-test-skill-system
-          intent: stitch-server-data-seed-and-ai-testing
-          mode: confirm
-          status: pending
-          current_phase: null
-        - id: ai-test-movement-system
-          intent: stitch-server-data-seed-and-ai-testing
-          mode: autopilot
-          status: pending
-          current_phase: null
-        - id: create-ai-testing-playbook
-          intent: stitch-server-data-seed-and-ai-testing
-          mode: autopilot
-          status: pending
-          current_phase: null
-      current_item: seed-food-def-data
-      started: 2026-02-01T13:24:11.418Z
   completed:
     - id: run-005
       scope: wide
@@ -303,3 +274,32 @@ runs:
           completed_at: 2026-02-01T12:00:00Z
       started: 2026-02-01T11:32:51.263Z
       completed: 2026-02-01T12:00:00Z
+    - id: run-007
+      scope: wide
+      work_items:
+        - id: seed-food-def-data
+          intent: stitch-server-data-seed-and-ai-testing
+          mode: autopilot
+        - id: seed-skill-def-data
+          intent: stitch-server-data-seed-and-ai-testing
+          mode: autopilot
+        - id: seed-item-def-data
+          intent: stitch-server-data-seed-and-ai-testing
+          mode: autopilot
+        - id: add-inventory-creation-to-bootstrap
+          intent: stitch-server-data-seed-and-ai-testing
+          mode: confirm
+        - id: ai-test-food-system
+          intent: stitch-server-data-seed-and-ai-testing
+          mode: confirm
+        - id: ai-test-skill-system
+          intent: stitch-server-data-seed-and-ai-testing
+          mode: confirm
+        - id: ai-test-movement-system
+          intent: stitch-server-data-seed-and-ai-testing
+          mode: autopilot
+        - id: create-ai-testing-playbook
+          intent: stitch-server-data-seed-and-ai-testing
+          mode: autopilot
+      started: 2026-02-01T13:24:11.418Z
+      completed: 2026-02-01T14:21:38.518Z

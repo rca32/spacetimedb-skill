@@ -3,10 +3,12 @@ id: ai-test-movement-system
 intent: stitch-server-data-seed-and-ai-testing
 complexity: low
 mode: autopilot
-status: pending
+status: completed
 depends_on:
   - add-inventory-creation-to-bootstrap
 created: 2026-02-01T22:05:00Z
+run_id: run-007
+completed_at: 2026-02-01T14:21:38.518Z
 ---
 
 # Work Item: AI test player movement system
