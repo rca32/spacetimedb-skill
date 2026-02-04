@@ -1,0 +1,77 @@
+===============================================
+CSV Import Integration Test
+Started: Wed Feb  4 00:56:59 KST 2026
+===============================================
+
+[0;32m[INFO][0m Running pre-flight checks...
+[0;32m[INFO][0m ✓ Found 14 CSV files
+[0;32m[INFO][0m ✓ Total CSV rows: 302 (matches expected)
+[0;32m[INFO][0m Building stitch-server...
+warning: unused variable: `claim_id`
+  --> crates/game_server/src/reducers/permission/permission_edit_simple.rs:22:9
+   |
+22 |     let claim_id = if claim_id_str.to_lowercase() == "null" {
+   |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_claim_id`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `game_server` (lib) generated 1 warning (run `cargo fix --lib -p game_server` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.05s
+[0;32m[INFO][0m ✓ Build successful
+[0;32m[INFO][0m spacetime CLI found, proceeding with integration test...
+[0;32m[INFO][0m Integration test setup complete. Manual steps required:
+
+Manual Test Instructions:
+========================
+
+1. Ensure SpacetimeDB is running:
+   spacetime start
+
+2. Deploy the stitch-server module:
+   cd /home/rca32/workspaces/spacetimedb-skill/stitch-server
+   spacetime publish stitch-server
+
+3. Monitor logs for CSV import messages:
+   Look for: [CSV-IMPORT] Successfully imported X records
+
+4. Verify row counts:
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM item_def'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM npc_dialogue'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM enemy_def'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM quest_stage_def'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM combat_action_def'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM biome_def'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM quest_chain_def'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM economy_params'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM achievement_def'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM npc_desc'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM enemy_scaling_def'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM item_list_def'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM price_index'
+   spacetime sql stitch-server 'SELECT COUNT(*) FROM building_def'
+
+5. Verify referential integrity:
+   spacetime sql stitch-server 'SELECT * FROM price_index WHERE item_def_id NOT IN (SELECT item_def_id FROM item_def)'
+   Should return 0 rows
+
+6. Test manual trigger:
+   spacetime call stitch-server trigger_csv_auto_import
+
+Expected Results:
+- All 14 CSV files parsed
+- Total 301 rows loaded
+- Import completes in < 30 seconds
+- No referential integrity violations
+
+===============================================
+Test Summary
+===============================================
+Pre-flight checks: PASSED
+CSV file verification: PASSED (14 files)
+Total CSV rows: 302 (expected: 302)
+Build: PASSED
+Integration test: REQUIRES MANUAL EXECUTION
+
+Log file: /home/rca32/workspaces/spacetimedb-skill/stitch-server/tests/csv_import_test_20260204_005659.log
+===============================================
+[0;32m[INFO][0m Integration test script completed successfully!
