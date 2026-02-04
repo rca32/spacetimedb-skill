@@ -111,3 +111,30 @@ pub fn eat(ctx: &ReducerContext, item_instance_id: u64) -> Result<(), String> {
 ---
 
 ## Approve this plan? [Y/n/edit]
+
+---
+
+## Work Item: implement-astar-pathfinding (Validate Mode)
+
+Based on approved design document: `.specs-fire/intents/stitch-server-critical-gaps-implementation/work-items/implement-astar-pathfinding-design.md`
+
+### Implementation Checklist
+- Align `find_path` signature and behavior to acceptance criteria
+- Ensure obstacle and terrain block checks are consistent
+- Enforce node_limit with `None` return
+- Add unit tests for straight path, detour, and no-path
+- Validate heuristic uses hex distance
+
+### Files to Create
+- `stitch-server/crates/game_server/tests/pathfinding_tests.rs` (unit tests for A* scenarios)
+
+### Files to Modify
+- `stitch-server/crates/game_server/src/services/pathfinding.rs` (finalize A* logic and node limit handling)
+
+### Tests
+- `cargo test -p game_server --tests`
+
+---
+
+This is Checkpoint 2 of Validate mode.
+Approve implementation plan? [Y/n/edit]

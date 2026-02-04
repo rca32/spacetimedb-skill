@@ -3,6 +3,7 @@ pub mod auth;
 pub mod building;
 pub mod claim;
 pub mod combat;
+pub mod csv_import;
 pub mod empire;
 pub mod housing;
 pub mod init;

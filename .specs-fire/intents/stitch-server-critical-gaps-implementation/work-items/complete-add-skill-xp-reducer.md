@@ -3,8 +3,9 @@ id: complete-add-skill-xp-reducer
 intent: stitch-server-critical-gaps-implementation
 complexity: medium
 mode: confirm
-status: pending
-depends_on: [add-player-state-creation]
+status: in_progress
+depends_on:
+  - add-player-state-creation
 created: 2026-02-01T21:35:00Z
 ---
 

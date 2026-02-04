@@ -13,3 +13,35 @@
 
 ## SpacetimeDB 작업 규칙
 - SpacetimeDB 관련 작업은 반드시 `.opencode/skills/spacetimedb-korean/SKILL.md` 스킬을 참조한다.
+
+
+## Manual Test Instructions
+
+To complete the full integration test, follow these steps:
+
+### 1. Start SpacetimeDB
+```bash
+spacetime start
+```
+
+### 2. Deploy Module
+```bash
+cd /home/rca32/workspaces/spacetimedb-skill/stitch-server/crates/game_server
+spacetime build
+spacetime publish stitch-server
+```
+
+## stitch-server Workflow Cheat Sheet
+
+| Task | Command / Notes |
+|------|-----------------|
+| Server root | `/home/rca32/workspaces/spacetimedb-skill/stitch-server` |
+| Start server | `spacetime start` (runs local SpacetimeDB at `127.0.0.1:3000`) |
+| Build module | `cd stitch-server && spacetime build` |
+| Publish module | `spacetime publish --server 127.0.0.1:3000 stitch-server` |
+| Seed static data | `spacetime call <name> seed_data` after publishing |
+| Run CSV import | `spacetime call <name> import_csv_data` or `import_csv_by_type "items"` |
+| Query tables | `spacetime sql <name> "SELECT COUNT(*) FROM item_def"` |
+| Call reducers | `spacetime call <name> reducer_name arg1 arg2` (use `--anonymous` if needed) |
+
+Replace `<name>` with the published database name (e.g., `stitch-server`).

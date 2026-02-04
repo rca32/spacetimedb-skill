@@ -52,6 +52,10 @@ pub fn eat(ctx: &ReducerContext, item_instance_id: u64) -> Result<(), String> {
         .find(&player_entity_id)
         .ok_or("Resource state not found")?;
 
+    if resource.hp == 0 {
+        return Err("Player is dead".to_string());
+    }
+
     // Get max values from character_stats
     let (max_hp, max_stamina, max_satiation) = ctx
         .db

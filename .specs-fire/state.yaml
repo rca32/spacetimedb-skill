@@ -1,7 +1,7 @@
 project:
   name: spacetimedb-skill
   description: Monorepo for SpacetimeDB-related skills, servers, and examples
-  created: 2026-02-01T00:00:00Z
+  created: 2026-02-01 00:00:00+00:00
   fire_version: 0.1.8
 workspace:
   type: brownfield
@@ -9,7 +9,7 @@ workspace:
   autonomy_bias: balanced
   run_scope_preference: single
   run_scope_history: []
-  scanned_at: 2026-02-01T00:00:00Z
+  scanned_at: 2026-02-01 00:00:00+00:00
   parts:
     - SpacetimeDB
     - stitch-server
@@ -101,6 +101,7 @@ intents:
         status: pending
         complexity: high
         mode: validate
+        checkpoint_1: approved
         depends_on:
           - add-player-state-creation
       - id: complete-add-skill-xp-reducer
@@ -142,7 +143,7 @@ intents:
         mode: autopilot
         depends_on: []
         run_id: run-007
-        completed_at: 2026-02-01T14:21:38.518Z
+        completed_at: 2026-02-01 14:21:38.518000+00:00
       - id: seed-skill-def-data
         title: Seed skill_def table with sample data
         status: completed
@@ -150,7 +151,7 @@ intents:
         mode: autopilot
         depends_on: []
         run_id: run-007
-        completed_at: 2026-02-01T14:21:38.518Z
+        completed_at: 2026-02-01 14:21:38.518000+00:00
       - id: seed-item-def-data
         title: Seed item_def table with sample items
         status: completed
@@ -158,7 +159,7 @@ intents:
         mode: autopilot
         depends_on: []
         run_id: run-007
-        completed_at: 2026-02-01T14:21:38.518Z
+        completed_at: 2026-02-01 14:21:38.518000+00:00
       - id: add-inventory-creation-to-bootstrap
         title: Add inventory creation to account bootstrap
         status: completed
@@ -166,7 +167,7 @@ intents:
         mode: confirm
         depends_on: []
         run_id: run-007
-        completed_at: 2026-02-01T14:21:38.518Z
+        completed_at: 2026-02-01 14:21:38.518000+00:00
       - id: ai-test-food-system
         title: AI test food system end-to-end
         status: completed
@@ -177,7 +178,7 @@ intents:
           - seed-item-def-data
           - add-inventory-creation-to-bootstrap
         run_id: run-007
-        completed_at: 2026-02-01T14:21:38.518Z
+        completed_at: 2026-02-01 14:21:38.518000+00:00
       - id: ai-test-skill-system
         title: AI test skill system end-to-end
         status: completed
@@ -186,7 +187,7 @@ intents:
         depends_on:
           - seed-skill-def-data
         run_id: run-007
-        completed_at: 2026-02-01T14:21:38.518Z
+        completed_at: 2026-02-01 14:21:38.518000+00:00
       - id: ai-test-movement-system
         title: AI test player movement system
         status: completed
@@ -195,7 +196,7 @@ intents:
         depends_on:
           - add-inventory-creation-to-bootstrap
         run_id: run-007
-        completed_at: 2026-02-01T14:21:38.518Z
+        completed_at: 2026-02-01 14:21:38.518000+00:00
       - id: create-ai-testing-playbook
         title: Create AI testing playbook
         status: completed
@@ -206,7 +207,402 @@ intents:
           - ai-test-skill-system
           - ai-test-movement-system
         run_id: run-007
-        completed_at: 2026-02-01T14:21:38.518Z
+        completed_at: 2026-02-01 14:21:38.518000+00:00
+  - id: csv-static-data-auto-import-system
+    title: Build CSV static data auto-import system for stitch-server
+    status: in_progress
+    work_items:
+      - id: create-csv-parsing-service
+        title: Create CSV parsing service module with Rust csv crate
+        status: completed
+        complexity: high
+        mode: confirm
+        depends_on: []
+        run_id: run-008
+        completed_at: 2026-02-02T15:28:31.235Z
+      - id: build-csv-table-mappers
+        title: Build CSV to table mappers for all 14 file types
+        status: completed
+        complexity: high
+        mode: confirm
+        depends_on:
+          - create-csv-parsing-service
+        run_id: run-009
+        completed_at: 2026-02-03T10:35:51.295Z
+      - id: create-missing-table-definitions
+        title: Create 9 missing table definitions for CSV data
+        status: completed
+        complexity: high
+        mode: confirm
+        depends_on: []
+        run_id: run-008
+        completed_at: 2026-02-02T15:28:31.235Z
+      - id: implement-referential-integrity
+        title: Implement referential integrity validation system
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - build-csv-table-mappers
+          - create-missing-table-definitions
+        run_id: run-010
+        completed_at: 2026-02-03T14:58:46.478Z
+      - id: add-detailed-logging
+        title: Add detailed logging throughout import process
+        status: completed
+        complexity: low
+        mode: autopilot
+        depends_on:
+          - create-csv-parsing-service
+        run_id: run-009
+        completed_at: 2026-02-03T10:35:51.295Z
+      - id: integrate-auto-import-lifecycle
+        title: Integrate auto-import into server startup lifecycle
+        status: completed
+        complexity: high
+        mode: confirm
+        depends_on:
+          - build-csv-table-mappers
+          - implement-referential-integrity
+          - add-detailed-logging
+        run_id: run-010
+        completed_at: 2026-02-03T14:58:46.478Z
+      - id: write-csv-parser-unit-tests
+        title: Write unit tests for CSV parsing logic
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - create-csv-parsing-service
+        run_id: run-009
+        completed_at: 2026-02-03T10:35:51.295Z
+      - id: test-full-import-cycle
+        title: Test full import cycle with all 14 CSV files
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - integrate-auto-import-lifecycle
+          - write-csv-parser-unit-tests
+        run_id: run-011
+        completed_at: 2026-02-03T15:12:39.303Z
+  - id: implement-game-server
+    title: Implement game server from DESIGN/DETAIL
+    status: pending
+    work_items:
+      - id: scaffold-server-workspace
+        title: Server workspace scaffolding
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on: []
+        run_id: run-004
+        completed_at: 2026-01-31T18:02:07.670Z
+      - id: auth-session-system
+        title: Authentication and session system
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - scaffold-server-workspace
+        run_id: run-004
+        completed_at: 2026-02-01T00:20:06.278Z
+      - id: worldgen-terrain-pathfinding
+        title: World generation, terrain, and pathfinding
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - scaffold-server-workspace
+        run_id: run-004
+        completed_at: 2026-02-01T00:31:23.958Z
+      - id: player-state-movement-skills
+        title: Player state, movement, skills, and abilities
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - auth-session-system
+        run_id: run-004
+        completed_at: 2026-02-01T00:40:32.597Z
+      - id: inventory-item-stacks
+        title: Inventory and item stack system
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - player-state-movement-skills
+        run_id: run-004
+        completed_at: 2026-02-01T01:03:00.873Z
+      - id: agent-system-core
+        title: Agent system core
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - auth-session-system
+        run_id: run-004
+        completed_at: 2026-02-01T01:46:43.062Z
+      - id: combat-pvp-pipeline
+        title: Combat and PvP pipeline
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - player-state-movement-skills
+          - inventory-item-stacks
+        run_id: run-004
+        completed_at: 2026-02-01T03:20:39.761Z
+      - id: trade-auction-barter
+        title: Trade, auction, and barter systems
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - inventory-item-stacks
+          - player-state-movement-skills
+        run_id: run-004
+        completed_at: 2026-02-01T03:30:17.539Z
+      - id: quest-achievement-system
+        title: Quest and achievement system
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - inventory-item-stacks
+          - player-state-movement-skills
+        run_id: run-004
+        completed_at: 2026-02-01T03:44:11.924Z
+      - id: claim-permission-empire-housing
+        title: Claim, permission, empire, and housing systems
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - auth-session-system
+          - player-state-movement-skills
+          - worldgen-terrain-pathfinding
+        run_id: run-004
+        completed_at: 2026-02-01T03:59:35.114Z
+      - id: building-system-core
+        title: Building system core
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - worldgen-terrain-pathfinding
+          - claim-permission-empire-housing
+          - inventory-item-stacks
+        run_id: run-004
+        completed_at: 2026-02-01T06:15:50.812Z
+      - id: npc-ai-conversation
+        title: NPC AI and conversation pipeline
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - player-state-movement-skills
+          - worldgen-terrain-pathfinding
+          - agent-system-core
+        run_id: run-004
+        completed_at: 2026-02-01T06:29:20.797Z
+      - id: environment-debuffs-status
+        title: Environment debuffs and status effects
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - agent-system-core
+          - worldgen-terrain-pathfinding
+          - player-state-movement-skills
+        run_id: run-004
+        completed_at: 2026-02-01T06:40:37.861Z
+      - id: server-test-suite
+        title: Server test suite
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - auth-session-system
+          - player-state-movement-skills
+          - inventory-item-stacks
+          - combat-pvp-pipeline
+          - worldgen-terrain-pathfinding
+          - claim-permission-empire-housing
+          - building-system-core
+          - npc-ai-conversation
+          - trade-auction-barter
+          - quest-achievement-system
+          - agent-system-core
+          - environment-debuffs-status
+        run_id: run-004
+        completed_at: 2026-02-01T08:37:14.083Z
+  - id: spacetime-dev-guide
+    title: Create SpacetimeDB Korean Educational Guide
+    status: completed
+    work_items:
+      - id: intro-project-overview
+        title: 01. Introduction and Project Overview
+        status: completed
+        complexity: low
+        mode: autopilot
+        depends_on: []
+        run_id: run-003
+        completed_at: 2026-01-31T07:33:58.539Z
+      - id: dev-environment-setup
+        title: 02. Development Environment Setup
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - intro-project-overview
+        run_id: run-003
+        completed_at: 2026-01-31T07:52:05.856Z
+      - id: core-concepts-tables-reducers
+        title: 03. Core Concepts - Tables and Reducers
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - dev-environment-setup
+        run_id: run-003
+        completed_at: 2026-01-31T07:53:50.783Z
+      - id: authentication-movement-guide
+        title: 04. Authentication and Player Movement System
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - core-concepts-tables-reducers
+        run_id: run-003
+        completed_at: 2026-01-31T07:55:34.167Z
+      - id: inventory-crafting-guide
+        title: 05. Inventory and Crafting System
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - authentication-movement-guide
+        run_id: run-003
+        completed_at: 2026-01-31T07:57:32.609Z
+      - id: npc-client-integration-guide
+        title: 06. NPC, AI, Web Client and Deployment
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - inventory-crafting-guide
+        run_id: run-003
+        completed_at: 2026-01-31T08:00:20.512Z
+  - id: fix-server-build-errors
+    title: fix-server-build-errors
+    status: pending
+    work_items:
+      - id: fix-server-build-errors-main
+        title: fix-server-build-errors-main
+        status: pending
+        complexity: high
+        mode: validate
+        depends_on: []
+  - id: cozy-mmo-game
+    title: cozy-mmo-game
+    status: pending
+    work_items:
+      - id: setup-project-structure
+        title: Setup Project Structure
+        status: completed
+        complexity: low
+        mode: autopilot
+        depends_on: []
+        run_id: run-001
+        completed_at: 2026-01-30T18:12:14.667Z
+      - id: core-data-models
+        title: Core Data Models
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - setup-project-structure
+        run_id: run-001
+        completed_at: 2026-01-30T18:14:12.316Z
+      - id: authentication-system
+        title: Authentication System
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - core-data-models
+        run_id: run-001
+        completed_at: 2026-01-30T18:15:36.028Z
+      - id: player-movement-system
+        title: Player Movement System
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - authentication-system
+        run_id: run-001
+        completed_at: 2026-01-30T18:16:10.913Z
+      - id: inventory-system
+        title: Inventory System
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - core-data-models
+        run_id: run-001
+        completed_at: 2026-01-30T18:16:48.393Z
+      - id: crafting-system
+        title: Crafting System
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - inventory-system
+        run_id: run-001
+        completed_at: 2026-01-30T18:17:29.130Z
+      - id: npc-core-system
+        title: NPC Core System
+        status: completed
+        complexity: low
+        mode: autopilot
+        depends_on:
+          - core-data-models
+        run_id: run-001
+        completed_at: 2026-01-30T18:18:10.667Z
+      - id: npc-conversation-system
+        title: NPC Conversation System
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - npc-core-system
+          - player-movement-system
+        run_id: run-001
+        completed_at: 2026-01-30T18:19:11.476Z
+      - id: web-client-foundation
+        title: Web Client Foundation
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - setup-project-structure
+        run_id: run-001
+        completed_at: 2026-01-30T18:21:42.333Z
+      - id: integration-testing
+        title: Integration and Testing
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - web-client-foundation
+          - authentication-system
+          - player-movement-system
+          - inventory-system
+          - crafting-system
+          - npc-conversation-system
+        run_id: run-001
+        completed_at: 2026-01-30T18:21:46.310Z
 runs:
   active:
     - id: run-006
@@ -217,28 +613,31 @@ runs:
           mode: confirm
           status: completed
           current_phase: plan
-          completed_at: 2026-02-01T12:58:46.654Z
+          completed_at: 2026-02-01 12:58:46.654000+00:00
         - id: create-food-def-table
           intent: stitch-server-critical-gaps-implementation
           mode: autopilot
           status: completed
           current_phase: plan
-          completed_at: 2026-02-01T13:01:24.990Z
+          completed_at: 2026-02-01 13:01:24.990000+00:00
         - id: implement-eat-reducer-food-system
           intent: stitch-server-critical-gaps-implementation
           mode: confirm
           status: completed
-          current_phase: plan
+          current_phase: review
+          completed_at: 2026-02-03T16:44:15.416Z
         - id: implement-astar-pathfinding
           intent: stitch-server-critical-gaps-implementation
           mode: validate
-          status: pending
-          current_phase: null
+          status: completed
+          current_phase: review
+          checkpoint_1: approved
+          completed_at: 2026-02-03T16:58:26.653Z
         - id: complete-add-skill-xp-reducer
           intent: stitch-server-critical-gaps-implementation
           mode: confirm
-          status: pending
-          current_phase: null
+          status: in_progress
+          current_phase: plan
         - id: fix-inventory-add-partial
           intent: stitch-server-critical-gaps-implementation
           mode: confirm
@@ -254,8 +653,8 @@ runs:
           mode: autopilot
           status: pending
           current_phase: null
-      current_item: implement-eat-reducer-food-system
-      started: 2026-02-01T12:50:46.356Z
+      current_item: complete-add-skill-xp-reducer
+      started: 2026-02-01 12:50:46.356000+00:00
   completed:
     - id: run-005
       scope: wide
@@ -265,15 +664,15 @@ runs:
           mode: confirm
           status: completed
           current_phase: review
-          completed_at: 2026-02-01T11:40:44.638Z
+          completed_at: 2026-02-01 11:40:44.638000+00:00
         - id: build-and-publish-stitch-server
           intent: stitch-server-build-publish
           mode: confirm
           status: completed
           current_phase: complete
-          completed_at: 2026-02-01T12:00:00Z
-      started: 2026-02-01T11:32:51.263Z
-      completed: 2026-02-01T12:00:00Z
+          completed_at: 2026-02-01 12:00:00+00:00
+      started: 2026-02-01 11:32:51.263000+00:00
+      completed: 2026-02-01 12:00:00+00:00
     - id: run-007
       scope: wide
       work_items:
@@ -301,5 +700,52 @@ runs:
         - id: create-ai-testing-playbook
           intent: stitch-server-data-seed-and-ai-testing
           mode: autopilot
-      started: 2026-02-01T13:24:11.418Z
-      completed: 2026-02-01T14:21:38.518Z
+      started: 2026-02-01 13:24:11.418000+00:00
+      completed: 2026-02-01 14:21:38.518000+00:00
+    - id: run-008
+      scope: batch
+      work_items:
+        - id: create-csv-parsing-service
+          intent: csv-static-data-auto-import-system
+          mode: confirm
+        - id: create-missing-table-definitions
+          intent: csv-static-data-auto-import-system
+          mode: confirm
+      started: 2026-02-02T15:19:50.132Z
+      completed: 2026-02-02T15:28:31.235Z
+    - id: run-009
+      scope: batch
+      work_items:
+        - id: build-csv-table-mappers
+          intent: csv-static-data-auto-import-system
+          mode: confirm
+        - id: add-detailed-logging
+          intent: csv-static-data-auto-import-system
+          mode: autopilot
+        - id: write-csv-parser-unit-tests
+          intent: csv-static-data-auto-import-system
+          mode: confirm
+      started: 2026-02-02T15:32:10.573Z
+      completed: 2026-02-03T10:35:51.295Z
+    - id: run-010
+      scope: wide
+      work_items:
+        - id: implement-referential-integrity
+          intent: csv-static-data-auto-import-system
+          mode: confirm
+        - id: integrate-auto-import-lifecycle
+          intent: csv-static-data-auto-import-system
+          mode: confirm
+        - id: test-full-import-cycle
+          intent: csv-static-data-auto-import-system
+          mode: validate
+      started: 2026-02-03T14:45:25.010Z
+      completed: 2026-02-03T14:58:46.478Z
+    - id: run-011
+      scope: single
+      work_items:
+        - id: test-full-import-cycle
+          intent: csv-static-data-auto-import-system
+          mode: validate
+      started: 2026-02-03T15:08:47.696Z
+      completed: 2026-02-03T15:12:39.303Z

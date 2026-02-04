@@ -1,3 +1,4 @@
+use crate::reducers::csv_import::init_csv_import;
 use crate::tables::{food_def_trait, item_def_trait, skill_def_trait, FoodDef, ItemDef, SkillDef};
 use spacetimedb::{ReducerContext, Table};
 
@@ -6,8 +7,15 @@ pub fn init_server() {
 }
 
 /// Seed all static data - food, items, skills
+///
+/// This reducer also triggers automatic CSV import if enabled via environment variables.
 #[spacetimedb::reducer]
 pub fn seed_data(ctx: &ReducerContext) -> Result<(), String> {
+    // First, try to import from CSV files (if enabled)
+    log::info!("[INIT] Checking for CSV auto-import...");
+    init_csv_import();
+
+    // Then seed any missing default data
     seed_food_data(ctx)?;
     seed_item_data(ctx)?;
     seed_skill_data(ctx)?;

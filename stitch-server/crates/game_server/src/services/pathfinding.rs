@@ -1,8 +1,10 @@
 use spacetimedb::Table;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use crate::services::world_gen::{HexCoordinates, HexDirection};
 use crate::tables::{nav_cell_cost_trait, nav_obstacle_trait};
+
+const DEFAULT_NODE_LIMIT: usize = 2500;
 
 /// Cell key generator for hex coordinates
 /// Combines x, z coordinates into a single u64 key
@@ -49,17 +51,16 @@ impl Ord for AStarNode {
 }
 
 /// Check if a cell is blocked by an obstacle
-fn is_blocked(ctx: &spacetimedb::ReducerContext, x: i32, z: i32, _dimension: u16) -> bool {
+fn is_blocked(ctx: &spacetimedb::ReducerContext, coords: HexCoordinates, dimension: u16) -> bool {
     // Check nav_obstacle table for any entity at this position
-    ctx.db
-        .nav_obstacle()
-        .iter()
-        .any(|obs| obs.x == x && obs.z == z && obs.blocked)
+    ctx.db.nav_obstacle().iter().any(|obs| {
+        obs.x == coords.x && obs.z == coords.z && obs.dimension == dimension && obs.blocked
+    })
 }
 
 /// Get the terrain cost for a cell
-fn get_terrain_cost(ctx: &spacetimedb::ReducerContext, x: i32, z: i32) -> f32 {
-    let key = cell_key(x, z);
+fn get_terrain_cost(ctx: &spacetimedb::ReducerContext, coords: HexCoordinates) -> f32 {
+    let key = cell_key(coords.x, coords.z);
     ctx.db
         .nav_cell_cost()
         .cell_key()
@@ -74,6 +75,14 @@ fn get_terrain_cost(ctx: &spacetimedb::ReducerContext, x: i32, z: i32) -> f32 {
         .unwrap_or(1.0) // Default cost if no entry
 }
 
+pub fn find_path_default(
+    ctx: &spacetimedb::ReducerContext,
+    start: HexCoordinates,
+    goal: HexCoordinates,
+) -> Option<Vec<HexCoordinates>> {
+    find_path(ctx, start, goal, DEFAULT_NODE_LIMIT)
+}
+
 /// Find a path from start to goal using A* algorithm
 /// Returns None if no path is found within the node limit
 pub fn find_path(
@@ -82,13 +91,37 @@ pub fn find_path(
     goal: HexCoordinates,
     node_limit: usize,
 ) -> Option<Vec<HexCoordinates>> {
+    find_path_with(
+        start,
+        goal,
+        node_limit,
+        |coords| is_blocked(ctx, coords, 0),
+        |coords| get_terrain_cost(ctx, coords),
+    )
+}
+
+pub fn find_path_with<FBlock, FCost>(
+    start: HexCoordinates,
+    goal: HexCoordinates,
+    node_limit: usize,
+    mut is_blocked: FBlock,
+    mut terrain_cost: FCost,
+) -> Option<Vec<HexCoordinates>>
+where
+    FBlock: FnMut(HexCoordinates) -> bool,
+    FCost: FnMut(HexCoordinates) -> f32,
+{
+    if node_limit == 0 {
+        return None;
+    }
+
     // Handle trivial case
     if start == goal {
         return Some(vec![start]);
     }
 
     // Check if goal is blocked
-    if is_blocked(ctx, goal.x, goal.z, 0) {
+    if is_blocked(goal) {
         return None;
     }
 
@@ -96,7 +129,7 @@ pub fn find_path(
     let mut open_set: BinaryHeap<AStarNode> = BinaryHeap::new();
     let mut came_from: HashMap<HexCoordinates, HexCoordinates> = HashMap::new();
     let mut g_score: HashMap<HexCoordinates, f32> = HashMap::new();
-    let mut closed_set: HashMap<HexCoordinates, bool> = HashMap::new();
+    let mut closed_set: HashSet<HexCoordinates> = HashSet::new();
 
     // Initialize with start node
     let h_start = heuristic(&start, &goal);
@@ -110,6 +143,9 @@ pub fn find_path(
     let mut nodes_processed = 0;
 
     while let Some(current) = open_set.pop() {
+        if closed_set.contains(&current.coords) {
+            continue;
+        }
         nodes_processed += 1;
 
         // Check node limit
@@ -136,27 +172,27 @@ pub fn find_path(
         }
 
         // Mark as closed
-        closed_set.insert(current.coords, true);
+        closed_set.insert(current.coords);
 
         // Explore neighbors
         for direction in HexDirection::all() {
             let neighbor = current.coords.neighbor(direction);
 
             // Skip if already processed
-            if closed_set.contains_key(&neighbor) {
+            if closed_set.contains(&neighbor) {
                 continue;
             }
 
             // Skip if blocked by obstacle
-            if is_blocked(ctx, neighbor.x, neighbor.z, 0) {
-                closed_set.insert(neighbor, true);
+            if is_blocked(neighbor) {
+                closed_set.insert(neighbor);
                 continue;
             }
 
             // Calculate movement cost
-            let terrain_cost = get_terrain_cost(ctx, neighbor.x, neighbor.z);
+            let terrain_cost = terrain_cost(neighbor);
             if terrain_cost.is_infinite() {
-                closed_set.insert(neighbor, true);
+                closed_set.insert(neighbor);
                 continue;
             }
 
@@ -228,4 +264,62 @@ pub fn find_path_greedy(
     }
 
     path
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::{find_path_with, HexCoordinates, HexDirection};
+
+    fn coord(x: i32, z: i32) -> HexCoordinates {
+        HexCoordinates { x, z }
+    }
+
+    #[test]
+    fn find_path_straight_line() {
+        let start = coord(0, 0);
+        let goal = coord(3, 0);
+
+        let path = find_path_with(start, goal, 64, |_| false, |_| 1.0)
+            .expect("expected straight-line path");
+
+        assert_eq!(path.first(), Some(&start));
+        assert_eq!(path.last(), Some(&goal));
+        assert_eq!(path.len() as i32 - 1, start.distance_to(&goal));
+
+        for window in path.windows(2) {
+            assert_eq!(window[0].distance_to(&window[1]), 1);
+        }
+    }
+
+    #[test]
+    fn find_path_around_obstacle() {
+        let start = coord(0, 0);
+        let goal = coord(2, 0);
+        let blocked = coord(1, 0);
+
+        let path = find_path_with(start, goal, 64, |coords| coords == blocked, |_| 1.0)
+            .expect("expected detour path");
+
+        assert_eq!(path.first(), Some(&start));
+        assert_eq!(path.last(), Some(&goal));
+        assert!(!path.contains(&blocked));
+        assert!(path.len() as i32 - 1 > start.distance_to(&goal));
+    }
+
+    #[test]
+    fn find_path_no_path_when_surrounded() {
+        let start = coord(0, 0);
+        let goal = coord(2, 0);
+
+        let mut blocked: HashSet<HexCoordinates> = HashSet::new();
+        for direction in HexDirection::all() {
+            blocked.insert(start.neighbor(direction));
+        }
+
+        let path = find_path_with(start, goal, 16, |coords| blocked.contains(&coords), |_| 1.0);
+
+        assert!(path.is_none());
+    }
 }

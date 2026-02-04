@@ -1,1 +1,12 @@
-id,scale
+scaling_id,enemy_type,player_count_multiplier,level_scaling_curve,hp_scaling_per_level,damage_scaling_per_level,exp_scaling_per_level
+1,0,0.2,linear,5,0.5,0.1
+2,1,0.25,linear,6,0.6,0.12
+3,2,0.3,linear,8,0.7,0.15
+4,3,0.35,linear,10,0.8,0.18
+5,4,0.25,linear,7,0.5,0.14
+6,5,0.2,linear,6,0.4,0.1
+7,6,0.3,linear,9,0.75,0.16
+8,7,0.25,linear,7,0.6,0.13
+9,8,0.4,linear,12,1.0,0.2
+10,9,0.5,exponential,50,3.0,0.5
+11,10,0.35,linear,15,1.2,0.22
