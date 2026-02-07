@@ -1,5 +1,6 @@
 flow: fire
 version: 0.1.22
-installed_at: '2026-01-30T17:56:22.406Z'
+installed_at: '2026-02-07T14:04:04.961Z'
 tools:
+  - codex
   - opencode

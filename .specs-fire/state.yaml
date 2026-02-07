@@ -74,43 +74,52 @@ intents:
           - create-reducer-reference
   - id: stitch-server-critical-gaps-implementation
     title: Implement critical DESIGN gaps in stitch-server
-    status: completed
+    status: in_progress
     work_items:
       - id: add-player-state-creation
         title: Add player_state creation to auth flow
-        status: pending
+        status: completed
         complexity: medium
         mode: confirm
         depends_on: []
+        run_id: run-006
+        completed_at: 2026-02-01T12:58:46.654Z
       - id: create-food-def-table
         title: Create food_def table and static data
-        status: pending
+        status: completed
         complexity: low
         mode: autopilot
         depends_on: []
+        run_id: run-006
+        completed_at: 2026-02-01T13:01:24.990Z
       - id: implement-eat-reducer-food-system
         title: Implement eat reducer and food system
-        status: pending
+        status: completed
         complexity: medium
         mode: confirm
         depends_on:
           - add-player-state-creation
           - create-food-def-table
+        run_id: run-006
+        completed_at: 2026-02-03T16:44:15.416Z
       - id: implement-astar-pathfinding
         title: Implement A* pathfinding algorithm
-        status: pending
+        status: completed
         complexity: high
         mode: validate
         checkpoint_1: approved
         depends_on:
           - add-player-state-creation
+        run_id: run-006
+        completed_at: 2026-02-03T16:58:26.653Z
       - id: complete-add-skill-xp-reducer
         title: Complete add_skill_xp reducer
-        status: pending
+        status: in_progress
         complexity: medium
         mode: confirm
         depends_on:
           - add-player-state-creation
+        run_id: run-006
       - id: fix-inventory-add-partial
         title: Fix inventory add_partial implementation
         status: pending
@@ -210,7 +219,7 @@ intents:
         completed_at: 2026-02-01 14:21:38.518000+00:00
   - id: csv-static-data-auto-import-system
     title: Build CSV static data auto-import system for stitch-server
-    status: in_progress
+    status: completed
     work_items:
       - id: create-csv-parsing-service
         title: Create CSV parsing service module with Rust csv crate
@@ -288,7 +297,7 @@ intents:
         completed_at: 2026-02-03T15:12:39.303Z
   - id: implement-game-server
     title: Implement game server from DESIGN/DETAIL
-    status: pending
+    status: completed
     work_items:
       - id: scaffold-server-workspace
         title: Server workspace scaffolding
@@ -496,17 +505,19 @@ intents:
         completed_at: 2026-01-31T08:00:20.512Z
   - id: fix-server-build-errors
     title: fix-server-build-errors
-    status: pending
+    status: completed
     work_items:
       - id: fix-server-build-errors-main
         title: fix-server-build-errors-main
-        status: pending
+        status: completed
         complexity: high
         mode: validate
         depends_on: []
+        run_id: run-002
+        completed_at: 2026-01-31T02:46:00.518Z
   - id: cozy-mmo-game
     title: cozy-mmo-game
-    status: pending
+    status: completed
     work_items:
       - id: setup-project-structure
         title: Setup Project Structure
@@ -656,6 +667,119 @@ runs:
       current_item: complete-add-skill-xp-reducer
       started: 2026-02-01 12:50:46.356000+00:00
   completed:
+    - id: run-001
+      scope: wide
+      work_items:
+        - id: setup-project-structure
+          intent: cozy-mmo-game
+          mode: autopilot
+        - id: core-data-models
+          intent: cozy-mmo-game
+          mode: confirm
+        - id: authentication-system
+          intent: cozy-mmo-game
+          mode: confirm
+        - id: player-movement-system
+          intent: cozy-mmo-game
+          mode: confirm
+        - id: inventory-system
+          intent: cozy-mmo-game
+          mode: confirm
+        - id: crafting-system
+          intent: cozy-mmo-game
+          mode: confirm
+        - id: npc-core-system
+          intent: cozy-mmo-game
+          mode: autopilot
+        - id: npc-conversation-system
+          intent: cozy-mmo-game
+          mode: validate
+        - id: web-client-foundation
+          intent: cozy-mmo-game
+          mode: confirm
+        - id: integration-testing
+          intent: cozy-mmo-game
+          mode: confirm
+      started: 2026-01-30T18:08:28.261Z
+      completed: 2026-01-30T18:22:12.008Z
+    - id: run-002
+      scope: wide
+      work_items:
+        - id: fix-server-build-errors-main
+          intent: fix-server-build-errors
+          mode: validate
+      started: 2026-01-31T01:52:03.080Z
+      completed: 2026-01-31T02:46:00.518Z
+    - id: run-003
+      scope: wide
+      work_items:
+        - id: intro-project-overview
+          intent: spacetime-dev-guide
+          mode: autopilot
+        - id: dev-environment-setup
+          intent: spacetime-dev-guide
+          mode: confirm
+        - id: core-concepts-tables-reducers
+          intent: spacetime-dev-guide
+          mode: confirm
+        - id: authentication-movement-guide
+          intent: spacetime-dev-guide
+          mode: confirm
+        - id: inventory-crafting-guide
+          intent: spacetime-dev-guide
+          mode: confirm
+        - id: npc-client-integration-guide
+          intent: spacetime-dev-guide
+          mode: validate
+      started: 2026-01-31T07:29:22.675Z
+      completed: 2026-01-31T08:00:20.512Z
+    - id: run-004
+      scope: wide
+      work_items:
+        - id: scaffold-server-workspace
+          intent: implement-game-server
+          mode: confirm
+        - id: auth-session-system
+          intent: implement-game-server
+          mode: validate
+        - id: worldgen-terrain-pathfinding
+          intent: implement-game-server
+          mode: validate
+        - id: player-state-movement-skills
+          intent: implement-game-server
+          mode: validate
+        - id: inventory-item-stacks
+          intent: implement-game-server
+          mode: validate
+        - id: agent-system-core
+          intent: implement-game-server
+          mode: validate
+        - id: combat-pvp-pipeline
+          intent: implement-game-server
+          mode: validate
+        - id: trade-auction-barter
+          intent: implement-game-server
+          mode: validate
+        - id: quest-achievement-system
+          intent: implement-game-server
+          mode: confirm
+        - id: claim-permission-empire-housing
+          intent: implement-game-server
+          mode: validate
+        - id: building-system-core
+          intent: implement-game-server
+          mode: validate
+        - id: npc-ai-conversation
+          intent: implement-game-server
+          mode: validate
+        - id: environment-debuffs-status
+          intent: implement-game-server
+          mode: validate
+        - id: server-test-suite
+          intent: implement-game-server
+          mode: confirm
+      started: 2026-01-31T17:53:04.201Z
+      completed: 2026-02-01T08:37:14.083Z
     - id: run-005
       scope: wide
       work_items:
