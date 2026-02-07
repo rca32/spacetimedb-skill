@@ -95,4 +95,15 @@ intents:
           - implement-subscription-streams-and-aoi-query-paths
           - build-static-data-loader-and-asset-pipeline
 runs:
-  active: []
+  active:
+    - id: run-001
+      scope: single
+      work_items:
+        - id: scaffold-domain-folder-structure-and-module-entrypoints
+          intent: stitch-full-game-server-development
+          mode: validate
+          status: in_progress
+          current_phase: plan
+      current_item: scaffold-domain-folder-structure-and-module-entrypoints
+      started: 2026-02-07T16:13:01.385Z
+  completed: []

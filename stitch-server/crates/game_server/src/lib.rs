@@ -1,5 +1,18 @@
 use spacetimedb::{Identity, ReducerContext, Table, Timestamp};
 
+pub mod agents;
+pub mod auth;
+pub mod config;
+pub mod errors;
+pub mod init;
+pub mod module;
+pub mod reducers;
+pub mod services;
+pub mod subscriptions;
+pub mod tables;
+pub mod utils;
+pub mod validation;
+
 const MOVE_MAX_DISTANCE_PER_STEP: f32 = 8.0;
 
 #[spacetimedb::table(name = account, public)]
@@ -79,12 +92,7 @@ pub struct MovementActorState {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::reducer(init)]
-pub fn init(_ctx: &ReducerContext) {
-    log::info!("stitch-server module initialized");
-}
-
-fn ensure_account_exists(ctx: &ReducerContext) {
+pub(crate) fn ensure_account_exists(ctx: &ReducerContext) {
     if ctx.db.account().identity().find(ctx.sender).is_none() {
         ctx.db.account().insert(Account {
             identity: ctx.sender,
@@ -94,7 +102,7 @@ fn ensure_account_exists(ctx: &ReducerContext) {
     }
 }
 
-fn ensure_player_state_exists(ctx: &ReducerContext, display_name: String) {
+pub(crate) fn ensure_player_state_exists(ctx: &ReducerContext, display_name: String) {
     if ctx.db.player_state().player_id().find(ctx.sender).is_none() {
         ctx.db.player_state().insert(PlayerState {
             player_id: ctx.sender,
@@ -158,7 +166,7 @@ fn log_movement_violation(
     );
 }
 
-fn ensure_transform_exists(ctx: &ReducerContext, region_id: u64) {
+pub(crate) fn ensure_transform_exists(ctx: &ReducerContext, region_id: u64) {
     if ctx.db.transform_state().entity_id().find(ctx.sender).is_none() {
         ctx.db.transform_state().insert(TransformState {
             entity_id: ctx.sender,
@@ -168,12 +176,6 @@ fn ensure_transform_exists(ctx: &ReducerContext, region_id: u64) {
             updated_at: ctx.timestamp,
         });
     }
-}
-
-#[spacetimedb::reducer(client_connected)]
-pub fn identity_connected(ctx: &ReducerContext) {
-    ensure_account_exists(ctx);
-    ensure_player_state_exists(ctx, "new-player".to_string());
 }
 
 #[spacetimedb::reducer]
