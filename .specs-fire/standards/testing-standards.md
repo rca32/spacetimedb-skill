@@ -2,43 +2,45 @@
 
 ## Overview
 
-Testing focuses on reducer behavior, data model integrity, and agent loops. Rust tests should use the standard cargo test runner, with integration tests placed in crate test directories.
+설계 검증은 정적 문서 검토와 SpacetimeDB CLI 기반 통합 테스트를 함께 사용한다.
 
 ## Testing Framework
 
-**Framework**: Rust built-in test framework
-**Runner**: cargo test
+**Framework**: Rust tests + CLI integration checks
+**Runner**: `cargo test` and `spacetime` CLI
 
 ## Test Types
 
 | Type | Tool | Location | When to Use |
 |------|------|----------|-------------|
-| Unit | cargo test | `crates/*/src/` | Pure logic and helpers |
-| Integration | cargo test | `crates/*/tests/` | Reducer/service integration |
-| Example/Smoke | custom scripts | `examples/` | End-to-end sanity checks |
+| Unit | `cargo test` | `stitch-server/**/tests` | reducer 유틸/도메인 로직 검증 |
+| Integration | `spacetime call/sql` | local runtime | 권한/동기화/경제/전투 흐름 검증 |
+| Schema Contract | SQL assertions | local runtime | 테이블/인덱스/필드 일관성 검증 |
 
 ## Coverage Requirements
 
-**Target**: 0%
-**Enforcement**: Not enforced
+**Target**: 80%
+**Enforcement**: CI gate (planned)
 
 **Critical paths that MUST have coverage:**
-- Reducer invariants and validation logic
-- Agent loop scheduling and time-based rules
+- 권한 비트마스크 해석 및 접근 제어
+- 이동/전투 검증 로직
+- 재생/포만감/디버프 전이
+- scheduled reducer 인증/권한
 
 ## Test Naming
 
-**Pattern**: `*_tests.rs`
+**Pattern**: `test_<feature>_<behavior>`
 
 **Examples**:
-- `reducers_tests.rs` — reducer behavior
-- `agents_tests.rs` — agent loop behavior
+- `test_permission_flags_owner_overrides` - 소유자 권한 우선 검증
+- `test_regen_passive_blocked_in_combat` - 전투 중 패시브 재생 차단 검증
 
 ## Test Structure
 
 ```rust
 #[test]
-fn creates_default_state() {
+fn test_feature_behavior() {
     // arrange
     // act
     // assert
@@ -47,19 +49,19 @@ fn creates_default_state() {
 
 ## Mock Strategy
 
-**Approach**: Prefer trait-based abstractions and in-memory fixtures.
+**Approach**: 가능한 실제 SpacetimeDB 로컬 런타임 사용
 
 **Guidelines**:
-- Mock only external boundaries
-- Use real data structures for reducer logic
+- 권한/동기화는 mock보다 통합 테스트 우선
+- 시간 기반 로직은 고정 timestamp 또는 서버 타이머 제어
 
 ## Test Data
 
-**Strategy**: Use small, explicit fixtures committed in repo.
+**Strategy**: seed data + 최소 재현 데이터셋
 
 **Guidelines**:
-- Keep fixtures minimal and readable
-- Avoid random data in deterministic tests
+- 테스트 간 독립성 유지
+- static data와 runtime state 분리
 
 ## Running Tests
 
@@ -71,7 +73,7 @@ cargo test
 cargo test
 
 # Run specific test file
-cargo test -p game_server --tests
+cargo test --test <name>
 
 # Run in watch mode
 cargo test

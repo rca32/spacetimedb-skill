@@ -1,8 +1,0 @@
-===============================================
-CSV Import Integration Test
-Started: Wed Feb  4 00:10:56 KST 2026
-===============================================
-
-[0;32m[INFO][0m Running pre-flight checks...
-[0;32m[INFO][0m ✓ Found 14 CSV files
-[0;31m[ERROR][0m Expected 301 total rows in CSV files, found 302

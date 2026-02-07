@@ -2,30 +2,30 @@
 
 ## Overview
 
-Primary development is in Rust with a focus on explicit types, clear module boundaries, and predictable error handling. TypeScript examples should follow conventional lint/format rules in their local module configs.
+SpacetimeDB 서버 모듈 설계/구현 시 서버 권위, 입력 검증, 테이블 무결성, 구독 최소화를 우선한다.
 
 ## Code Formatting
 
 **Tool**: rustfmt
-**Config**: rustfmt.toml if present, otherwise defaults
-**Enforcement**: Required before merge
+**Config**: default
+**Enforcement**: pre-commit or CI check
 
 ### Key Settings
 
-- **Edition**: 2021
-- **Line Width**: Default rustfmt settings
+- **edition**: 2021
+- **line width**: rustfmt default
 
 ## Linting
 
 **Tool**: clippy
-**Base Config**: default clippy lints with local crate overrides
-**Strictness**: warn on new lints, allow where justified
+**Base Config**: default + `-D warnings` 권장
+**Strictness**: high
 
 ### Key Rules
 
-- `clippy::unwrap_used`: allow in tests, avoid in production paths
-- `clippy::expect_used`: allow with clear error messages
-- `clippy::result_large_err`: allow where ergonomics outweigh size
+- `unwrap_used`: deny - 서버 패닉 방지
+- `todo`: deny - 미완료 로직 커밋 방지
+- `panic`: warn - 의도적 패닉 금지
 
 ## Naming Conventions
 
@@ -33,126 +33,116 @@ Primary development is in Rust with a focus on explicit types, clear module boun
 
 | Element | Convention | Example |
 |---------|------------|---------|
-| Variables | snake_case | `player_id` |
-| Functions | snake_case | `load_world_state` |
-| Types | PascalCase | `WorldState` |
-| Constants | SCREAMING_SNAKE_CASE | `MAX_TICK_RATE` |
+| Reducer | `snake_case` | `player_regen_agent_loop` |
+| Table | `snake_case` | `resource_state` |
+| Type/Struct | `PascalCase` | `ResourceState` |
+| Constant | `SCREAMING_SNAKE_CASE` | `CHUNK_WIDTH` |
 
 ### Files and Folders
 
-- **Rust modules**: snake_case (e.g., `world_state.rs`)
-- **Tests**: snake_case (e.g., `reducers_tests.rs`)
+- **module files**: `snake_case.rs` (e.g., `player_regen_agent.rs`)
+- **design docs**: `kebab-case.md` (e.g., `world-generation-system.md`)
 
 ## File Organization
 
 ### Project Structure
 
 ```
-stitch-server/
-  crates/
-    game_server/
-      src/
-        tables/
-        reducers/
-        services/
-        agents/
+DESIGN/
+.specs-fire/
+stitch-server/ (runtime code when implemented)
 ```
 
 ### Conventions
 
-- **Public exports**: use `mod.rs` to re-export module items
-- **Separation**: keep reducers, tables, services, and agents in their respective folders
+- **Reducer placement**: domain module별로 분리
+- **Table definition**: 스키마 중심 파일에 집중
+- **Design linkage**: 코드 항목은 DESIGN 섹션 ID를 참조
 
 ## Import Order
 
 ```rust
-use std::collections::HashMap;
-
-use anyhow::Result;
-use tracing::info;
-
-use crate::services::world_state::WorldStateService;
+use std::time::Duration;
+use spacetimedb::{ReducerContext, Table, Timestamp};
 ```
 
 **Rules**:
-- Standard library first
-- Third-party crates next
-- Local crate imports last
+- std 먼저, 외부 크레이트 다음, 내부 모듈 마지막
+- wildcard import 지양
 
 ## Error Handling
 
 ### Pattern
 
-**Approach**: Return `Result<_, String>` for reducers; use `thiserror`/`anyhow` in services and tools as appropriate.
+**Approach**: early return + explicit validation
 
 ### Guidelines
 
-- Prefer descriptive error messages at boundaries
-- Convert internal errors into user-friendly reducer errors
+- reducer 시작 시 입력/권한 검증
+- 실패 시 의미 있는 오류 메시지 반환
+- scheduled reducer는 server/admin 호출만 허용
 
 ### Example
 
 ```rust
-pub fn load_world(ctx: &ReducerContext) -> Result<(), String> {
-    ctx.db
-        .world_state()
-        .get()
-        .ok_or_else(|| "world_state missing".to_string())?;
-    Ok(())
+if !is_authorized(ctx.sender) {
+    return Err("unauthorized".into());
 }
 ```
 
 ## Logging
 
-**Tool**: tracing
-**Format**: structured logs with context fields
+**Tool**: structured logging (crate policy TBD)
+**Format**: key-value
 
 ### Log Levels
 
 | Level | Usage |
 |-------|-------|
-| error | user-facing failures, invariants broken |
-| warn | unexpected but recoverable conditions |
-| info | major state changes and lifecycle events |
-| debug | detailed behavior for development |
+| info | 정상 상태 전이 |
+| warn | 재시도 가능 이상 상태 |
+| error | 무결성/권한/보안 위반 |
 
 ### Guidelines
 
 **Always log**:
-- Reducer failures with key identifiers
-- Lifecycle start/stop events for agents
+- 인증/권한 실패
+- anti-cheat 위반 판정
+- 스케줄러 핵심 상태 변경
 
 **Never log**:
-- Secrets, tokens, or credentials
+- 토큰/비밀값
+- 개인정보 원문
 
 ## Comments and Documentation
 
 ### When to Comment
 
-- Explain non-obvious reducer invariants
-- Document time-based or decay rules
+- 정책성 검증(예: 쿨다운, 속도 제한) 근거를 설명할 때
+- 테이블/필드가 DESIGN 요구사항과 연결될 때
 
 ### Documentation Format
 
-**Functions**: Rust doc comments for public APIs
-**Classes**: Rust doc comments for public structs and enums
+**Functions**: Rust doc comments
+**Classes**: Rust doc comments
 
 ## Code Patterns
 
 ### Preferred Patterns
 
-#### Newtype IDs
+#### Server-authoritative reducers
 
-Wrap identifiers in newtypes to avoid mixing IDs across domains.
+상태 변경은 reducer 내에서만 처리하고 클라이언트는 요청만 전송한다.
 
 ```rust
-pub struct PlayerId(pub u64);
+// reducer validates and mutates authoritative state
 ```
 
 ### Anti-Patterns to Avoid
 
-- **Global mutable state**: hard to test and reason about
-- **Reducer side effects outside DB**: keep reducers deterministic
+- **client-authoritative state**: 동기화/치트 취약점 증가
+- **implicit permission checks**: 보안 검토 누락 유발
+- **broad subscriptions**: 네트워크/서버 부하 증가
 
 ---
 *Generated by specs.md - fabriqa.ai FIRE Flow*

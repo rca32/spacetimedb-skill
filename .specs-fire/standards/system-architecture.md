@@ -2,107 +2,111 @@
 
 ## Overview
 
-The repository is a monorepo that hosts SpacetimeDB core sources, game server modules, and supporting examples and tools. Each module/crate owns its tables, reducers, agents, and services while following shared design documentation.
+Stitch는 SpacetimeDB를 데이터베이스+서버 런타임으로 사용하며, MMO 핵심 상태(플레이어, 월드, 전투, 경제)를 서버 권위로 유지한다.
 
 ## System Context
 
-Developers build and run SpacetimeDB modules locally or in self-hosted environments. DESIGN documents define the authoritative behavior for server-side logic.
+클라이언트는 reducer 호출로 의도를 전달하고, 서버는 검증 후 테이블 변경을 구독 스트림으로 전파한다.
 
 ### Context Diagram
 
 ```
-[Developer] -> [Monorepo Sources] -> [SpacetimeDB Runtime]
+[Client] -- reducer call --> [SpacetimeDB Module]
+[SpacetimeDB Module] -- table updates --> [Client Subscriptions]
+[Admin/Tools] -- spacetime sql/call --> [SpacetimeDB Module]
 ```
 
 ### Users
 
-- **Developers**: implement reducers, tables, agents, and services
-- **Game Servers**: execute SpacetimeDB modules in runtime
+- **Player**: 게임 플레이, 이동/전투/채집/건설 수행
+- **Operator**: 배포, 데이터 시드, 운영 점검
+- **Designer**: 밸런스 파라미터 및 도메인 정책 관리
 
 ### External Systems
 
-- **None**: external dependencies vary per module and are defined locally
+- **SpacetimeDB Runtime**: 모듈 실행 및 실시간 동기화
+- **CLI Tooling**: build/publish/call/sql/subscription 테스트
 
 ## Architecture Pattern
 
-**Pattern**: Modular monorepo with event-driven reducers
-**Rationale**: Clear separation between core runtime, game modules, and tooling.
+**Pattern**: Server-authoritative realtime module
+**Rationale**: 치트 방지와 상태 일관성 보장에 유리
 
 ## Component Architecture
 
 ### Components
 
-#### SpacetimeDB Core
+#### Auth/Identity
 
-- **Purpose**: Core runtime, database engine, and SDKs
-- **Responsibilities**: Execution, storage, APIs, tooling
-- **Dependencies**: Rust ecosystem crates
+- **Purpose**: 호출자 식별 및 권한 경계 제공
+- **Responsibilities**: sender 검증, admin/server guard
+- **Dependencies**: session state, permission state
 
-#### Stitch Server
+#### Domain Reducers
 
-- **Purpose**: Game server module implementation
-- **Responsibilities**: Tables, reducers, services, agents based on DESIGN/DETAIL
-- **Dependencies**: SpacetimeDB runtime
+- **Purpose**: 게임 규칙 실행
+- **Responsibilities**: 입력 검증, 상태 전이, 제약 집행
+- **Dependencies**: core tables, balance parameters
 
-#### Examples and Tools
+#### Subscription Layer
 
-- **Purpose**: Demonstrations, tooling, and documentation
-- **Responsibilities**: Sample modules, scripts, and learning assets
-- **Dependencies**: Local module stacks
+- **Purpose**: 관심 데이터 실시간 전달
+- **Responsibilities**: 범위 제한, 델타 기반 갱신
+- **Dependencies**: table schema, query filters
 
 ### Component Diagram
 
 ```
-[SpacetimeDB Core] <-- [Stitch Server]
-           ^
-           |
-     [Examples/Tools]
+Client -> Reducer API -> Validation -> Domain State Tables -> Subscription Push
 ```
 
 ## Data Flow
 
-Reducers mutate tables, agents schedule periodic work, and subscriptions deliver state to clients. Design documents define invariants and constraints.
+클라이언트 입력은 reducer로 들어가고, 서버 검증 성공 시 테이블에 반영되며 구독 중인 클라이언트가 변경분을 수신한다.
 
 ```
-[Reducer] -> [Tables] -> [Subscriptions] -> [Clients]
+input -> validate -> mutate -> publish delta -> reconcile client
 ```
 
 ## Technology Stack
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
-| Runtime | Rust + SpacetimeDB | Server execution and data model |
-| Data | SpacetimeDB tables | State storage |
-| Tooling | cargo + npm | Builds and scripts |
+| Runtime | SpacetimeDB | 서버 권위 상태/동기화 |
+| Module | Rust | 도메인 로직 구현 |
+| Interface | reducer + SQL subscription | 입력/조회 경로 |
+| Ops | spacetime CLI | 빌드/배포/검증 |
 
 ## Non-Functional Requirements
 
 ### Performance
 
-- **Reducer latency**: Defined per module design documents
-- **Agent tick rate**: Defined per module design documents
+- **Tick/Sync**: 10-20Hz 스냅샷 + 중요 이벤트 즉시 푸시
+- **Subscription scope**: 관심 영역 기반 최소 전송
 
 ### Security
 
-- No secrets in source control
-- Access control enforced in reducers where applicable
+- 모든 민감 reducer는 권한 검사 필수
+- anti-cheat 검증은 서버에서 최종 판정
+- scheduled reducer는 server/admin로 제한
 
 ### Scalability
 
-Scale by modularizing workloads and keeping reducers deterministic.
+관심 영역/도메인 단위로 데이터 접근을 분리하고, 테이블 인덱스 및 구독 필터를 우선 최적화한다.
 
 ## Constraints
 
-- DESIGN/DETAIL docs are the source of truth for server behavior
-- SpacetimeDB-related work must follow the SpacetimeDB skill guidance
+- DESIGN 문서가 우선이며 외부 레퍼런스는 참고만 사용
+- SpacetimeDB 데이터 모델(테이블/리듀서/구독)에 맞춘 설계 유지
+- 파라미터/타이머는 프로젝트 정책 정의에서 결정
 
 ## Key Decisions
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Core runtime | SpacetimeDB | Unified database + reducer model |
-| Primary language | Rust | Performance and safety for server logic |
-| Repo structure | Monorepo | Shared tooling and coordinated design |
+| Authority model | Server authoritative | 동기화/치트 방지 강화를 위해 |
+| Sync strategy | Subscription + delta updates | 실시간성과 대역폭 효율 균형 |
+| Validation point | Reducer entry | 규칙 일관성과 감사 가능성 확보 |
 
 ---
 *Generated by specs.md - fabriqa.ai FIRE Flow*

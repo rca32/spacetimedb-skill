@@ -1,7 +1,0 @@
-[workspace]
-members = [
-  "crates/game_server",
-  "crates/shared_types",
-  "crates/data_loader",
-]
-resolver = "2"
