@@ -56,25 +56,31 @@ intents:
         completed_at: 2026-02-07T16:34:54.357Z
       - id: implement-combat-loop-and-combat-state
         title: 전투 루프 및 combat_state 구현
-        status: pending
+        status: completed
         complexity: high
         mode: validate
         depends_on:
           - migrate-auth-session-movement-foundation-into-domain-modules
+        run_id: run-005
+        completed_at: 2026-02-07T16:56:49.051Z
       - id: implement-npc-quest-foundation-and-agent-schedule
         title: NPC/퀘스트 기반 및 에이전트 스케줄 구현
-        status: pending
+        status: completed
         complexity: high
         mode: validate
         depends_on:
           - migrate-auth-session-movement-foundation-into-domain-modules
+        run_id: run-005
+        completed_at: 2026-02-07T16:56:49.051Z
       - id: implement-trade-and-market-core-loop
         title: 거래/경매 코어 루프 구현
-        status: pending
+        status: completed
         complexity: high
         mode: validate
         depends_on:
           - implement-inventory-container-slot-item-loop
+        run_id: run-005
+        completed_at: 2026-02-07T16:56:49.051Z
       - id: build-static-data-loader-and-asset-pipeline
         title: 정적 데이터 로더 및 에셋 파이프라인 구축
         status: pending
@@ -103,27 +109,7 @@ intents:
           - implement-subscription-streams-and-aoi-query-paths
           - build-static-data-loader-and-asset-pipeline
 runs:
-  active:
-    - id: run-005
-      scope: batch
-      work_items:
-        - id: implement-combat-loop-and-combat-state
-          intent: stitch-full-game-server-development
-          mode: validate
-          status: in_progress
-          current_phase: review
-        - id: implement-npc-quest-foundation-and-agent-schedule
-          intent: stitch-full-game-server-development
-          mode: validate
-          status: pending
-          current_phase: null
-        - id: implement-trade-and-market-core-loop
-          intent: stitch-full-game-server-development
-          mode: validate
-          status: pending
-          current_phase: null
-      current_item: implement-combat-loop-and-combat-state
-      started: 2026-02-07T16:42:23.799Z
+  active: []
   completed:
     - id: run-001
       scope: single
@@ -157,3 +143,17 @@ runs:
           mode: validate
       started: 2026-02-07T16:30:14.639Z
       completed: 2026-02-07T16:34:54.357Z
+    - id: run-005
+      scope: batch
+      work_items:
+        - id: implement-combat-loop-and-combat-state
+          intent: stitch-full-game-server-development
+          mode: validate
+        - id: implement-npc-quest-foundation-and-agent-schedule
+          intent: stitch-full-game-server-development
+          mode: validate
+        - id: implement-trade-and-market-core-loop
+          intent: stitch-full-game-server-development
+          mode: validate
+      started: 2026-02-07T16:42:23.799Z
+      completed: 2026-02-07T16:56:49.051Z

@@ -4,9 +4,12 @@ title: 전투 루프 및 combat_state 구현
 intent: stitch-full-game-server-development
 complexity: high
 mode: validate
-status: pending
-depends_on: [migrate-auth-session-movement-foundation-into-domain-modules]
+status: completed
+depends_on:
+  - migrate-auth-session-movement-foundation-into-domain-modules
 created: 2026-02-07T16:08:40Z
+run_id: run-005
+completed_at: 2026-02-07T16:56:16.925Z
 ---
 
 # Work Item: 전투 루프 및 combat_state 구현
