@@ -35,12 +35,30 @@ spacetime call --server 127.0.0.1:3000 stitch-server sign_in 1
 spacetime call --server 127.0.0.1:3000 stitch-server sign_out
 ```
 
+## Authoritative Movement / Anti-Cheat
+
+```bash
+# 정상 이동
+spacetime call --server 127.0.0.1:3000 stitch-server move_to "req-1" 1 1000 1.0 0.0 0.0
+
+# 멱등 중복 요청 (same request_id): no-op 처리
+spacetime call --server 127.0.0.1:3000 stitch-server move_to "req-1" 1 1000 1.0 0.0 0.0
+
+# 위반 예시: 비정상 장거리 이동
+spacetime call --server 127.0.0.1:3000 stitch-server move_to "req-2" 1 2000 100.0 0.0 0.0
+```
+
+위반 요청은 reducer 오류 대신 서버 no-op으로 처리되고 `movement_violation`/`movement_request_log`에 기록된다.
+
 ## Verify Seeded Data
 
 ```bash
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM item_def"
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM account"
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM player_state"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT entity_id, region_id, position FROM transform_state"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT identity, reason, attempted_position FROM movement_violation"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT identity, request_id, accepted FROM movement_request_log"
 ```
 
 ## Notes

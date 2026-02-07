@@ -4,9 +4,12 @@ title: 서버 권위 이동 및 안티치트 검증 구현
 intent: stitch-design-implementation-kickoff
 complexity: high
 mode: validate
-status: pending
-depends_on: [implement-account-player-session-foundation]
+status: completed
+depends_on:
+  - implement-account-player-session-foundation
 created: 2026-02-07T15:28:44Z
+run_id: run-016
+completed_at: 2026-02-07T16:01:53.630Z
 ---
 
 # Work Item: 서버 권위 이동 및 안티치트 검증 구현
