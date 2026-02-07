@@ -1,6 +1,7 @@
 pub mod account;
 pub mod building_state;
 pub mod claim_state;
+pub mod combat;
 pub mod inventory_container;
 pub mod inventory_lock;
 pub mod inventory_slot;
@@ -8,14 +9,17 @@ pub mod item_def;
 pub mod item_instance;
 pub mod item_stack;
 pub mod movement;
+pub mod npc_quest;
 pub mod permission_state;
 pub mod player_state;
 pub mod session_state;
 pub mod transform_state;
+pub mod trade_market;
 
 pub use account::Account;
 pub use building_state::BuildingState;
 pub use claim_state::ClaimState;
+pub use combat::{AttackOutcome, AttackScheduled, CombatState, ThreatState};
 pub use inventory_container::InventoryContainer;
 pub use inventory_lock::InventoryLock;
 pub use inventory_slot::InventorySlot;
@@ -23,7 +27,11 @@ pub use item_def::ItemDef;
 pub use item_instance::ItemInstance;
 pub use item_stack::ItemStack;
 pub use movement::{MovementActorState, MovementRequestLog, MovementViolation};
+pub use npc_quest::{
+    AgentRequest, AgentResult, NpcInteractionLog, NpcState, QuestChainState, QuestStageState,
+};
 pub use permission_state::PermissionState;
 pub use player_state::PlayerState;
 pub use session_state::SessionState;
 pub use transform_state::TransformState;
+pub use trade_market::{MarketFill, MarketOrder, TradeOffer, TradeSession};
