@@ -111,7 +111,7 @@ runs:
           intent: stitch-full-game-server-development
           mode: validate
           status: in_progress
-          current_phase: test
+          current_phase: review
         - id: implement-npc-quest-foundation-and-agent-schedule
           intent: stitch-full-game-server-development
           mode: validate

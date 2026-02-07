@@ -2,7 +2,7 @@ use spacetimedb::{ReducerContext, Table};
 
 use crate::tables::{AttackOutcome, ThreatState};
 use crate::tables::combat::attack_outcome;
-use crate::tables::combat::attack_scheduled;
+use crate::tables::combat::attack_schedule_state;
 use crate::tables::combat::combat_state;
 use crate::tables::session_state::session_state;
 use crate::tables::combat::threat_state;
@@ -14,7 +14,7 @@ const ATTACK_RANGE_SQ: f32 = 64.0;
 pub fn attack_impact(ctx: &ReducerContext, request_key: String, client_ts_ms: u64) -> Result<(), String> {
     let mut scheduled = ctx
         .db
-        .attack_scheduled()
+        .attack_schedule_state()
         .request_key()
         .find(request_key.clone())
         .ok_or("scheduled attack not found".to_string())?;
@@ -101,7 +101,7 @@ pub fn attack_impact(ctx: &ReducerContext, request_key: String, client_ts_ms: u6
     let scheduled_target = scheduled.target_identity;
     let scheduled_region = scheduled.region_id;
     let scheduled_damage = scheduled.impact_damage;
-    ctx.db.attack_scheduled().request_key().update(scheduled);
+    ctx.db.attack_schedule_state().request_key().update(scheduled);
 
     let outcome_id = format!("{}:{}", scheduled_request_key, client_ts_ms);
     if ctx.db.attack_outcome().outcome_id().find(outcome_id.clone()).is_none() {

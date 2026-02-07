@@ -1,12 +1,12 @@
 use spacetimedb::ReducerContext;
 
-use crate::tables::combat::attack_scheduled as attack_scheduled_table;
+use crate::tables::combat::attack_schedule_state;
 
 #[spacetimedb::reducer]
 pub fn attack_scheduled(ctx: &ReducerContext, request_key: String) -> Result<(), String> {
     let mut scheduled = ctx
         .db
-        .attack_scheduled()
+        .attack_schedule_state()
         .request_key()
         .find(request_key)
         .ok_or("scheduled attack not found".to_string())?;
@@ -21,7 +21,7 @@ pub fn attack_scheduled(ctx: &ReducerContext, request_key: String) -> Result<(),
 
     scheduled.phase = 1;
     scheduled.updated_at = ctx.timestamp;
-    ctx.db.attack_scheduled().request_key().update(scheduled);
+    ctx.db.attack_schedule_state().request_key().update(scheduled);
 
     Ok(())
 }
