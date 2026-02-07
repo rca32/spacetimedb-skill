@@ -40,5 +40,4 @@ created: 2026-02-07T16:08:40Z
 
 ## Notes
 
-기존 intent(`stitch-design-implementation-kickoff`)의 미완료 항목과 충돌하지 않도록,
-본 intent는 "전체 구조/기능 확장" 중심으로 독립 백로그를 구성한다.
+intent는 "전체 구조/기능 확장" 중심으로 독립 백로그를 구성한다.

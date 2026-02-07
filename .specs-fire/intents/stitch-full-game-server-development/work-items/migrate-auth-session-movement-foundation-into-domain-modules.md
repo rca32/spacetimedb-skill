@@ -4,9 +4,12 @@ title: 기존 인증/세션/이동 기반을 도메인 모듈로 이전
 intent: stitch-full-game-server-development
 complexity: high
 mode: validate
-status: pending
-depends_on: [scaffold-domain-folder-structure-and-module-entrypoints]
+status: completed
+depends_on:
+  - scaffold-domain-folder-structure-and-module-entrypoints
 created: 2026-02-07T16:08:40Z
+run_id: run-002
+completed_at: 2026-02-07T16:22:06.493Z
 ---
 
 # Work Item: 기존 인증/세션/이동 기반을 도메인 모듈로 이전

@@ -1,1 +1,2 @@
-//! Domain reducer modules will be added incrementally.
+pub mod inventory;
+pub mod player;

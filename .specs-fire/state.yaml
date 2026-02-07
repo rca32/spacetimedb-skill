@@ -29,11 +29,13 @@ intents:
         completed_at: 2026-02-07T16:16:03.530Z
       - id: migrate-auth-session-movement-foundation-into-domain-modules
         title: 기존 인증/세션/이동 기반을 도메인 모듈로 이전
-        status: pending
+        status: completed
         complexity: high
         mode: validate
         depends_on:
           - scaffold-domain-folder-structure-and-module-entrypoints
+        run_id: run-002
+        completed_at: 2026-02-07T16:22:06.493Z
       - id: implement-inventory-container-slot-item-loop
         title: 인벤토리 컨테이너/슬롯/아이템 루프 구현
         status: pending
@@ -97,7 +99,17 @@ intents:
           - implement-subscription-streams-and-aoi-query-paths
           - build-static-data-loader-and-asset-pipeline
 runs:
-  active: []
+  active:
+    - id: run-003
+      scope: single
+      work_items:
+        - id: implement-inventory-container-slot-item-loop
+          intent: stitch-full-game-server-development
+          mode: confirm
+          status: in_progress
+          current_phase: plan
+      current_item: implement-inventory-container-slot-item-loop
+      started: 2026-02-07T16:23:00.206Z
   completed:
     - id: run-001
       scope: single
@@ -107,3 +119,11 @@ runs:
           mode: validate
       started: 2026-02-07T16:13:01.385Z
       completed: 2026-02-07T16:16:03.530Z
+    - id: run-002
+      scope: single
+      work_items:
+        - id: migrate-auth-session-movement-foundation-into-domain-modules
+          intent: stitch-full-game-server-development
+          mode: validate
+      started: 2026-02-07T16:17:29.216Z
+      completed: 2026-02-07T16:22:06.493Z

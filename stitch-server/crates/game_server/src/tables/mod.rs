@@ -1,1 +1,23 @@
-//! Table declarations will be split by domain in follow-up work items.
+pub mod account;
+pub mod inventory_container;
+pub mod inventory_lock;
+pub mod inventory_slot;
+pub mod item_def;
+pub mod item_instance;
+pub mod item_stack;
+pub mod movement;
+pub mod player_state;
+pub mod session_state;
+pub mod transform_state;
+
+pub use account::Account;
+pub use inventory_container::InventoryContainer;
+pub use inventory_lock::InventoryLock;
+pub use inventory_slot::InventorySlot;
+pub use item_def::ItemDef;
+pub use item_instance::ItemInstance;
+pub use item_stack::ItemStack;
+pub use movement::{MovementActorState, MovementRequestLog, MovementViolation};
+pub use player_state::PlayerState;
+pub use session_state::SessionState;
+pub use transform_state::TransformState;
