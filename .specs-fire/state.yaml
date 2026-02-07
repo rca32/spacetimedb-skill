@@ -59,8 +59,61 @@ intents:
           - define-sync-and-anti-cheat-contracts
           - define-world-generation-contracts
           - define-player-regeneration-contracts
+  - id: stitch-design-implementation-kickoff
+    title: Stitch 게임 서버 실개발 착수 (DESIGN 기반)
+    status: in_progress
+    work_items:
+      - id: bootstrap-spacetimedb-module-and-seed
+        title: SpacetimeDB 모듈 부트스트랩 및 시드 경로 확정
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on: []
+        run_id: run-014
+        completed_at: 2026-02-07T15:40:27.186Z
+      - id: implement-account-player-session-foundation
+        title: 계정/플레이어/세션 기반 상태 구현
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - bootstrap-spacetimedb-module-and-seed
+        run_id: run-015
+        completed_at: 2026-02-07T15:50:52.362Z
+      - id: implement-authoritative-movement-and-anti-cheat-checks
+        title: 서버 권위 이동 및 안티치트 검증 구현
+        status: pending
+        complexity: high
+        mode: validate
+        depends_on:
+          - implement-account-player-session-foundation
+      - id: implement-minimum-inventory-loop
+        title: 최소 인벤토리 루프 구현 (컨테이너/슬롯/아이템 조회)
+        status: pending
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - implement-account-player-session-foundation
+      - id: establish-cli-integration-test-scenarios
+        title: CLI 기반 통합 시나리오 테스트 확립
+        status: pending
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - implement-authoritative-movement-and-anti-cheat-checks
+          - implement-minimum-inventory-loop
 runs:
-  active: []
+  active:
+    - id: run-016
+      scope: single
+      work_items:
+        - id: implement-authoritative-movement-and-anti-cheat-checks
+          intent: stitch-design-implementation-kickoff
+          mode: validate
+          status: in_progress
+          current_phase: execute
+      current_item: implement-authoritative-movement-and-anti-cheat-checks
+      started: 2026-02-07T15:55:16.680Z
   completed:
     - id: run-012
       scope: single
@@ -78,3 +131,19 @@ runs:
           mode: validate
       started: 2026-02-07T15:09:29.064Z
       completed: 2026-02-07T15:11:23.524Z
+    - id: run-014
+      scope: single
+      work_items:
+        - id: bootstrap-spacetimedb-module-and-seed
+          intent: stitch-design-implementation-kickoff
+          mode: confirm
+      started: 2026-02-07T15:32:06.940Z
+      completed: 2026-02-07T15:40:27.186Z
+    - id: run-015
+      scope: single
+      work_items:
+        - id: implement-account-player-session-foundation
+          intent: stitch-design-implementation-kickoff
+          mode: validate
+      started: 2026-02-07T15:41:21.499Z
+      completed: 2026-02-07T15:50:52.362Z

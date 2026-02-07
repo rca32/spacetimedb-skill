@@ -1,0 +1,12 @@
+[package]
+name = "game_server"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+anyhow = "1"
+log = "0.4"
+spacetimedb = "1.11.*"
