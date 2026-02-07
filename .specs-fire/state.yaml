@@ -1,57 +1,70 @@
 project:
-  name: "spacetimedb-skill"
-  description: "Stitch MMO RPG 서버 설계를 FIRE 방법론으로 관리"
-  created: "2026-02-07T14:35:19Z"
-  fire_version: "0.1.8"
-
+  name: spacetimedb-skill
+  description: Stitch MMO RPG 서버 설계를 FIRE 방법론으로 관리
+  created: 2026-02-07T14:35:19Z
+  fire_version: 0.1.8
 workspace:
   type: greenfield
   structure: monolith
   autonomy_bias: balanced
   run_scope_preference: single
-  run_scope_history: []
-  scanned_at: "2026-02-07T14:35:19Z"
+  run_scope_history:
+    - choice: single
+      items_count: 1
+      timestamp: 2026-02-07T14:45:38Z
+  scanned_at: 2026-02-07T14:35:19Z
   parts: []
-
 intents:
   - id: mmo-core-server-foundation
-    title: "MMO 코어 서버 설계 정렬 (DESIGN -> FIRE)"
+    title: MMO 코어 서버 설계 정렬 (DESIGN -> FIRE)
     status: in_progress
     work_items:
       - id: align-data-model-and-permissions
-        title: "데이터 모델/권한 설계 정렬"
-        status: pending
+        title: 데이터 모델/권한 설계 정렬
+        status: in_progress
         complexity: high
         mode: validate
         depends_on: []
       - id: define-sync-and-anti-cheat-contracts
-        title: "동기화/안티치트 계약 정의"
-        status: pending
+        title: 동기화/안티치트 계약 정의
+        status: in_progress
         complexity: high
         mode: validate
-        depends_on: [align-data-model-and-permissions]
+        depends_on:
+          - align-data-model-and-permissions
       - id: define-world-generation-contracts
-        title: "월드 생성 계약 정의"
-        status: pending
+        title: 월드 생성 계약 정의
+        status: completed
         complexity: medium
         mode: confirm
-        depends_on: [align-data-model-and-permissions]
+        depends_on:
+          - align-data-model-and-permissions
       - id: define-player-regeneration-contracts
-        title: "플레이어 재생/소비 계약 정의"
-        status: pending
+        title: 플레이어 재생/소비 계약 정의
+        status: completed
         complexity: medium
         mode: confirm
-        depends_on: [align-data-model-and-permissions]
+        depends_on:
+          - align-data-model-and-permissions
       - id: build-design-traceability-matrix
-        title: "DESIGN 추적 매트릭스 구축"
-        status: pending
+        title: DESIGN 추적 매트릭스 구축
+        status: completed
         complexity: medium
         mode: confirm
         depends_on:
           - define-sync-and-anti-cheat-contracts
           - define-world-generation-contracts
           - define-player-regeneration-contracts
-
 runs:
-  active: []
+  active:
+    - id: run-012
+      scope: single
+      work_items:
+        - id: align-data-model-and-permissions
+          intent: mmo-core-server-foundation
+          mode: validate
+          status: in_progress
+          current_phase: execute
+      current_item: align-data-model-and-permissions
+      started: 2026-02-07T14:45:38Z
   completed: []
