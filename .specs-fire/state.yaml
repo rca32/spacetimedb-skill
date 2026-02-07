@@ -21,10 +21,12 @@ intents:
     work_items:
       - id: align-data-model-and-permissions
         title: 데이터 모델/권한 설계 정렬
-        status: in_progress
+        status: completed
         complexity: high
         mode: validate
         depends_on: []
+        run_id: run-012
+        completed_at: 2026-02-07T15:07:52.754Z
       - id: define-sync-and-anti-cheat-contracts
         title: 동기화/안티치트 계약 정의
         status: in_progress
@@ -56,15 +58,13 @@ intents:
           - define-world-generation-contracts
           - define-player-regeneration-contracts
 runs:
-  active:
+  active: []
+  completed:
     - id: run-012
       scope: single
       work_items:
         - id: align-data-model-and-permissions
           intent: mmo-core-server-foundation
           mode: validate
-          status: in_progress
-          current_phase: execute
-      current_item: align-data-model-and-permissions
       started: 2026-02-07T14:45:38Z
-  completed: []
+      completed: 2026-02-07T15:07:52.754Z

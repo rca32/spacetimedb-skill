@@ -1,127 +1,113 @@
-# Stitch 권한/접근 제어 시스템 상세 설계
+# Stitch 권한/접근 제어 상세 설계
 
-> **작성일**: 2026-02-01  
+> **작성일**: 2026-02-07  
 > **상태**: DESIGN/DETAIL - 상세 구현 설계  
-> **참고**: BitCraftPublicDoc 및 BitCraftServer 구현 패턴은 영감용 참고  
-> **범위**: Permission 계층, 그룹, 엔티티/차원/클레임 캐스케이드
+> **범위**: `permission_state` 비트마스크, 조회 경계, reducer 검증 지점
 
 ---
 
 ## 1. 목표
 
-- 단일 권한 모델로 **엔티티/차원/클레임**을 모두 제어.
-- 그룹 권한(플레이어/클레임/엠파이어/전체)을 지원.
-- `OverrideNoAccess`로 명시적 차단 가능.
+- 권한 판단을 `permission_state.flags` 단일 모델로 통합한다.
+- 공개 데이터(`building_state`, `claim_state`)와 민감 권한 데이터(`permission_state`)의 경계를 분리한다.
+- 모든 민감 reducer가 동일한 권한 검증 경로(`permission_check`)를 사용하도록 고정한다.
 
 ---
 
-## 2. 권한 계층
+## 2. 핵심 권한 모델
 
-```rust
-pub enum Permission {
-  PendingVisitor,
-  Visitor,
-  Usage,
-  Inventory,
-  Build,
-  CoOwner,
-  OverrideNoAccess,
-  Owner,
-}
+### 2.1 권한 비트
 
-impl Permission {
-  pub fn meets(self, target: Permission) -> bool {
-    if (self as i32) < (target as i32) { return false; }
-    self != Permission::OverrideNoAccess
-  }
-}
-```
+| Flag | Bit | 목적 |
+|---|---:|---|
+| `perm_view` | `0x0001` | 조회/가시성 |
+| `perm_use` | `0x0002` | 사용/상호작용 |
+| `perm_build` | `0x0004` | 건설/수정 |
+| `perm_inventory` | `0x0008` | 인벤토리 접근 |
+| `perm_trade` | `0x0010` | 거래 |
+| `perm_admin` | `0x4000` | 권한 관리 |
+| `perm_owner` | `0x8000` | 소유자(최상위) |
 
----
+### 2.2 우선순위
 
-## 3. 권한 그룹
+1. `perm_owner`  
+2. `perm_admin`  
+3. 기능 비트(`perm_view/use/build/inventory/trade`)
 
-- Player: 단일 플레이어
-- Claim: 클레임 멤버 전체
-- Empire: 엠파이어 멤버 전체
-- Everyone: 모든 플레이어
+규칙:
+- `perm_owner`는 최상위이며 소유자 전용 액션 허용 근거다.
+- `perm_admin`은 관리 액션(`permission_edit`) 권한이며 소유권 대체가 아니다.
 
 ---
 
-## 4. 캐스케이드 평가
+## 3. subject_type 및 평가 규칙
 
-### 4.1 평가 순서
-1) 엔티티 권한
-2) 차원(인테리어) 권한
-3) 클레임 권한
+| subject_type | 의미 | 매칭 소스 |
+|---:|---|---|
+| 1 | Player | `viewer_entity_id` |
+| 2 | Party | `party_member` |
+| 3 | Guild | `guild_member` |
+| 4 | Empire | `empire_member` |
+| 5 | Public | 전원 |
 
-`OverrideNoAccess` 발견 즉시 차단.
+평가 순서:
+1. Player
+2. Party
+3. Guild
+4. Empire
+5. Public
 
----
-
-## 5. 테이블 설계 (정리)
-
-### 5.1 permission_state
-```rust
-#[spacetimedb::table(name = permission_state, public)]
-pub struct PermissionState {
-  #[primary_key]
-  pub entity_id: u64,
-  pub ordained_entity_id: u64, // 대상(건물/차원/클레임/하우징)
-  pub allowed_entity_id: u64,  // 허용 주체
-  pub group: i32,
-  pub rank: i32,
-}
-```
+동일 target에서 다중 행이 매칭되면 허용 비트는 OR 결합으로 판정한다.
 
 ---
 
-## 6. 건물/타일 권한
+## 4. 테이블 접근 경계
 
-- 건물은 `BuildingInteractionLevel`로 1차 필터.
-- Empire 건물은 `empire_rank` 권한 체크 추가.
-- 클레임은 `claim_member_state`에 의해 세부 권한 결정.
+| 테이블 | 공개 수준 | 접근 원칙 |
+|---|---|---|
+| `permission_state` | private/RLS | 원본 권한 저장, 허용된 뷰만 노출 |
+| `building_state` | public | 기본 정보 공개 + 권한 뷰 제한 |
+| `claim_state` | public | 기본 정보 공개 + 권한 뷰 제한 |
 
----
-
-## 7. 임대 인테리어(렌트)
-
-- 렌트된 차원은 클레임 권한을 무시하고 **화이트리스트**만 적용.
-
-```rust
-#[spacetimedb::table(name = rent_state, public)]
-pub struct RentState {
-  #[primary_key]
-  pub entity_id: u64,
-  pub white_list: Vec<u64>,
-}
-```
+뷰 정책:
+- `PublicView`: 기본 정보만 노출
+- `PartyView`/`GuildView`: `perm_view` 또는 `perm_owner` 만족 시 노출
+- `SelfView`: 소유자 또는 `perm_owner` 보유 시 노출
+- `AdminView`: 운영자 전용
 
 ---
 
-## 8. 리듀서 설계
+## 5. reducer 검증 포인트
 
-### 8.1 permission_edit
-- CoOwner 이상만 수정 가능
-- 동일 또는 상위 권한을 가진 대상은 수정 불가
-- 주거는 네트워크 차원 전체에 전파
+| Reducer | Entry Validation | Authorization Check | 비고 |
+|---|---|---|---|
+| `permission_check` | target/action/subject 파라미터 유효성 검사 | `permission_state` 조회 + 비트 판정 | 공통 권한 함수 |
+| `permission_edit` | 변경 대상/비트 마스크 유효성 검사 | 호출자 `perm_admin` 또는 `perm_owner` 확인 | 권한 상승 차단 필수 |
+| `building_*` 민감 변경 reducer | target 존재/상태 검사 | mutate 전 `permission_check(target=building_id, action=...)` | 배치/철거/수리 등 |
+| `claim_*` 민감 변경 reducer | claim_id/입력 범위 검사 | mutate 전 `permission_check(target=claim_id, action=...)` | 정책/멤버/확장 등 |
 
-### 8.2 permission_check
-- 서버 핸들러 공통 함수로 통합
-- 요청마다 entity/dimension/claim 캐스케이드 적용
+### 5.1 `permission_edit` 추가 제약
 
----
-
-## 9. 에지 케이스
-
-- 권한 없음: 기본 허용(오픈 월드 정책)
-- `OverrideNoAccess`: Owner 외에는 전면 차단
-- 클레임 공급 0/무주 상태는 기본 허용
+- 호출자는 최소 `perm_admin`이어야 한다.
+- 대상이 `perm_owner`인 경우 `perm_owner`만 수정 가능하다.
+- 호출자가 보유하지 않은 상위 비트는 부여할 수 없다.
 
 ---
 
-## 10. 관련 문서
+## 6. 표준 처리 흐름
 
-- DESIGN/05-data-model-tables/permission_state.md
-- DESIGN/DETAIL/stitch-housing-interior.md
-- DESIGN/DETAIL/stitch-claim-empire-management.md
+1. reducer 진입 시 입력값 검증
+2. `permission_check` 호출
+3. 허용 시 상태 변경 수행
+4. 거부 시 즉시 에러 반환
+
+이 흐름은 서버 권위 모델의 기본 계약으로 모든 민감 reducer에서 동일하게 적용한다.
+
+---
+
+## 7. 운영/검증 체크리스트
+
+- [ ] `permission_state` direct read가 아닌 허용 view만 사용
+- [ ] `building_state`/`claim_state` 뷰 조건이 `perm_view`/`perm_owner` 기준으로 정렬됨
+- [ ] 민감 reducer에서 `permission_check` 선호출이 문서/구현 모두에 반영됨
+- [ ] owner/admin 의미가 문서 간 동일하게 유지됨

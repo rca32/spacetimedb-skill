@@ -4,10 +4,10 @@
 - Primary Key: (target_id, subject_type, subject_id)
 
 ## RLS 규칙
-- 기본: 대상 소유자 또는 subject에 해당하는 본인/그룹만 조회.
-- 파티 예외: 파티 권한 플래그가 있을 때만 조회.
-- 길드 예외: Officer 이상 권한 보유 시 조회.
-- 운영자/GM 예외: 운영자 전체 조회 가능.
+- 기본: 호출자와 매칭되는 subject만 조회 가능.
+- 매칭 순서: Player(1) -> Party(2) -> Guild(3) -> Empire(4) -> Public(5).
+- 운영자 예외: `AdminView`에서만 전체 조회 허용.
+- private 테이블 직접 구독/조회는 금지하고, 허용된 view만 노출한다.
 
 
 ## 뷰/필드 노출 스펙
@@ -16,6 +16,15 @@
 - GuildView: (none)
 - SelfView: target_id, subject_type, subject_id, flags
 - AdminView: target_id, subject_type, subject_id, flags
+
+## subject_type 정의
+| 값 | 의미 | 매칭 키 |
+|---:|---|---|
+| 1 | Player | `viewer_entity_id` |
+| 2 | Party | `viewer_party_ids` |
+| 3 | Guild | `viewer_guild_ids` |
+| 4 | Empire | `viewer_empire_ids` |
+| 5 | Public | 전체 |
 
 ## 비트별 허용 액션 매핑
 | Flag | Bit | 허용 액션 | 예시 |
@@ -54,8 +63,10 @@ CREATE VIEW permission_state_selfview AS
 SELECT target_id, subject_type, subject_id, flags
 FROM permission_state
 WHERE (subject_type = 1 AND subject_id = :viewer_entity_id)
-  OR (subject_type = 2 AND subject_id IN (SELECT party_id FROM party_member WHERE entity_id = :viewer_entity_id))
-  OR (subject_type = 3 AND subject_id IN (SELECT guild_id FROM guild_member WHERE entity_id = :viewer_entity_id));
+   OR (subject_type = 2 AND subject_id IN (SELECT party_id FROM party_member WHERE entity_id = :viewer_entity_id))
+   OR (subject_type = 3 AND subject_id IN (SELECT guild_id FROM guild_member WHERE entity_id = :viewer_entity_id))
+   OR (subject_type = 4 AND subject_id IN (SELECT empire_id FROM empire_member WHERE entity_id = :viewer_entity_id))
+   OR (subject_type = 5);
 
 -- AdminView
 CREATE VIEW permission_state_adminview AS
@@ -68,5 +79,6 @@ WHERE :is_admin = true;
 
 
 ## 비고
-- RLS에서 role/flag 조합 평가.
-- subject_type: 1=Player, 2=Party, 3=Guild, 4=Empire, 5=Public.
+- 권한 원본은 `permission_state`만 보유한다.
+- 도메인 reducer는 직접 비트 연산을 분산 구현하지 않고 `permission_check`를 호출한다.
+- 동일 target에 다중 row가 매칭되면 허용 비트를 OR 결합해 최종 판정한다.

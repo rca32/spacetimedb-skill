@@ -4,9 +4,11 @@ title: 데이터 모델/권한 설계 정렬
 intent: mmo-core-server-foundation
 complexity: high
 mode: validate
-status: pending
+status: completed
 depends_on: []
 created: 2026-02-07T14:35:19Z
+run_id: run-012
+completed_at: 2026-02-07T15:07:52.754Z
 ---
 
 # Work Item: 데이터 모델/권한 설계 정렬
