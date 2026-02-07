@@ -4,9 +4,11 @@ title: 도메인 폴더 구조 및 모듈 엔트리포인트 스캐폴딩
 intent: stitch-full-game-server-development
 complexity: high
 mode: validate
-status: pending
+status: completed
 depends_on: []
 created: 2026-02-07T16:08:40Z
+run_id: run-001
+completed_at: 2026-02-07T16:16:03.530Z
 ---
 
 # Work Item: 도메인 폴더 구조 및 모듈 엔트리포인트 스캐폴딩

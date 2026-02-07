@@ -21,10 +21,12 @@ intents:
     work_items:
       - id: scaffold-domain-folder-structure-and-module-entrypoints
         title: 도메인 폴더 구조 및 모듈 엔트리포인트 스캐폴딩
-        status: pending
+        status: completed
         complexity: high
         mode: validate
         depends_on: []
+        run_id: run-001
+        completed_at: 2026-02-07T16:16:03.530Z
       - id: migrate-auth-session-movement-foundation-into-domain-modules
         title: 기존 인증/세션/이동 기반을 도메인 모듈로 이전
         status: pending
@@ -95,15 +97,13 @@ intents:
           - implement-subscription-streams-and-aoi-query-paths
           - build-static-data-loader-and-asset-pipeline
 runs:
-  active:
+  active: []
+  completed:
     - id: run-001
       scope: single
       work_items:
         - id: scaffold-domain-folder-structure-and-module-entrypoints
           intent: stitch-full-game-server-development
           mode: validate
-          status: in_progress
-          current_phase: plan
-      current_item: scaffold-domain-folder-structure-and-module-entrypoints
       started: 2026-02-07T16:13:01.385Z
-  completed: []
+      completed: 2026-02-07T16:16:03.530Z

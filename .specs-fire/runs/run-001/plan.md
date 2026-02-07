@@ -12,10 +12,10 @@ Based on `DESIGN/DETAIL/stitch-server-folder-structure.md`.
 
 ## Implementation Checklist
 
-- [ ] `game_server/src` 하위에 핵심 도메인 디렉터리 골격 생성
-- [ ] `module.rs`/`init.rs`/각 `mod.rs` 엔트리포인트 추가
-- [ ] 기존 `lib.rs` 기능을 모듈 분리 후 공개 경계(`pub mod ...`) 정렬
-- [ ] 기존 reducer/테이블 동작이 깨지지 않도록 컴파일 검증
+- [x] `game_server/src` 하위에 핵심 도메인 디렉터리 골격 생성
+- [x] `module.rs`/`init.rs`/각 `mod.rs` 엔트리포인트 추가
+- [x] 기존 `lib.rs` 기능을 모듈 분리 후 공개 경계(`pub mod ...`) 정렬
+- [x] 기존 reducer/테이블 동작이 깨지지 않도록 컴파일 검증
 
 ## Files to Create
 
