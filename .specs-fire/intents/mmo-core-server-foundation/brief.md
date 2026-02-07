@@ -1,8 +1,9 @@
 ---
 id: mmo-core-server-foundation
 title: MMO 코어 서버 설계 정렬 (DESIGN -> FIRE)
-status: in_progress
+status: completed
 created: 2026-02-07T14:35:19Z
+completed_at: 2026-02-07T15:11:23.540Z
 ---
 
 # Intent: MMO 코어 서버 설계 정렬 (DESIGN -> FIRE)

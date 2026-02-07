@@ -29,11 +29,13 @@ intents:
         completed_at: 2026-02-07T15:07:52.754Z
       - id: define-sync-and-anti-cheat-contracts
         title: 동기화/안티치트 계약 정의
-        status: in_progress
+        status: completed
         complexity: high
         mode: validate
         depends_on:
           - align-data-model-and-permissions
+        run_id: run-013
+        completed_at: 2026-02-07T15:11:23.524Z
       - id: define-world-generation-contracts
         title: 월드 생성 계약 정의
         status: completed
@@ -68,3 +70,11 @@ runs:
           mode: validate
       started: 2026-02-07T14:45:38Z
       completed: 2026-02-07T15:07:52.754Z
+    - id: run-013
+      scope: single
+      work_items:
+        - id: define-sync-and-anti-cheat-contracts
+          intent: mmo-core-server-foundation
+          mode: validate
+      started: 2026-02-07T15:09:29.064Z
+      completed: 2026-02-07T15:11:23.524Z

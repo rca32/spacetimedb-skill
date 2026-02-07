@@ -4,9 +4,12 @@ title: 동기화/안티치트 계약 정의
 intent: mmo-core-server-foundation
 complexity: high
 mode: validate
-status: pending
-depends_on: [align-data-model-and-permissions]
+status: completed
+depends_on:
+  - align-data-model-and-permissions
 created: 2026-02-07T14:35:19Z
+run_id: run-013
+completed_at: 2026-02-07T15:11:23.524Z
 ---
 
 # Work Item: 동기화/안티치트 계약 정의
