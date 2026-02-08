@@ -1,5 +1,6 @@
 use crate::agents::{
-    player_regen_agent_loop, resource_regen_agent_loop, session_cleanup_agent_loop,
+    environment_effect_agent_loop, player_regen_agent_loop, resource_regen_agent_loop,
+    session_cleanup_agent_loop,
 };
 use spacetimedb::{ScheduleAt, Timestamp};
 
@@ -21,6 +22,14 @@ pub struct ResourceRegenLoopTimer {
 
 #[spacetimedb::table(name = session_cleanup_loop_timer, scheduled(session_cleanup_agent_loop))]
 pub struct SessionCleanupLoopTimer {
+    #[primary_key]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+    pub last_run_at: Timestamp,
+}
+
+#[spacetimedb::table(name = environment_effect_loop_timer, scheduled(environment_effect_agent_loop))]
+pub struct EnvironmentEffectLoopTimer {
     #[primary_key]
     pub scheduled_id: u64,
     pub scheduled_at: ScheduleAt,

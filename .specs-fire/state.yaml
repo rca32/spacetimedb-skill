@@ -137,12 +137,14 @@ intents:
         completed_at: 2026-02-08T10:32:00Z
       - id: implement-environment-debuff-and-status-effect-pipeline
         title: 환경 디버프 및 상태효과 파이프라인 구현
-        status: pending
+        status: completed
         complexity: high
         mode: validate
         depends_on:
           - establish-extended-schema-for-liveops-social-security-domains
           - implement-world-resource-and-regeneration-agent-loops
+        run_id: run-011
+        completed_at: 2026-02-08T10:54:00Z
       - id: implement-housing-interior-dimension-network-loop
         title: 주거 인테리어 차원 네트워크 루프 구현
         status: pending
@@ -274,3 +276,11 @@ runs:
           mode: validate
       started: 2026-02-08T10:18:00Z
       completed: 2026-02-08T10:32:00Z
+    - id: run-011
+      scope: single
+      work_items:
+        - id: implement-environment-debuff-and-status-effect-pipeline
+          intent: stitch-server-gap-closure-phase2
+          mode: validate
+      started: 2026-02-08T10:37:00Z
+      completed: 2026-02-08T10:54:00Z

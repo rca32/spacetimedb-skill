@@ -5,6 +5,7 @@ pub mod building_state;
 pub mod claim_state;
 pub mod combat;
 pub mod economy;
+pub mod environment_effect;
 pub mod inventory_container;
 pub mod inventory_lock;
 pub mod inventory_slot;
@@ -28,11 +29,17 @@ pub mod world_state;
 
 pub use account::Account;
 pub use account_profile::AccountProfile;
-pub use agent_timers::{PlayerRegenLoopTimer, ResourceRegenLoopTimer, SessionCleanupLoopTimer};
+pub use agent_timers::{
+    EnvironmentEffectLoopTimer, PlayerRegenLoopTimer, ResourceRegenLoopTimer,
+    SessionCleanupLoopTimer,
+};
 pub use building_state::BuildingState;
 pub use claim_state::ClaimState;
 pub use combat::{AttackOutcome, AttackScheduled, CombatState, ThreatState};
 pub use economy::{CurrencyTxn, EscrowItem, OrderFill, PriceIndex, TaxPolicy, Wallet};
+pub use environment_effect::{
+    EnvironmentEffectDesc, EnvironmentEffectExposure, EnvironmentEffectState,
+};
 pub use inventory_container::InventoryContainer;
 pub use inventory_lock::InventoryLock;
 pub use inventory_slot::InventorySlot;
