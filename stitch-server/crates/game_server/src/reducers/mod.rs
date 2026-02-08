@@ -4,6 +4,7 @@ pub mod combat;
 pub mod housing;
 pub mod inventory;
 pub mod npc_quest;
+pub mod ops_moderation;
 pub mod player;
 pub mod social;
 pub mod trade_market;
