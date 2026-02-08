@@ -93,12 +93,14 @@ sql_check() {
 }
 
 require_server() {
-  run_cmd spacetime sql --server "$SERVER" "$DB_NAME" "SELECT COUNT(*) FROM account"
+  run_cmd spacetime sql --server "$SERVER" "$DB_NAME" "SELECT COUNT(*) AS account_cnt FROM account"
 }
 
 run_iteration() {
   local iter="$1"
   local run_tag="reg-${iter}-$(date +%s)"
+  local run_epoch
+  run_epoch="$(date +%s)"
   local base_ms
   base_ms="$(($(date +%s%3N) + iter * 10000))"
 
@@ -107,8 +109,8 @@ run_iteration() {
   local talk_req="talk-${run_tag}"
   local trade_req="trade-${run_tag}"
   local quest_req="quest-${run_tag}"
-  local building_id=$((700000 + iter))
-  local claim_id=$((800000 + iter))
+  local building_id=$((700000000 + run_epoch + iter))
+  local claim_id=$((800000000 + run_epoch + iter))
   local buy_order="buy-${run_tag}"
 
   echo "=== Iteration ${iter}/${REPEAT}: ${run_tag} ==="
@@ -135,12 +137,27 @@ run_iteration() {
   call_reducer market_order_place "\"${buy_order}\"" 0 1 2 10
   call_reducer market_order_cancel "\"${buy_order}\""
 
-  sql_check "account/player/transform" "SELECT COUNT(*) AS account_cnt FROM account; SELECT COUNT(*) AS player_cnt FROM player_state; SELECT COUNT(*) AS transform_cnt FROM transform_state"
-  sql_check "inventory" "SELECT COUNT(*) AS container_cnt FROM inventory_container; SELECT COUNT(*) AS slot_cnt FROM inventory_slot; SELECT COUNT(*) AS item_cnt FROM item_instance"
-  sql_check "building/claim" "SELECT COUNT(*) AS building_cnt FROM building_state; SELECT COUNT(*) AS claim_cnt FROM claim_state"
-  sql_check "combat" "SELECT COUNT(*) AS combat_cnt FROM combat_state; SELECT COUNT(*) AS schedule_cnt FROM attack_schedule_state; SELECT COUNT(*) AS outcome_cnt FROM attack_outcome"
-  sql_check "npc/quest" "SELECT COUNT(*) AS npc_log_cnt FROM npc_interaction_log; SELECT COUNT(*) AS chain_cnt FROM quest_chain_state; SELECT COUNT(*) AS stage_cnt FROM quest_stage_state"
-  sql_check "market" "SELECT COUNT(*) AS order_cnt FROM market_order; SELECT COUNT(*) AS fill_cnt FROM market_fill"
+  sql_check "account count" "SELECT COUNT(*) AS account_cnt FROM account"
+  sql_check "player count" "SELECT COUNT(*) AS player_cnt FROM player_state"
+  sql_check "transform count" "SELECT COUNT(*) AS transform_cnt FROM transform_state"
+
+  sql_check "inventory container count" "SELECT COUNT(*) AS container_cnt FROM inventory_container"
+  sql_check "inventory slot count" "SELECT COUNT(*) AS slot_cnt FROM inventory_slot"
+  sql_check "item instance count" "SELECT COUNT(*) AS item_cnt FROM item_instance"
+
+  sql_check "building count" "SELECT COUNT(*) AS building_cnt FROM building_state"
+  sql_check "claim count" "SELECT COUNT(*) AS claim_cnt FROM claim_state"
+
+  sql_check "combat count" "SELECT COUNT(*) AS combat_cnt FROM combat_state"
+  sql_check "attack schedule count" "SELECT COUNT(*) AS schedule_cnt FROM attack_schedule_state"
+  sql_check "attack outcome count" "SELECT COUNT(*) AS outcome_cnt FROM attack_outcome"
+
+  sql_check "npc interaction count" "SELECT COUNT(*) AS npc_log_cnt FROM npc_interaction_log"
+  sql_check "quest chain count" "SELECT COUNT(*) AS chain_cnt FROM quest_chain_state"
+  sql_check "quest stage count" "SELECT COUNT(*) AS stage_cnt FROM quest_stage_state"
+
+  sql_check "market order count" "SELECT COUNT(*) AS order_cnt FROM market_order"
+  sql_check "market fill count" "SELECT COUNT(*) AS fill_cnt FROM market_fill"
 
   call_reducer sign_out
 
