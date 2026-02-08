@@ -1,9 +1,9 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::tables::MarketOrder;
 use crate::tables::item_def::item_def;
 use crate::tables::session_state::session_state;
 use crate::tables::trade_market::market_order;
+use crate::tables::MarketOrder;
 
 #[spacetimedb::reducer]
 pub fn market_order_place(

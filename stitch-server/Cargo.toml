@@ -1,3 +1,3 @@
 [workspace]
-members = ["crates/game_server"]
+members = ["crates/game_server", "crates/data_loader"]
 resolver = "2"

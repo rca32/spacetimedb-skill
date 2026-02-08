@@ -2,11 +2,11 @@ use std::hash::{Hash, Hasher};
 
 use spacetimedb::{ReducerContext, Table};
 
-use crate::tables::{InventoryContainer, InventorySlot, ItemInstance, ItemStack};
 use crate::tables::inventory_container::inventory_container;
 use crate::tables::inventory_slot::inventory_slot;
 use crate::tables::item_instance::item_instance;
 use crate::tables::item_stack::item_stack;
+use crate::tables::{InventoryContainer, InventorySlot, ItemInstance, ItemStack};
 
 const DEFAULT_MAIN_SLOT_COUNT: u32 = 16;
 const DEFAULT_SLOT_VOLUME: i32 = 120;

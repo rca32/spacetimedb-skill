@@ -1,10 +1,10 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
-use crate::tables::{AttackScheduled, CombatState};
 use crate::tables::combat::attack_schedule_state;
 use crate::tables::combat::combat_state;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
+use crate::tables::{AttackScheduled, CombatState};
 
 const ATTACK_RANGE_SQ: f32 = 64.0;
 const ATTACK_COOLDOWN_MS: u64 = 1200;
@@ -75,19 +75,19 @@ pub fn attack_start(
         return Ok(());
     }
 
-    let mut attacker_combat = ctx
-        .db
-        .combat_state()
-        .identity()
-        .find(ctx.sender)
-        .unwrap_or(CombatState {
-            identity: ctx.sender,
-            region_id: attacker_session.region_id,
-            in_combat: false,
-            current_hp: DEFAULT_HP,
-            last_attack_client_ts_ms: 0,
-            updated_at: ctx.timestamp,
-        });
+    let mut attacker_combat =
+        ctx.db
+            .combat_state()
+            .identity()
+            .find(ctx.sender)
+            .unwrap_or(CombatState {
+                identity: ctx.sender,
+                region_id: attacker_session.region_id,
+                in_combat: false,
+                current_hp: DEFAULT_HP,
+                last_attack_client_ts_ms: 0,
+                updated_at: ctx.timestamp,
+            });
 
     if client_ts_ms <= attacker_combat.last_attack_client_ts_ms {
         return Err("client timestamp must increase".to_string());
@@ -125,7 +125,13 @@ pub fn attack_start(
     target_combat.region_id = attacker_session.region_id;
     target_combat.updated_at = ctx.timestamp;
 
-    if ctx.db.combat_state().identity().find(target_identity).is_some() {
+    if ctx
+        .db
+        .combat_state()
+        .identity()
+        .find(target_identity)
+        .is_some()
+    {
         ctx.db.combat_state().identity().update(target_combat);
     } else {
         ctx.db.combat_state().insert(target_combat);

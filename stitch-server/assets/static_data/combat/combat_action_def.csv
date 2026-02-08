@@ -1,0 +1,3 @@
+action_def_id,base_damage,cooldown_ms,range_meters
+2001,12,800,2
+2002,18,1500,3

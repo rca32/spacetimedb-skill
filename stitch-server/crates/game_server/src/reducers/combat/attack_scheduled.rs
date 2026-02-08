@@ -21,7 +21,10 @@ pub fn attack_scheduled(ctx: &ReducerContext, request_key: String) -> Result<(),
 
     scheduled.phase = 1;
     scheduled.updated_at = ctx.timestamp;
-    ctx.db.attack_schedule_state().request_key().update(scheduled);
+    ctx.db
+        .attack_schedule_state()
+        .request_key()
+        .update(scheduled);
 
     Ok(())
 }

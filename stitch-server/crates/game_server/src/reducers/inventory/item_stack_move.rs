@@ -1,11 +1,11 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::services::economy;
-use crate::tables::{ItemInstance, ItemStack};
 use crate::tables::inventory_slot::inventory_slot;
 use crate::tables::item_def::item_def;
 use crate::tables::item_instance::item_instance;
 use crate::tables::item_stack::item_stack;
+use crate::tables::{ItemInstance, ItemStack};
 
 use super::inventory_bootstrap::{next_item_instance_id, slot_key};
 use super::inventory_lock::{ensure_not_locked, ensure_owner};
@@ -115,8 +115,14 @@ pub fn item_stack_move(
 
         ctx.db.item_stack().item_instance_id().update(target_stack);
         if src_stack.quantity == 0 {
-            ctx.db.item_stack().item_instance_id().delete(src_instance.item_instance_id);
-            ctx.db.item_instance().item_instance_id().delete(src_instance.item_instance_id);
+            ctx.db
+                .item_stack()
+                .item_instance_id()
+                .delete(src_instance.item_instance_id);
+            ctx.db
+                .item_instance()
+                .item_instance_id()
+                .delete(src_instance.item_instance_id);
             from_slot.item_instance_id = 0;
             ctx.db.inventory_slot().slot_key().update(from_slot);
         } else {

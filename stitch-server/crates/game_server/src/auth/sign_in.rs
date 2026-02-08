@@ -1,8 +1,8 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::tables::SessionState;
 use crate::tables::account::account;
 use crate::tables::session_state::session_state;
+use crate::tables::SessionState;
 
 #[spacetimedb::reducer]
 pub fn sign_in(ctx: &ReducerContext, region_id: u64) -> Result<(), String> {

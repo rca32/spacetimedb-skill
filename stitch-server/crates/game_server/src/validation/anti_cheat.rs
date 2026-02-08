@@ -1,8 +1,8 @@
 use spacetimedb::{Identity, ReducerContext, Table, Timestamp};
 
-use crate::tables::{MovementActorState, MovementRequestLog, MovementViolation};
 use crate::tables::movement::movement_request_log;
 use crate::tables::movement::movement_violation;
+use crate::tables::{MovementActorState, MovementRequestLog, MovementViolation};
 
 pub const MOVE_MAX_DISTANCE_PER_STEP: f32 = 8.0;
 
@@ -23,7 +23,11 @@ pub(crate) fn request_key(identity: Identity, request_id: &str) -> String {
 
 pub(crate) fn is_duplicate_request(ctx: &ReducerContext, request_id: &str) -> bool {
     let req_key = request_key(ctx.sender, request_id);
-    ctx.db.movement_request_log().request_key().find(req_key).is_some()
+    ctx.db
+        .movement_request_log()
+        .request_key()
+        .find(req_key)
+        .is_some()
 }
 
 pub(crate) fn validate_actor_progression(
@@ -63,7 +67,13 @@ pub(crate) fn log_movement_violation(
     });
 
     let req_key = request_key(ctx.sender, request_id);
-    if ctx.db.movement_request_log().request_key().find(req_key.clone()).is_none() {
+    if ctx
+        .db
+        .movement_request_log()
+        .request_key()
+        .find(req_key.clone())
+        .is_none()
+    {
         ctx.db.movement_request_log().insert(MovementRequestLog {
             request_key: req_key,
             identity: ctx.sender,

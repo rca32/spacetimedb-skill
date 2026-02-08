@@ -1,8 +1,9 @@
 ---
 id: stitch-full-game-server-development
 title: Stitch 서버 전체 게임 기능 개발 (폴더 구조 상세 설계 기반)
-status: in_progress
+status: completed
 created: 2026-02-07T16:08:40Z
+completed_at: 2026-02-08T00:26:55.933Z
 ---
 
 # Intent: Stitch 서버 전체 게임 기능 개발 (폴더 구조 상세 설계 기반)

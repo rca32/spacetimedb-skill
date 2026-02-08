@@ -2,7 +2,6 @@ use spacetimedb::{ReducerContext, Table};
 
 use crate::reducers::inventory::inventory_bootstrap::next_item_instance_id;
 use crate::services::permissions;
-use crate::tables::{BuildingState, ItemInstance, ItemStack};
 use crate::tables::building_state::building_state;
 use crate::tables::claim_state::claim_state;
 use crate::tables::inventory_container::inventory_container;
@@ -13,6 +12,7 @@ use crate::tables::item_stack::item_stack;
 use crate::tables::permission_state::permission_state;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
+use crate::tables::{BuildingState, ItemInstance, ItemStack};
 
 #[spacetimedb::reducer]
 pub fn building_place(
@@ -52,7 +52,13 @@ pub fn building_place(
         return Err("too far from build position".to_string());
     }
 
-    if ctx.db.building_state().entity_id().find(building_id).is_some() {
+    if ctx
+        .db
+        .building_state()
+        .entity_id()
+        .find(building_id)
+        .is_some()
+    {
         return Err("building_id already exists".to_string());
     }
 
@@ -90,18 +96,25 @@ pub fn building_place(
 
     // owner gets build+admin permission on this building
     let key = permissions::permission_key(2, building_id, ctx.sender);
-    ctx.db.permission_state().insert(crate::tables::PermissionState {
-        permission_key: key,
-        target_kind: 2,
-        target_id: building_id,
-        subject_identity: ctx.sender,
-        flags: permissions::PERM_BUILD | permissions::PERM_ADMIN,
-    });
+    ctx.db
+        .permission_state()
+        .insert(crate::tables::PermissionState {
+            permission_key: key,
+            target_kind: 2,
+            target_id: building_id,
+            subject_identity: ctx.sender,
+            flags: permissions::PERM_BUILD | permissions::PERM_ADMIN,
+        });
 
     Ok(())
 }
 
-fn claim_covering(ctx: &ReducerContext, region_id: u64, x: i32, z: i32) -> Option<crate::tables::ClaimState> {
+fn claim_covering(
+    ctx: &ReducerContext,
+    region_id: u64,
+    x: i32,
+    z: i32,
+) -> Option<crate::tables::ClaimState> {
     ctx.db.claim_state().iter().find(|c| {
         if c.region_id != region_id {
             return false;
@@ -137,7 +150,11 @@ fn consume_items_from_main_inventory(
     let total_available: u32 = slots
         .iter()
         .filter_map(|slot| {
-            let inst = ctx.db.item_instance().item_instance_id().find(slot.item_instance_id)?;
+            let inst = ctx
+                .db
+                .item_instance()
+                .item_instance_id()
+                .find(slot.item_instance_id)?;
             if inst.item_def_id != item_def_id {
                 return None;
             }
@@ -158,7 +175,12 @@ fn consume_items_from_main_inventory(
             break;
         }
 
-        let inst = match ctx.db.item_instance().item_instance_id().find(slot.item_instance_id) {
+        let inst = match ctx
+            .db
+            .item_instance()
+            .item_instance_id()
+            .find(slot.item_instance_id)
+        {
             Some(v) => v,
             None => continue,
         };
@@ -166,7 +188,12 @@ fn consume_items_from_main_inventory(
             continue;
         }
 
-        let mut stack = match ctx.db.item_stack().item_instance_id().find(slot.item_instance_id) {
+        let mut stack = match ctx
+            .db
+            .item_stack()
+            .item_instance_id()
+            .find(slot.item_instance_id)
+        {
             Some(v) => v,
             None => continue,
         };
@@ -176,8 +203,14 @@ fn consume_items_from_main_inventory(
         remaining -= taken;
 
         if stack.quantity == 0 {
-            ctx.db.item_stack().item_instance_id().delete(slot.item_instance_id);
-            ctx.db.item_instance().item_instance_id().delete(slot.item_instance_id);
+            ctx.db
+                .item_stack()
+                .item_instance_id()
+                .delete(slot.item_instance_id);
+            ctx.db
+                .item_instance()
+                .item_instance_id()
+                .delete(slot.item_instance_id);
 
             let mut next_slot = slot;
             next_slot.item_instance_id = 0;
@@ -224,7 +257,12 @@ pub(crate) fn add_items_to_main_inventory(
         if remaining == 0 {
             break;
         }
-        let inst = match ctx.db.item_instance().item_instance_id().find(slot.item_instance_id) {
+        let inst = match ctx
+            .db
+            .item_instance()
+            .item_instance_id()
+            .find(slot.item_instance_id)
+        {
             Some(v) => v,
             None => continue,
         };
@@ -232,7 +270,12 @@ pub(crate) fn add_items_to_main_inventory(
             continue;
         }
 
-        let mut stack = match ctx.db.item_stack().item_instance_id().find(slot.item_instance_id) {
+        let mut stack = match ctx
+            .db
+            .item_stack()
+            .item_instance_id()
+            .find(slot.item_instance_id)
+        {
             Some(v) => v,
             None => continue,
         };

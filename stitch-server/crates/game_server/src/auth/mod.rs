@@ -1,9 +1,9 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::tables::{Account, PlayerState, TransformState};
 use crate::tables::account::account;
 use crate::tables::player_state::player_state;
 use crate::tables::transform_state::transform_state;
+use crate::tables::{Account, PlayerState, TransformState};
 
 pub mod account_bootstrap;
 pub mod sign_in;
@@ -30,7 +30,13 @@ pub(crate) fn ensure_player_state_exists(ctx: &ReducerContext, display_name: Str
 }
 
 pub(crate) fn ensure_transform_exists(ctx: &ReducerContext, region_id: u64) {
-    if ctx.db.transform_state().entity_id().find(ctx.sender).is_none() {
+    if ctx
+        .db
+        .transform_state()
+        .entity_id()
+        .find(ctx.sender)
+        .is_none()
+    {
         ctx.db.transform_state().insert(TransformState {
             entity_id: ctx.sender,
             region_id,

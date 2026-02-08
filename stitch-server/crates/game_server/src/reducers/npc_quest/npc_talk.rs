@@ -1,10 +1,10 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::tables::{NpcInteractionLog, NpcState};
 use crate::tables::npc_quest::npc_interaction_log;
 use crate::tables::npc_quest::npc_state;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
+use crate::tables::{NpcInteractionLog, NpcState};
 
 const NPC_INTERACTION_RANGE_SQ: f32 = 100.0;
 

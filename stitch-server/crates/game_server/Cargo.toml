@@ -10,3 +10,4 @@ crate-type = ["cdylib"]
 anyhow = "1"
 log = "0.4"
 spacetimedb = "1.11.*"
+data_loader = { path = "../data_loader" }

@@ -1,8 +1,8 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::tables::MarketFill;
 use crate::tables::trade_market::market_fill;
 use crate::tables::trade_market::market_order;
+use crate::tables::MarketFill;
 
 #[spacetimedb::reducer]
 pub fn market_order_match(
@@ -71,7 +71,13 @@ pub fn market_order_match(
     ctx.db.market_order().order_id().update(sell);
 
     let fill_id = format!("{}:{}:{}", buy_order_id, sell_order_id, ctx.timestamp);
-    if ctx.db.market_fill().fill_id().find(fill_id.clone()).is_none() {
+    if ctx
+        .db
+        .market_fill()
+        .fill_id()
+        .find(fill_id.clone())
+        .is_none()
+    {
         ctx.db.market_fill().insert(MarketFill {
             fill_id,
             buy_order_id,

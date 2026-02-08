@@ -1,9 +1,9 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::tables::NpcInteractionLog;
 use crate::tables::npc_quest::npc_interaction_log;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
+use crate::tables::NpcInteractionLog;
 
 use super::npc_talk::ensure_npc;
 

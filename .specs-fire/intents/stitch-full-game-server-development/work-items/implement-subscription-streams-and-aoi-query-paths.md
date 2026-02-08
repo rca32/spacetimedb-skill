@@ -4,9 +4,13 @@ title: 구독 스트림 및 AOI 조회 경로 구현
 intent: stitch-full-game-server-development
 complexity: medium
 mode: confirm
-status: pending
-depends_on: [migrate-auth-session-movement-foundation-into-domain-modules, implement-combat-loop-and-combat-state]
+status: completed
+depends_on:
+  - migrate-auth-session-movement-foundation-into-domain-modules
+  - implement-combat-loop-and-combat-state
 created: 2026-02-07T16:08:40Z
+run_id: run-007
+completed_at: 2026-02-08T00:16:06.667Z
 ---
 
 # Work Item: 구독 스트림 및 AOI 조회 경로 구현

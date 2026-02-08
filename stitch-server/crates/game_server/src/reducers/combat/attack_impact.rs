@@ -1,17 +1,21 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::tables::{AttackOutcome, ThreatState};
 use crate::tables::combat::attack_outcome;
 use crate::tables::combat::attack_schedule_state;
 use crate::tables::combat::combat_state;
-use crate::tables::session_state::session_state;
 use crate::tables::combat::threat_state;
+use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
+use crate::tables::{AttackOutcome, ThreatState};
 
 const ATTACK_RANGE_SQ: f32 = 64.0;
 
 #[spacetimedb::reducer]
-pub fn attack_impact(ctx: &ReducerContext, request_key: String, client_ts_ms: u64) -> Result<(), String> {
+pub fn attack_impact(
+    ctx: &ReducerContext,
+    request_key: String,
+    client_ts_ms: u64,
+) -> Result<(), String> {
     let mut scheduled = ctx
         .db
         .attack_schedule_state()
@@ -42,7 +46,9 @@ pub fn attack_impact(ctx: &ReducerContext, request_key: String, client_ts_ms: u6
         .find(scheduled.target_identity)
         .ok_or("target session missing".to_string())?;
 
-    if attacker_session.region_id != target_session.region_id || attacker_session.region_id != scheduled.region_id {
+    if attacker_session.region_id != target_session.region_id
+        || attacker_session.region_id != scheduled.region_id
+    {
         return Err("region mismatch on impact".to_string());
     }
 
@@ -79,7 +85,10 @@ pub fn attack_impact(ctx: &ReducerContext, request_key: String, client_ts_ms: u6
     let target_hp_after = target_combat.current_hp;
     ctx.db.combat_state().identity().update(target_combat);
 
-    let threat_key = format!("{}:{}", scheduled.attacker_identity, scheduled.target_identity);
+    let threat_key = format!(
+        "{}:{}",
+        scheduled.attacker_identity, scheduled.target_identity
+    );
     if let Some(mut threat) = ctx.db.threat_state().threat_key().find(threat_key.clone()) {
         threat.threat += scheduled.impact_damage;
         threat.updated_at = ctx.timestamp;
@@ -101,10 +110,19 @@ pub fn attack_impact(ctx: &ReducerContext, request_key: String, client_ts_ms: u6
     let scheduled_target = scheduled.target_identity;
     let scheduled_region = scheduled.region_id;
     let scheduled_damage = scheduled.impact_damage;
-    ctx.db.attack_schedule_state().request_key().update(scheduled);
+    ctx.db
+        .attack_schedule_state()
+        .request_key()
+        .update(scheduled);
 
     let outcome_id = format!("{}:{}", scheduled_request_key, client_ts_ms);
-    if ctx.db.attack_outcome().outcome_id().find(outcome_id.clone()).is_none() {
+    if ctx
+        .db
+        .attack_outcome()
+        .outcome_id()
+        .find(outcome_id.clone())
+        .is_none()
+    {
         ctx.db.attack_outcome().insert(AttackOutcome {
             outcome_id,
             request_key: scheduled_request_key,

@@ -4,9 +4,12 @@ title: 정적 데이터 로더 및 에셋 파이프라인 구축
 intent: stitch-full-game-server-development
 complexity: medium
 mode: confirm
-status: pending
-depends_on: [scaffold-domain-folder-structure-and-module-entrypoints]
+status: completed
+depends_on:
+  - scaffold-domain-folder-structure-and-module-entrypoints
 created: 2026-02-07T16:08:40Z
+run_id: run-006
+completed_at: 2026-02-07T23:51:05.059Z
 ---
 
 # Work Item: 정적 데이터 로더 및 에셋 파이프라인 구축

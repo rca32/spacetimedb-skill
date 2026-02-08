@@ -1,7 +1,7 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::tables::QuestChainState;
 use crate::tables::npc_quest::quest_chain_state;
+use crate::tables::QuestChainState;
 
 #[spacetimedb::reducer]
 pub fn quest_chain_start(ctx: &ReducerContext, chain_id: u64) -> Result<(), String> {

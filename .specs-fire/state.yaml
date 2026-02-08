@@ -83,22 +83,26 @@ intents:
         completed_at: 2026-02-07T16:56:49.051Z
       - id: build-static-data-loader-and-asset-pipeline
         title: 정적 데이터 로더 및 에셋 파이프라인 구축
-        status: pending
+        status: completed
         complexity: medium
         mode: confirm
         depends_on:
           - scaffold-domain-folder-structure-and-module-entrypoints
+        run_id: run-006
+        completed_at: 2026-02-07T23:51:05.059Z
       - id: implement-subscription-streams-and-aoi-query-paths
         title: 구독 스트림 및 AOI 조회 경로 구현
-        status: pending
+        status: completed
         complexity: medium
         mode: confirm
         depends_on:
           - migrate-auth-session-movement-foundation-into-domain-modules
           - implement-combat-loop-and-combat-state
+        run_id: run-007
+        completed_at: 2026-02-08T00:16:06.667Z
       - id: establish-full-cli-integration-regression-suite
         title: 전체 기능 CLI 통합 회귀 시나리오 확립
-        status: pending
+        status: completed
         complexity: medium
         mode: confirm
         depends_on:
@@ -108,6 +112,8 @@ intents:
           - implement-trade-and-market-core-loop
           - implement-subscription-streams-and-aoi-query-paths
           - build-static-data-loader-and-asset-pipeline
+        run_id: run-008
+        completed_at: 2026-02-08T00:26:55.910Z
 runs:
   active: []
   completed:
@@ -157,3 +163,27 @@ runs:
           mode: validate
       started: 2026-02-07T16:42:23.799Z
       completed: 2026-02-07T16:56:49.051Z
+    - id: run-006
+      scope: single
+      work_items:
+        - id: build-static-data-loader-and-asset-pipeline
+          intent: stitch-full-game-server-development
+          mode: confirm
+      started: 2026-02-07T23:42:09.825Z
+      completed: 2026-02-07T23:51:05.059Z
+    - id: run-007
+      scope: single
+      work_items:
+        - id: implement-subscription-streams-and-aoi-query-paths
+          intent: stitch-full-game-server-development
+          mode: confirm
+      started: 2026-02-08T00:03:24.110Z
+      completed: 2026-02-08T00:16:06.667Z
+    - id: run-008
+      scope: single
+      work_items:
+        - id: establish-full-cli-integration-regression-suite
+          intent: stitch-full-game-server-development
+          mode: confirm
+      started: 2026-02-08T00:16:21.670Z
+      completed: 2026-02-08T00:26:55.910Z

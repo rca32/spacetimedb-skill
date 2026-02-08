@@ -1,5 +1,5 @@
-use spacetimedb::ReducerContext;
 use crate::tables::session_state::session_state;
+use spacetimedb::ReducerContext;
 
 #[spacetimedb::reducer]
 pub fn sign_out(ctx: &ReducerContext) -> Result<(), String> {

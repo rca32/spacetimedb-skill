@@ -1,9 +1,9 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
-use crate::tables::TradeSession;
 use crate::tables::session_state::session_state;
 use crate::tables::trade_market::trade_session;
 use crate::tables::transform_state::transform_state;
+use crate::tables::TradeSession;
 
 const TRADE_RANGE_SQ: f32 = 100.0;
 
@@ -21,7 +21,13 @@ pub fn trade_session_open(
         return Err("cannot open trade with self".to_string());
     }
 
-    if ctx.db.trade_session().session_id().find(sid.clone()).is_some() {
+    if ctx
+        .db
+        .trade_session()
+        .session_id()
+        .find(sid.clone())
+        .is_some()
+    {
         return Err("session_id already exists".to_string());
     }
 

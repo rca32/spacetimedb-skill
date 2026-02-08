@@ -1,10 +1,10 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::services::permissions;
-use crate::tables::{ClaimState, PermissionState};
 use crate::tables::building_state::building_state;
 use crate::tables::claim_state::claim_state;
 use crate::tables::permission_state::permission_state;
+use crate::tables::{ClaimState, PermissionState};
 
 #[spacetimedb::reducer]
 pub fn claim_totem_place(
@@ -36,7 +36,12 @@ pub fn claim_totem_place(
     }
 
     // Minimum distance from other claims.
-    for c in ctx.db.claim_state().iter().filter(|c| c.region_id == building.region_id) {
+    for c in ctx
+        .db
+        .claim_state()
+        .iter()
+        .filter(|c| c.region_id == building.region_id)
+    {
         let dx = c.center_x - building.hex_x;
         let dz = c.center_z - building.hex_z;
         if dx * dx + dz * dz < 100 {

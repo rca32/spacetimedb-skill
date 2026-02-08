@@ -1,12 +1,12 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::reducers::inventory::inventory_lock::ensure_not_locked;
-use crate::tables::TradeOffer;
 use crate::tables::inventory_container::inventory_container;
 use crate::tables::inventory_slot::inventory_slot;
 use crate::tables::item_stack::item_stack;
 use crate::tables::trade_market::trade_offer;
 use crate::tables::trade_market::trade_session;
+use crate::tables::TradeOffer;
 
 #[spacetimedb::reducer]
 pub fn trade_item_add(
@@ -80,11 +80,10 @@ fn ensure_item_owned_in_container(
     item_instance_id: u64,
     quantity: u32,
 ) -> Result<(), String> {
-    let owns_slot = ctx
-        .db
-        .inventory_slot()
-        .iter()
-        .any(|slot| slot.container_id == container_id && slot.item_instance_id == item_instance_id);
+    let owns_slot =
+        ctx.db.inventory_slot().iter().any(|slot| {
+            slot.container_id == container_id && slot.item_instance_id == item_instance_id
+        });
 
     if !owns_slot {
         return Err("item does not belong to caller main inventory".to_string());

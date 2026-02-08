@@ -4,7 +4,11 @@ use crate::tables::trade_market::trade_offer;
 use crate::tables::trade_market::trade_session;
 
 #[spacetimedb::reducer]
-pub fn trade_accept(ctx: &ReducerContext, session_id: String, accepted: bool) -> Result<(), String> {
+pub fn trade_accept(
+    ctx: &ReducerContext,
+    session_id: String,
+    accepted: bool,
+) -> Result<(), String> {
     let mut session = ctx
         .db
         .trade_session()
@@ -24,12 +28,16 @@ pub fn trade_accept(ctx: &ReducerContext, session_id: String, accepted: bool) ->
         return Err("only session participants can accept".to_string());
     }
 
-    let has_offer_from_initiator = ctx.db.trade_offer().iter().any(|x| {
-        x.session_id == session_id && x.owner_identity == session.initiator_identity
-    });
-    let has_offer_from_partner = ctx.db.trade_offer().iter().any(|x| {
-        x.session_id == session_id && x.owner_identity == session.partner_identity
-    });
+    let has_offer_from_initiator = ctx
+        .db
+        .trade_offer()
+        .iter()
+        .any(|x| x.session_id == session_id && x.owner_identity == session.initiator_identity);
+    let has_offer_from_partner = ctx
+        .db
+        .trade_offer()
+        .iter()
+        .any(|x| x.session_id == session_id && x.owner_identity == session.partner_identity);
 
     if session.initiator_accepted && session.partner_accepted {
         if !has_offer_from_initiator && !has_offer_from_partner {

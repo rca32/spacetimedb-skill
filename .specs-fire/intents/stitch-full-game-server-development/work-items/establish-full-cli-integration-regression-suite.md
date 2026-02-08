@@ -4,9 +4,17 @@ title: 전체 기능 CLI 통합 회귀 시나리오 확립
 intent: stitch-full-game-server-development
 complexity: medium
 mode: confirm
-status: pending
-depends_on: [implement-building-and-claim-core-reducers, implement-combat-loop-and-combat-state, implement-npc-quest-foundation-and-agent-schedule, implement-trade-and-market-core-loop, implement-subscription-streams-and-aoi-query-paths, build-static-data-loader-and-asset-pipeline]
+status: completed
+depends_on:
+  - implement-building-and-claim-core-reducers
+  - implement-combat-loop-and-combat-state
+  - implement-npc-quest-foundation-and-agent-schedule
+  - implement-trade-and-market-core-loop
+  - implement-subscription-streams-and-aoi-query-paths
+  - build-static-data-loader-and-asset-pipeline
 created: 2026-02-07T16:08:40Z
+run_id: run-008
+completed_at: 2026-02-08T00:26:55.910Z
 ---
 
 # Work Item: 전체 기능 CLI 통합 회귀 시나리오 확립

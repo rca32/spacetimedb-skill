@@ -25,6 +25,9 @@ spacetime publish --server 127.0.0.1:3000 stitch-server-bootstrap
 spacetime call --server 127.0.0.1:3000 stitch-server seed_data
 spacetime call --server 127.0.0.1:3000 stitch-server import_csv_data
 spacetime call --server 127.0.0.1:3000 stitch-server import_csv_by_type "items"
+spacetime call --server 127.0.0.1:3000 stitch-server import_csv_by_type "buildings"
+spacetime call --server 127.0.0.1:3000 stitch-server import_csv_by_type "combat"
+spacetime call --server 127.0.0.1:3000 stitch-server import_csv_by_type "quests"
 ```
 
 ## Auth / Session Bootstrap
@@ -54,6 +57,9 @@ spacetime call --server 127.0.0.1:3000 stitch-server move_to "req-2" 1 2000 100.
 
 ```bash
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM item_def"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM building_def"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM combat_action_def"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM quest_chain_def"
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM account"
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM player_state"
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT entity_id, region_id, position FROM transform_state"
@@ -63,7 +69,37 @@ spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT identity, request_id
 
 ## Notes
 
-- `import_csv_data` and `import_csv_by_type` are bootstrap reducers for the initial development phase.
+- CSV files are loaded from `stitch-server/assets/static_data/{items,buildings,combat,quests}`.
+- `import_csv_data` and `import_csv_by_type` run schema validation first and reject malformed rows.
 - Full CSV pipeline and detailed data contracts will be implemented in follow-up work items.
 - `session_state` is intentionally private; inspect via admin SQL tools only in controlled environments.
 - If name lookup fails in your local CLI context, use the database identity shown by `spacetime publish`.
+
+## Subscription Query Paths
+
+`game_server::subscriptions` now provides separated query builders for AOI and domain streams:
+
+- `position_stream_query` (`transform_state`, region scoped)
+- `building_state_stream_query` / `claim_state_stream_query`
+- `combat_state_stream_query` / `attack_outcome_stream_query`
+- `inventory_container_stream_query` / `inventory_slot_stream_query` / `inventory_item_stream_query`
+
+These are intended for selective client subscriptions instead of broad full-table subscriptions.
+
+## CLI Regression Suite
+
+Run the standardized end-to-end CLI regression flow:
+
+```bash
+cd /home/rca32/workspaces/spacetimedb-skill/stitch-server
+bash scripts/cli_regression_suite.sh --db stitch-server --server 127.0.0.1:3000 --repeat 1
+```
+
+For repeatability checks:
+
+```bash
+REPEAT=3 bash scripts/cli_regression_suite.sh --db stitch-server --server 127.0.0.1:3000
+```
+
+Detailed scenario and failure diagnosis checklist:
+- `stitch-server/docs/cli-regression-suite.md`

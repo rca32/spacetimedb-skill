@@ -1,8 +1,8 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::tables::InventoryLock;
 use crate::tables::inventory_container::inventory_container;
 use crate::tables::inventory_lock::inventory_lock as inventory_lock_table;
+use crate::tables::InventoryLock;
 
 #[spacetimedb::reducer]
 pub fn lock_inventory_container(
@@ -31,7 +31,13 @@ pub fn lock_inventory_container(
 pub fn unlock_inventory_container(ctx: &ReducerContext, container_id: u64) -> Result<(), String> {
     ensure_owner(ctx, container_id)?;
 
-    if ctx.db.inventory_lock().container_id().find(container_id).is_some() {
+    if ctx
+        .db
+        .inventory_lock()
+        .container_id()
+        .find(container_id)
+        .is_some()
+    {
         ctx.db.inventory_lock().container_id().delete(container_id);
     }
 
@@ -39,7 +45,13 @@ pub fn unlock_inventory_container(ctx: &ReducerContext, container_id: u64) -> Re
 }
 
 pub(crate) fn ensure_not_locked(ctx: &ReducerContext, container_id: u64) -> Result<(), String> {
-    if ctx.db.inventory_lock().container_id().find(container_id).is_some() {
+    if ctx
+        .db
+        .inventory_lock()
+        .container_id()
+        .find(container_id)
+        .is_some()
+    {
         return Err("container is locked".to_string());
     }
     Ok(())

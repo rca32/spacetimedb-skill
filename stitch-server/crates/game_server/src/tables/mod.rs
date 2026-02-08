@@ -13,8 +13,9 @@ pub mod npc_quest;
 pub mod permission_state;
 pub mod player_state;
 pub mod session_state;
-pub mod transform_state;
+pub mod static_data;
 pub mod trade_market;
+pub mod transform_state;
 
 pub use account::Account;
 pub use building_state::BuildingState;
@@ -33,5 +34,6 @@ pub use npc_quest::{
 pub use permission_state::PermissionState;
 pub use player_state::PlayerState;
 pub use session_state::SessionState;
-pub use transform_state::TransformState;
+pub use static_data::{BuildingDef, CombatActionDef, QuestChainDef};
 pub use trade_market::{MarketFill, MarketOrder, TradeOffer, TradeSession};
+pub use transform_state::TransformState;
