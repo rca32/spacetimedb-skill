@@ -107,7 +107,12 @@ run_security_cases() {
   expect_fail spacetime call --server "$SERVER" $YES_FLAG "$DB_NAME" role_grant "identity-not-valid" "\"admin\""
 
   echo "-- Security regression: SEC-002 세션 하이재킹 --"
+  # first sign_out should succeed for current authenticated identity
+  run_cmd spacetime call --server "$SERVER" $YES_FLAG "$DB_NAME" sign_out
+  # second sign_out should fail because no active session exists now
   expect_fail spacetime call --server "$SERVER" $YES_FLAG "$DB_NAME" sign_out
+  # restore active session for remaining checks in this iteration
+  run_cmd spacetime call --server "$SERVER" $YES_FLAG "$DB_NAME" sign_in "$REGION_ID"
 
   echo "-- Security regression: SEC-003 private table query leakage --"
   expect_fail spacetime sql --server "$SERVER" "$DB_NAME" "SELECT * FROM role_binding LIMIT 1"

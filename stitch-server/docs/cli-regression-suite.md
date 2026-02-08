@@ -92,14 +92,14 @@ REPEAT=3 bash scripts/cli_regression_multi_identity_security.sh --db stitch-serv
 
 ### 4.2 진단 SQL
 ```sql
-SELECT COUNT(*) FROM account;
-SELECT COUNT(*) FROM session_state;
+SELECT COUNT(*) AS count FROM account;
+SELECT COUNT(*) AS count FROM session_state;
 SELECT identity, region_id, position FROM transform_state;
 
-SELECT COUNT(*) FROM inventory_container;
-SELECT COUNT(*) FROM inventory_slot;
-SELECT COUNT(*) FROM item_instance;
-SELECT COUNT(*) FROM item_stack;
+SELECT COUNT(*) AS count FROM inventory_container;
+SELECT COUNT(*) AS count FROM inventory_slot;
+SELECT COUNT(*) AS count FROM item_instance;
+SELECT COUNT(*) AS count FROM item_stack;
 
 SELECT entity_id, state, build_progress, build_required FROM building_state ORDER BY updated_at DESC LIMIT 5;
 SELECT claim_id, owner_identity, radius, tier FROM claim_state ORDER BY updated_at DESC LIMIT 5;

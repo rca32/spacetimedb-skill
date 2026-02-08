@@ -100,7 +100,7 @@ impl BenchDatabase for SQLite {
     fn count_table(&mut self, table_id: &Self::TableId) -> ResultBench<u32> {
         let rows = self
             .db
-            .query_row(&format!("SELECT COUNT(*) FROM {table_id}"), (), |row| row.get(0))?;
+            .query_row(&format!("SELECT COUNT(*) AS count FROM {table_id}"), (), |row| row.get(0))?;
         Ok(rows)
     }
 

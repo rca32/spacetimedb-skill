@@ -41,7 +41,7 @@ spacetime publish stitch-server
 | Publish module | `spacetime publish --server 127.0.0.1:3000 stitch-server` |
 | Seed static data | `spacetime call <name> seed_data` after publishing |
 | Run CSV import | `spacetime call <name> import_csv_data` or `import_csv_by_type "items"` |
-| Query tables | `spacetime sql <name> "SELECT COUNT(*) FROM item_def"` |
+| Query tables | `spacetime sql <name> "SELECT COUNT(*) AS count FROM item_def"` |
 | Call reducers | `spacetime call <name> reducer_name arg1 arg2` (use `--anonymous` if needed) |
 
 Replace `<name>` with the published database name (e.g., `stitch-server`).

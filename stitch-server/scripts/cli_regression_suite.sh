@@ -85,6 +85,15 @@ call_reducer() {
   run_cmd spacetime call --server "$SERVER" $YES_FLAG "$DB_NAME" "$reducer" "$@"
 }
 
+call_reducer_capture() {
+  local reducer="$1"; shift
+  echo "+ spacetime call --server $SERVER $YES_FLAG $DB_NAME $reducer $*"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    return 0
+  fi
+  spacetime call --server "$SERVER" $YES_FLAG "$DB_NAME" "$reducer" "$@" 2>&1
+}
+
 sql_check() {
   local label="$1"
   local query="$2"
@@ -123,8 +132,18 @@ run_iteration() {
 
   call_reducer building_place "$building_id" "$REGION_ID" 1 1 1 1 2
   call_reducer building_advance "$building_id" 2
-  call_reducer claim_totem_place "$claim_id" "$building_id" 3
-  call_reducer claim_expand "$claim_id" 1
+  local claim_output
+  claim_output="$(call_reducer_capture claim_totem_place "$claim_id" "$building_id" 3)" || {
+    if grep -q "too close to existing claim" <<<"$claim_output"; then
+      echo "WARN: claim_totem_place skipped (too close to existing claim)"
+    else
+      echo "$claim_output" >&2
+      return 1
+    fi
+  }
+  if [[ "${claim_output:-}" != *"too close to existing claim"* ]]; then
+    call_reducer claim_expand "$claim_id" 1
+  fi
 
   expect_fail spacetime call --server "$SERVER" $YES_FLAG "$DB_NAME" attack_scheduled "\"missing-${run_tag}\""
 

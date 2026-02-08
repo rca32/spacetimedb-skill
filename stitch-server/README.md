@@ -56,12 +56,12 @@ spacetime call --server 127.0.0.1:3000 stitch-server move_to "req-2" 1 2000 100.
 ## Verify Seeded Data
 
 ```bash
-spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM item_def"
-spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM building_def"
-spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM combat_action_def"
-spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM quest_chain_def"
-spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM account"
-spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM player_state"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS count FROM item_def"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS count FROM building_def"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS count FROM combat_action_def"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS count FROM quest_chain_def"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS count FROM account"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS count FROM player_state"
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT entity_id, region_id, position FROM transform_state"
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT identity, reason, attempted_position FROM movement_violation"
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT identity, request_id, accepted FROM movement_request_log"
