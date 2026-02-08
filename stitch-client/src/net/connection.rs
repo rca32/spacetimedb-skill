@@ -15,13 +15,30 @@ pub enum ConnectionStatus {
 
 #[derive(Debug)]
 pub enum RuntimeNetEvent {
-    Connected { token: String },
-    ConnectError { reason: String },
-    Disconnected { reason: Option<String> },
-    SubscriptionApplied { group: String },
-    SubscriptionError { group: String, reason: String },
-    ReducerCommitted { reducer: String },
-    ReducerFailed { reducer: String, reason: String },
+    Connected {
+        token: String,
+    },
+    ConnectError {
+        reason: String,
+    },
+    Disconnected {
+        reason: Option<String>,
+    },
+    SubscriptionApplied {
+        group: String,
+    },
+    SubscriptionError {
+        group: String,
+        reason: String,
+        recoverable: bool,
+    },
+    ReducerCommitted {
+        reducer: String,
+    },
+    ReducerFailed {
+        reducer: String,
+        reason: String,
+    },
 }
 
 #[derive(Resource)]

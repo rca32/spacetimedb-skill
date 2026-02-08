@@ -11,10 +11,30 @@ use plugins::{
     BuildClaimHousingPlugin, CombatPlugin, CorePlugin, DiagnosticsPlugin, InventoryTradePlugin,
     NetPlugin, SocialNpcQuestPlugin, SyncPlugin, UiPlugin, WorldPlugin,
 };
+use std::time::Duration;
 
 fn main() {
-    App::new()
-        .add_plugins(
+    let headless = std::env::var("STITCH_CLIENT_HEADLESS")
+        .ok()
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    let mut app = App::new();
+
+    if headless {
+        app.add_plugins(
+            MinimalPlugins.set(bevy::app::ScheduleRunnerPlugin::run_loop(
+                Duration::from_millis(16),
+            )),
+        )
+        .add_plugins(bevy::state::app::StatesPlugin)
+        .add_plugins(bevy::log::LogPlugin {
+            filter: infra::logging::default_log_filter(),
+            ..default()
+        })
+        .add_plugins((CorePlugin, NetPlugin));
+    } else {
+        app.add_plugins(
             DefaultPlugins
                 .set(bevy::log::LogPlugin {
                     filter: infra::logging::default_log_filter(),
@@ -40,6 +60,8 @@ fn main() {
             SocialNpcQuestPlugin,
             UiPlugin,
             DiagnosticsPlugin,
-        ))
-        .run();
+        ));
+    }
+
+    app.run();
 }

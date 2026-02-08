@@ -21,10 +21,13 @@ struct AuthFlowState {
 }
 
 const BASE_SUBSCRIPTION_GROUP: &str = "base_world_sync";
+const OPTIONAL_SUBSCRIPTION_GROUP: &str = "optional_player_views";
 const BASE_SUBSCRIPTION_QUERIES: &[&str] = &[
     "SELECT * FROM transform_state",
     "SELECT * FROM resource_node",
     "SELECT * FROM terrain_chunk",
+];
+const OPTIONAL_SUBSCRIPTION_QUERIES: &[&str] = &[
     "SELECT * FROM player_session_view",
     "SELECT * FROM player_movement_feedback_view",
     "SELECT * FROM player_inventory_container_view",
@@ -67,7 +70,7 @@ impl Plugin for NetPlugin {
 }
 
 fn log_plugin_ready() {
-    info!("net plugin ready (phase2 network core)");
+    warn!("net plugin ready (phase2 network core)");
 }
 
 fn ensure_connection_for_state(
@@ -86,8 +89,11 @@ fn ensure_connection_for_state(
 
     if matches!(
         connection.status,
-        ConnectionStatus::Connecting | ConnectionStatus::Connected
+        ConnectionStatus::Connecting | ConnectionStatus::Connected | ConnectionStatus::Reconnecting
     ) {
+        return;
+    }
+    if connection.connection.is_some() {
         return;
     }
 
@@ -133,7 +139,7 @@ fn ensure_connection_for_state(
     match db_builder.build() {
         Ok(conn) => {
             connection.connection = Some(conn);
-            info!(
+            warn!(
                 "spacetime connection initiated: uri={}, module={}",
                 connection.server_uri, connection.module_name
             );
@@ -183,6 +189,7 @@ fn handle_runtime_events(
                     warn!("token save failed: {error}");
                 }
 
+                warn!("net connected; token received");
                 net_connected.write(NetConnected);
 
                 if matches!(
@@ -193,6 +200,7 @@ fn handle_runtime_events(
                 }
             }
             RuntimeNetEvent::ConnectError { reason } => {
+                warn!("net connect error: {reason}");
                 connection.status = ConnectionStatus::Disconnected;
                 connection.last_error = Some(reason.clone());
                 app_state_next.set(ClientAppState::Disconnected);
@@ -202,6 +210,7 @@ fn handle_runtime_events(
                 });
             }
             RuntimeNetEvent::Disconnected { reason } => {
+                warn!("net disconnected: {:?}", reason);
                 connection.status = ConnectionStatus::Disconnected;
                 connection.last_error = reason.clone();
                 connection.connection = None;
@@ -215,28 +224,38 @@ fn handle_runtime_events(
                 }
             }
             RuntimeNetEvent::SubscriptionApplied { group } => {
-                info!("subscription applied: {group}");
+                warn!("subscription applied: {group}");
                 sub_applied.write(SubscriptionApplied);
-                if matches!(app_state.get(), ClientAppState::CharacterReady) {
+                if group == BASE_SUBSCRIPTION_GROUP
+                    && matches!(app_state.get(), ClientAppState::CharacterReady)
+                {
                     app_state_next.set(ClientAppState::InWorld);
                 }
             }
-            RuntimeNetEvent::SubscriptionError { group, reason } => {
+            RuntimeNetEvent::SubscriptionError {
+                group,
+                reason,
+                recoverable,
+            } => {
+                warn!("subscription error [{group}]: {reason}");
                 connection.last_error = Some(format!("{group}: {reason}"));
                 reducer_failed.write(ReducerFailed {
                     reducer: format!("subscription:{group}"),
                     reason,
                 });
-                if matches!(
-                    app_state.get(),
-                    ClientAppState::CharacterReady | ClientAppState::InWorld
-                ) {
+                if !recoverable
+                    && matches!(
+                        app_state.get(),
+                        ClientAppState::CharacterReady | ClientAppState::InWorld
+                    )
+                {
                     app_state_next.set(ClientAppState::Reconnecting);
                 }
             }
             RuntimeNetEvent::ReducerCommitted { reducer } => {
                 if reducer == "sign_in" && matches!(app_state.get(), ClientAppState::Authenticating)
                 {
+                    warn!("reducer committed: sign_in");
                     app_state_next.set(ClientAppState::CharacterReady);
                 }
             }
@@ -245,6 +264,7 @@ fn handle_runtime_events(
                     reducer: reducer.clone(),
                     reason: reason.clone(),
                 });
+                warn!("reducer failed [{reducer}]: {reason}");
 
                 if matches!(reducer.as_str(), "account_bootstrap" | "sign_in")
                     && matches!(app_state.get(), ClientAppState::Authenticating)
@@ -266,10 +286,7 @@ fn enqueue_auth_bootstrap_reducers(
         return;
     }
 
-    queue.enqueue(
-        "account_bootstrap",
-        vec![app_config.0.display_name.clone()],
-    );
+    queue.enqueue("account_bootstrap", vec![app_config.0.display_name.clone()]);
     queue.enqueue("sign_in", vec![app_config.0.region_id.to_string()]);
     auth_flow.bootstrapped = true;
 }
@@ -318,7 +335,9 @@ fn dispatch_intent(conn: &DbConnection, intent: &ReducerIntent) -> Result<(), St
                 .ok_or_else(|| "missing region_id".to_string())?
                 .parse::<u64>()
                 .map_err(|e| format!("invalid region_id: {e}"))?;
-            conn.reducers.sign_in(region_id).map_err(|e| format!("{e:?}"))
+            conn.reducers
+                .sign_in(region_id)
+                .map_err(|e| format!("{e:?}"))
         }
         "sign_out" => conn.reducers.sign_out().map_err(|e| format!("{e:?}")),
         "inventory_bootstrap" => conn
@@ -340,27 +359,22 @@ fn apply_base_subscriptions(
 
     registry.clear_all();
 
-    let applied_tx = runtime.tx.clone();
-    let error_tx = runtime.tx.clone();
-    let handle = conn
-        .subscription_builder()
-        .on_applied(move |_ctx| {
-            let _ = applied_tx.send(RuntimeNetEvent::SubscriptionApplied {
-                group: BASE_SUBSCRIPTION_GROUP.to_string(),
-            });
-        })
-        .on_error(move |_ctx, error| {
-            let _ = error_tx.send(RuntimeNetEvent::SubscriptionError {
-                group: BASE_SUBSCRIPTION_GROUP.to_string(),
-                reason: format!("{error:?}"),
-            });
-        })
-        .subscribe(BASE_SUBSCRIPTION_QUERIES.to_vec());
-
-    registry
-        .active_queries
-        .extend(BASE_SUBSCRIPTION_QUERIES.iter().map(|query| (*query).to_string()));
-    registry.handles.push(handle);
+    subscribe_group(
+        conn,
+        &mut registry,
+        &runtime,
+        BASE_SUBSCRIPTION_GROUP,
+        BASE_SUBSCRIPTION_QUERIES,
+        false,
+    );
+    subscribe_group(
+        conn,
+        &mut registry,
+        &runtime,
+        OPTIONAL_SUBSCRIPTION_GROUP,
+        OPTIONAL_SUBSCRIPTION_QUERIES,
+        true,
+    );
 }
 
 fn prepare_reconnect_flow(
@@ -377,7 +391,10 @@ fn prepare_reconnect_flow(
     connection.connection = None;
 }
 
-fn register_reducer_callbacks(conn: &DbConnection, runtime_tx: std::sync::mpsc::Sender<RuntimeNetEvent>) {
+fn register_reducer_callbacks(
+    conn: &DbConnection,
+    runtime_tx: std::sync::mpsc::Sender<RuntimeNetEvent>,
+) {
     conn.reducers.on_account_bootstrap({
         let runtime_tx = runtime_tx.clone();
         move |ctx, _args| match &ctx.event.status {
@@ -424,23 +441,58 @@ fn register_reducer_callbacks(conn: &DbConnection, runtime_tx: std::sync::mpsc::
         }
     });
 
-    conn.reducers.on_sign_out(move |ctx| match &ctx.event.status {
-        Status::Committed => {
-            let _ = runtime_tx.send(RuntimeNetEvent::ReducerCommitted {
-                reducer: "sign_out".to_string(),
+    conn.reducers
+        .on_sign_out(move |ctx| match &ctx.event.status {
+            Status::Committed => {
+                let _ = runtime_tx.send(RuntimeNetEvent::ReducerCommitted {
+                    reducer: "sign_out".to_string(),
+                });
+            }
+            Status::Failed(reason) => {
+                let _ = runtime_tx.send(RuntimeNetEvent::ReducerFailed {
+                    reducer: "sign_out".to_string(),
+                    reason: reason.to_string(),
+                });
+            }
+            Status::OutOfEnergy => {
+                let _ = runtime_tx.send(RuntimeNetEvent::ReducerFailed {
+                    reducer: "sign_out".to_string(),
+                    reason: "out_of_energy".to_string(),
+                });
+            }
+        });
+}
+
+fn subscribe_group(
+    conn: &DbConnection,
+    registry: &mut SubscriptionRegistry,
+    runtime: &NetRuntimeChannel,
+    group: &str,
+    queries: &[&str],
+    recoverable_error: bool,
+) {
+    let applied_tx = runtime.tx.clone();
+    let error_tx = runtime.tx.clone();
+    let group_name = group.to_string();
+    let group_name_for_error = group.to_string();
+    let handle = conn
+        .subscription_builder()
+        .on_applied(move |_ctx| {
+            let _ = applied_tx.send(RuntimeNetEvent::SubscriptionApplied {
+                group: group_name.clone(),
             });
-        }
-        Status::Failed(reason) => {
-            let _ = runtime_tx.send(RuntimeNetEvent::ReducerFailed {
-                reducer: "sign_out".to_string(),
-                reason: reason.to_string(),
+        })
+        .on_error(move |_ctx, error| {
+            let _ = error_tx.send(RuntimeNetEvent::SubscriptionError {
+                group: group_name_for_error.clone(),
+                reason: format!("{error:?}"),
+                recoverable: recoverable_error,
             });
-        }
-        Status::OutOfEnergy => {
-            let _ = runtime_tx.send(RuntimeNetEvent::ReducerFailed {
-                reducer: "sign_out".to_string(),
-                reason: "out_of_energy".to_string(),
-            });
-        }
-    });
+        })
+        .subscribe(queries.to_vec());
+
+    registry
+        .active_queries
+        .extend(queries.iter().map(|query| (*query).to_string()));
+    registry.handles.push(handle);
 }
