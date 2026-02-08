@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use spacetimedb_sdk::Identity;
 use std::sync::{mpsc, Mutex};
 
 use crate::module_bindings;
@@ -38,6 +39,26 @@ pub enum RuntimeNetEvent {
     ReducerFailed {
         reducer: String,
         reason: String,
+    },
+    TransformUpsert {
+        row: module_bindings::TransformState,
+    },
+    TransformDelete {
+        entity_id: Identity,
+    },
+    MovementFeedbackUpsert {
+        row: module_bindings::PlayerMovementFeedbackView,
+    },
+    MovementFeedbackDelete {
+        request_key: String,
+    },
+    PlayerRegionUpdated {
+        region_id: u64,
+    },
+    AoiAnchorChanged {
+        region_id: u64,
+        chunk_x: i32,
+        chunk_z: i32,
     },
 }
 

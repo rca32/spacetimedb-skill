@@ -94,9 +94,11 @@ fn drive_bootstrap_state_flow(
         return;
     };
 
-    if matches!(state.get(), ClientAppState::Boot) && timer.0.tick(time.delta()).just_finished() {
-        warn!("state advance: Boot -> Connecting");
-        next_state.set(ClientAppState::Connecting);
+    if matches!(state.get(), ClientAppState::Boot) {
+        if timer.0.tick(time.delta()).just_finished() {
+            warn!("state advance: Boot -> Connecting");
+            next_state.set(ClientAppState::Connecting);
+        }
         return;
     }
 
@@ -112,15 +114,15 @@ fn quick_state_shortcuts(
         return;
     };
 
-    if keyboard.just_pressed(KeyCode::KeyD) {
+    if keyboard.just_pressed(KeyCode::F8) {
         next_state.set(ClientAppState::Disconnected);
     }
 
-    if keyboard.just_pressed(KeyCode::KeyR) && matches!(state.get(), ClientAppState::InWorld) {
+    if keyboard.just_pressed(KeyCode::F10) && matches!(state.get(), ClientAppState::InWorld) {
         next_state.set(ClientAppState::Reconnecting);
     }
 
-    if keyboard.just_pressed(KeyCode::KeyC) && matches!(state.get(), ClientAppState::Disconnected) {
+    if keyboard.just_pressed(KeyCode::F9) && matches!(state.get(), ClientAppState::Disconnected) {
         next_state.set(ClientAppState::Connecting);
     }
 }

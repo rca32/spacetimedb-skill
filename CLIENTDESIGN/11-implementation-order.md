@@ -58,13 +58,26 @@
 - 연결/재연결/기본 구독/기본 reducer 호출이 동작
 
 ## Phase 3: World + Movement
-- [ ] AOI 구독 생성기 구현
-- [ ] world entity upsert/despawn 동기화
-- [ ] `move_to` 예측/보정 구현
-- [ ] movement feedback UI 연결
+- [x] AOI 구독 생성기 구현
+- [x] world entity upsert/despawn 동기화
+- [x] `move_to` 예측/보정 구현
+- [x] movement feedback UI 연결
 
 완료 기준:
 - 이동 체감이 안정적이고 보정이 눈에 띄게 수렴
+
+검증 스냅샷 (client code 기준):
+- AOI 구독 생성/재적용:
+  - `stitch-client/src/plugins/net.rs` (`build_aoi_queries`, `refresh_aoi_subscriptions`)
+- world upsert/despawn 동기화:
+  - `stitch-client/src/plugins/world.rs` (`apply_transform_upserts`, `apply_transform_deletes`)
+- `move_to` 예측/보정:
+  - `stitch-client/src/plugins/sync.rs` (`predict_and_send_move_to`, `apply_movement_reconciliation`)
+  - `stitch-client/src/plugins/net.rs` (`dispatch_intent`의 `"move_to"` 분기)
+- movement feedback UI:
+  - `stitch-client/src/plugins/ui.rs` (`capture_movement_feedback`, HUD 라벨 반영)
+- 로컬 검증:
+  - `cd stitch-client && cargo check` 통과
 
 ## Phase 4: Combat + Resources
 - [ ] 공격 state machine 구현

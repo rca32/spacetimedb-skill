@@ -1,14 +1,19 @@
 use bevy::prelude::*;
-use spacetimedb_sdk::{DbContext, Status};
+use spacetimedb_sdk::{DbContext, Status, Table as _, TableWithPrimaryKey as _};
 
 use crate::app_state::ClientAppState;
 use crate::module_bindings::{
-    account_bootstrap, inventory_bootstrap, sign_in, sign_out, DbConnection,
+    account_bootstrap, inventory_bootstrap, move_to, sign_in, sign_out, DbConnection,
+    PlayerMovementFeedbackViewTableAccess, PlayerSessionViewTableAccess, TransformStateTableAccess,
 };
 use crate::net::connection::{
     ConnectionStatus, NetRuntimeChannel, RuntimeNetEvent, SpacetimeConnectionResource,
 };
-use crate::net::events::{NetConnected, NetDisconnected, ReducerFailed, SubscriptionApplied};
+use crate::net::events::{
+    MovementFeedbackDeleted, MovementFeedbackUpdated, NetConnected, NetDisconnected,
+    PlayerRegionUpdated, ReducerFailed, SubscriptionApplied, WorldTransformDelete,
+    WorldTransformUpsert,
+};
 use crate::net::reducers::{ReducerCallQueue, ReducerIntent};
 use crate::net::subscriptions::SubscriptionRegistry;
 use crate::plugins::core::{AppConfigResource, TokenStoreResource};
@@ -20,13 +25,27 @@ struct AuthFlowState {
     bootstrapped: bool,
 }
 
-const BASE_SUBSCRIPTION_GROUP: &str = "base_world_sync";
+#[derive(Resource, Debug, Clone, Copy)]
+struct AoiSubscriptionState {
+    pub region_id: u64,
+    pub chunk_x: i32,
+    pub chunk_z: i32,
+    pub dirty: bool,
+}
+
+impl Default for AoiSubscriptionState {
+    fn default() -> Self {
+        Self {
+            region_id: 1,
+            chunk_x: 0,
+            chunk_z: 0,
+            dirty: true,
+        }
+    }
+}
+
+const BASE_SUBSCRIPTION_GROUP: &str = "aoi_world_sync";
 const OPTIONAL_SUBSCRIPTION_GROUP: &str = "optional_player_views";
-const BASE_SUBSCRIPTION_QUERIES: &[&str] = &[
-    "SELECT * FROM transform_state",
-    "SELECT * FROM resource_node",
-    "SELECT * FROM terrain_chunk",
-];
 const OPTIONAL_SUBSCRIPTION_QUERIES: &[&str] = &[
     "SELECT * FROM player_session_view",
     "SELECT * FROM player_movement_feedback_view",
@@ -43,18 +62,20 @@ impl Plugin for NetPlugin {
             .init_resource::<SubscriptionRegistry>()
             .init_resource::<ReducerCallQueue>()
             .init_resource::<AuthFlowState>()
+            .init_resource::<AoiSubscriptionState>()
             .add_message::<NetConnected>()
             .add_message::<NetDisconnected>()
             .add_message::<SubscriptionApplied>()
             .add_message::<ReducerFailed>()
+            .add_message::<WorldTransformUpsert>()
+            .add_message::<WorldTransformDelete>()
+            .add_message::<MovementFeedbackUpdated>()
+            .add_message::<MovementFeedbackDeleted>()
+            .add_message::<PlayerRegionUpdated>()
             .add_systems(Startup, log_plugin_ready)
             .add_systems(
                 OnEnter(ClientAppState::Reconnecting),
                 prepare_reconnect_flow,
-            )
-            .add_systems(
-                OnEnter(ClientAppState::CharacterReady),
-                apply_base_subscriptions,
             )
             .add_systems(
                 Update,
@@ -64,6 +85,7 @@ impl Plugin for NetPlugin {
                     handle_runtime_events,
                     enqueue_auth_bootstrap_reducers,
                     dispatch_reducer_queue,
+                    refresh_aoi_subscriptions,
                 ),
             );
     }
@@ -173,6 +195,12 @@ fn handle_runtime_events(
     mut net_disconnected: MessageWriter<NetDisconnected>,
     mut sub_applied: MessageWriter<SubscriptionApplied>,
     mut reducer_failed: MessageWriter<ReducerFailed>,
+    mut world_upsert: MessageWriter<WorldTransformUpsert>,
+    mut world_delete: MessageWriter<WorldTransformDelete>,
+    mut feedback_upsert: MessageWriter<MovementFeedbackUpdated>,
+    mut feedback_delete: MessageWriter<MovementFeedbackDeleted>,
+    mut region_updated: MessageWriter<PlayerRegionUpdated>,
+    mut aoi_state: ResMut<AoiSubscriptionState>,
 ) {
     let Ok(rx) = runtime.rx.lock() else {
         return;
@@ -272,6 +300,40 @@ fn handle_runtime_events(
                     app_state_next.set(ClientAppState::Disconnected);
                 }
             }
+            RuntimeNetEvent::TransformUpsert { row } => {
+                world_upsert.write(WorldTransformUpsert { row });
+            }
+            RuntimeNetEvent::TransformDelete { entity_id } => {
+                world_delete.write(WorldTransformDelete { entity_id });
+            }
+            RuntimeNetEvent::MovementFeedbackUpsert { row } => {
+                feedback_upsert.write(MovementFeedbackUpdated { row });
+            }
+            RuntimeNetEvent::MovementFeedbackDelete { request_key } => {
+                feedback_delete.write(MovementFeedbackDeleted { request_key });
+            }
+            RuntimeNetEvent::PlayerRegionUpdated { region_id } => {
+                region_updated.write(PlayerRegionUpdated { region_id });
+                if aoi_state.region_id != region_id {
+                    aoi_state.region_id = region_id;
+                    aoi_state.dirty = true;
+                }
+            }
+            RuntimeNetEvent::AoiAnchorChanged {
+                region_id,
+                chunk_x,
+                chunk_z,
+            } => {
+                if aoi_state.region_id != region_id
+                    || aoi_state.chunk_x != chunk_x
+                    || aoi_state.chunk_z != chunk_z
+                {
+                    aoi_state.region_id = region_id;
+                    aoi_state.chunk_x = chunk_x;
+                    aoi_state.chunk_z = chunk_z;
+                    aoi_state.dirty = true;
+                }
+            }
         }
     }
 }
@@ -344,27 +406,77 @@ fn dispatch_intent(conn: &DbConnection, intent: &ReducerIntent) -> Result<(), St
             .reducers
             .inventory_bootstrap()
             .map_err(|e| format!("{e:?}")),
+        "move_to" => {
+            if intent.args.len() != 6 {
+                return Err(format!(
+                    "move_to requires 6 args, got {}",
+                    intent.args.len()
+                ));
+            }
+
+            let request_id = intent.args[0].clone();
+            let region_id = intent.args[1]
+                .parse::<u64>()
+                .map_err(|e| format!("invalid region_id: {e}"))?;
+            let client_ts_ms = intent.args[2]
+                .parse::<u64>()
+                .map_err(|e| format!("invalid client_ts_ms: {e}"))?;
+            let x = intent.args[3]
+                .parse::<f32>()
+                .map_err(|e| format!("invalid x: {e}"))?;
+            let y = intent.args[4]
+                .parse::<f32>()
+                .map_err(|e| format!("invalid y: {e}"))?;
+            let z = intent.args[5]
+                .parse::<f32>()
+                .map_err(|e| format!("invalid z: {e}"))?;
+
+            conn.reducers
+                .move_to(request_id, region_id, client_ts_ms, x, y, z)
+                .map_err(|e| format!("{e:?}"))
+        }
         other => Err(format!("unsupported reducer intent: {other}")),
     }
 }
 
-fn apply_base_subscriptions(
+fn refresh_aoi_subscriptions(
+    state: Res<State<ClientAppState>>,
     connection: Res<SpacetimeConnectionResource>,
     mut registry: ResMut<SubscriptionRegistry>,
     runtime: Res<NetRuntimeChannel>,
+    mut aoi_state: ResMut<AoiSubscriptionState>,
 ) {
+    if !matches!(
+        state.get(),
+        ClientAppState::CharacterReady | ClientAppState::InWorld
+    ) {
+        return;
+    }
+
+    if !aoi_state.dirty && !registry.active_queries.is_empty() {
+        return;
+    }
+
     let Some(conn) = connection.connection.as_ref() else {
         return;
     };
 
     registry.clear_all();
 
+    let dynamic_queries = build_aoi_queries(
+        aoi_state.region_id,
+        aoi_state.chunk_x,
+        aoi_state.chunk_z,
+        3,
+        2,
+    );
+
     subscribe_group(
         conn,
         &mut registry,
         &runtime,
         BASE_SUBSCRIPTION_GROUP,
-        BASE_SUBSCRIPTION_QUERIES,
+        &dynamic_queries,
         false,
     );
     subscribe_group(
@@ -375,6 +487,8 @@ fn apply_base_subscriptions(
         OPTIONAL_SUBSCRIPTION_QUERIES,
         true,
     );
+
+    aoi_state.dirty = false;
 }
 
 fn prepare_reconnect_flow(
@@ -382,10 +496,12 @@ fn prepare_reconnect_flow(
     mut queue: ResMut<ReducerCallQueue>,
     mut registry: ResMut<SubscriptionRegistry>,
     mut connection: ResMut<SpacetimeConnectionResource>,
+    mut aoi_state: ResMut<AoiSubscriptionState>,
 ) {
     auth_flow.bootstrapped = false;
     queue.clear();
     registry.clear_all();
+    aoi_state.dirty = true;
     connection.reconnect_attempt = connection.reconnect_attempt.saturating_add(1);
     connection.status = ConnectionStatus::Reconnecting;
     connection.connection = None;
@@ -395,6 +511,8 @@ fn register_reducer_callbacks(
     conn: &DbConnection,
     runtime_tx: std::sync::mpsc::Sender<RuntimeNetEvent>,
 ) {
+    register_table_callbacks(conn, runtime_tx.clone());
+
     conn.reducers.on_account_bootstrap({
         let runtime_tx = runtime_tx.clone();
         move |ctx, _args| match &ctx.event.status {
@@ -463,12 +581,136 @@ fn register_reducer_callbacks(
         });
 }
 
+fn register_table_callbacks(
+    conn: &DbConnection,
+    runtime_tx: std::sync::mpsc::Sender<RuntimeNetEvent>,
+) {
+    conn.db.transform_state().on_insert({
+        let runtime_tx = runtime_tx.clone();
+        move |ctx, row| {
+            let _ = runtime_tx.send(RuntimeNetEvent::TransformUpsert { row: row.clone() });
+            send_local_anchor_event(ctx.try_identity(), row, &runtime_tx);
+        }
+    });
+    conn.db.transform_state().on_update({
+        let runtime_tx = runtime_tx.clone();
+        move |ctx, _old_row, new_row| {
+            let _ = runtime_tx.send(RuntimeNetEvent::TransformUpsert {
+                row: new_row.clone(),
+            });
+            send_local_anchor_event(ctx.try_identity(), new_row, &runtime_tx);
+        }
+    });
+    conn.db.transform_state().on_delete({
+        let runtime_tx = runtime_tx.clone();
+        move |_ctx, row| {
+            let _ = runtime_tx.send(RuntimeNetEvent::TransformDelete {
+                entity_id: row.entity_id,
+            });
+        }
+    });
+
+    conn.db.player_movement_feedback_view().on_insert({
+        let runtime_tx = runtime_tx.clone();
+        move |_ctx, row| {
+            let _ = runtime_tx.send(RuntimeNetEvent::MovementFeedbackUpsert { row: row.clone() });
+        }
+    });
+    conn.db.player_movement_feedback_view().on_update({
+        let runtime_tx = runtime_tx.clone();
+        move |_ctx, _old_row, new_row| {
+            let _ = runtime_tx.send(RuntimeNetEvent::MovementFeedbackUpsert {
+                row: new_row.clone(),
+            });
+        }
+    });
+    conn.db.player_movement_feedback_view().on_delete({
+        let runtime_tx = runtime_tx.clone();
+        move |_ctx, row| {
+            let _ = runtime_tx.send(RuntimeNetEvent::MovementFeedbackDelete {
+                request_key: row.request_key.clone(),
+            });
+        }
+    });
+
+    conn.db.player_session_view().on_insert({
+        let runtime_tx = runtime_tx.clone();
+        move |ctx, row| {
+            if ctx.try_identity() == Some(row.identity) {
+                let _ = runtime_tx.send(RuntimeNetEvent::PlayerRegionUpdated {
+                    region_id: row.region_id,
+                });
+            }
+        }
+    });
+    conn.db
+        .player_session_view()
+        .on_update(move |ctx, _old_row, new_row| {
+            if ctx.try_identity() == Some(new_row.identity) {
+                let _ = runtime_tx.send(RuntimeNetEvent::PlayerRegionUpdated {
+                    region_id: new_row.region_id,
+                });
+            }
+        });
+}
+
+fn send_local_anchor_event(
+    local_identity: Option<spacetimedb_sdk::Identity>,
+    row: &crate::module_bindings::TransformState,
+    runtime_tx: &std::sync::mpsc::Sender<RuntimeNetEvent>,
+) {
+    if local_identity != Some(row.entity_id) {
+        return;
+    }
+
+    let chunk_x = (row.position.first().copied().unwrap_or_default() / 16.0).floor() as i32;
+    let chunk_z = (row.position.get(2).copied().unwrap_or_default() / 16.0).floor() as i32;
+    let _ = runtime_tx.send(RuntimeNetEvent::AoiAnchorChanged {
+        region_id: row.region_id,
+        chunk_x,
+        chunk_z,
+    });
+}
+
+fn build_aoi_queries(
+    region_id: u64,
+    center_chunk_x: i32,
+    center_chunk_z: i32,
+    terrain_radius: i32,
+    dynamic_radius: i32,
+) -> Vec<String> {
+    let terrain_min_x = center_chunk_x - terrain_radius;
+    let terrain_max_x = center_chunk_x + terrain_radius;
+    let terrain_min_y = center_chunk_z - terrain_radius;
+    let terrain_max_y = center_chunk_z + terrain_radius;
+    let dynamic_min_x = center_chunk_x - dynamic_radius;
+    let dynamic_max_x = center_chunk_x + dynamic_radius;
+    let dynamic_min_z = center_chunk_z - dynamic_radius;
+    let dynamic_max_z = center_chunk_z + dynamic_radius;
+
+    vec![
+        format!("SELECT * FROM transform_state WHERE region_id = {region_id}"),
+        format!(
+            "SELECT * FROM terrain_chunk WHERE region_id = {region_id} AND chunk_x >= {terrain_min_x} AND chunk_x <= {terrain_max_x} AND chunk_y >= {terrain_min_y} AND chunk_y <= {terrain_max_y}"
+        ),
+        "SELECT * FROM resource_node".to_string(),
+        format!(
+            "SELECT * FROM building_state WHERE region_id = {region_id} AND hex_x >= {dynamic_min_x} AND hex_x <= {dynamic_max_x} AND hex_z >= {dynamic_min_z} AND hex_z <= {dynamic_max_z}"
+        ),
+        format!(
+            "SELECT * FROM claim_state WHERE region_id = {region_id} AND center_x >= {dynamic_min_x} AND center_x <= {dynamic_max_x} AND center_z >= {dynamic_min_z} AND center_z <= {dynamic_max_z}"
+        ),
+        format!("SELECT * FROM combat_state WHERE region_id = {region_id}"),
+        format!("SELECT * FROM attack_outcome WHERE region_id = {region_id}"),
+    ]
+}
+
 fn subscribe_group(
     conn: &DbConnection,
     registry: &mut SubscriptionRegistry,
     runtime: &NetRuntimeChannel,
     group: &str,
-    queries: &[&str],
+    queries: &[impl AsRef<str>],
     recoverable_error: bool,
 ) {
     let applied_tx = runtime.tx.clone();
@@ -489,10 +731,15 @@ fn subscribe_group(
                 recoverable: recoverable_error,
             });
         })
-        .subscribe(queries.to_vec());
+        .subscribe(
+            queries
+                .iter()
+                .map(|query| query.as_ref().to_string())
+                .collect::<Vec<_>>(),
+        );
 
     registry
         .active_queries
-        .extend(queries.iter().map(|query| (*query).to_string()));
+        .extend(queries.iter().map(|query| query.as_ref().to_string()));
     registry.handles.push(handle);
 }
