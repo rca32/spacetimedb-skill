@@ -61,7 +61,7 @@ spacetime call --server 127.0.0.1:3000 stitch-server npc_trade 9001 "\"trade-a\"
 spacetime call --server 127.0.0.1:3000 stitch-server npc_quest 9001 "\"quest-a\""
 spacetime call --server 127.0.0.1:3000 stitch-server quest_chain_start 3001
 spacetime call --server 127.0.0.1:3000 stitch-server quest_stage_complete 3001 0
-spacetime sql  --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM npc_interaction_log"
+spacetime sql  --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS npc_interaction_cnt FROM npc_interaction_log"
 ```
 
 Expected:
@@ -74,7 +74,7 @@ spacetime call --server 127.0.0.1:3000 stitch-server economy_set_param "\"trade_
 spacetime call --server 127.0.0.1:3000 stitch-server tax_policy_set 1 300
 spacetime call --server 127.0.0.1:3000 stitch-server market_order_place "\"buy-a\"" 0 1 2 10
 spacetime call --server 127.0.0.1:3000 stitch-server market_order_cancel "\"buy-a\""
-spacetime sql  --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM market_order"
+spacetime sql  --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS market_order_cnt FROM market_order"
 ```
 
 Expected:
@@ -117,22 +117,22 @@ Expected:
 - 아래 확인 SQL에서 값 증가/유지 확인
 
 ```bash
-spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM movement_request_log"
-spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) FROM transform_state"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS movement_request_cnt FROM movement_request_log"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS transform_cnt FROM transform_state"
 ```
 
 ## 8. Triage SQL Bundle
 
 ```sql
-SELECT COUNT(*) FROM account;
-SELECT COUNT(*) FROM session_state;
-SELECT COUNT(*) FROM movement_request_log;
-SELECT COUNT(*) FROM attack_outcome;
-SELECT COUNT(*) FROM market_order;
-SELECT COUNT(*) FROM market_fill;
-SELECT COUNT(*) FROM currency_txn;
-SELECT COUNT(*) FROM price_index;
-SELECT COUNT(*) FROM report_queue;
-SELECT COUNT(*) FROM moderation_action;
-SELECT COUNT(*) FROM audit_log;
+SELECT COUNT(*) AS account_cnt FROM account;
+SELECT COUNT(*) AS session_cnt FROM session_state;
+SELECT COUNT(*) AS movement_request_cnt FROM movement_request_log;
+SELECT COUNT(*) AS attack_outcome_cnt FROM attack_outcome;
+SELECT COUNT(*) AS market_order_cnt FROM market_order;
+SELECT COUNT(*) AS market_fill_cnt FROM market_fill;
+SELECT COUNT(*) AS currency_txn_cnt FROM currency_txn;
+SELECT COUNT(*) AS price_index_cnt FROM price_index;
+SELECT COUNT(*) AS report_queue_cnt FROM report_queue;
+SELECT COUNT(*) AS moderation_action_cnt FROM moderation_action;
+SELECT COUNT(*) AS audit_log_cnt FROM audit_log;
 ```
