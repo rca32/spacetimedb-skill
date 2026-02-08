@@ -41,6 +41,7 @@
 | account_profile | public/RLS | identity | display_name, avatar_id, locale | display_name(unique) |
 | role_binding | private | (identity, role) | granted_at | role |
 | session_state | private | session_id | identity, region_id, last_active_at | identity, last_active_at |
+| player_session_view | public | identity | region_id, last_active_at | 클라이언트 세션 projection |
 | moderation_flag | private | identity | score, last_reason | score |
 
 **설계 포인트**: 운영자/GM 역할은 `role_binding`으로 분리 관리.
@@ -94,6 +95,9 @@
 | inventory_slot | private/RLS | (container_id, slot_index) | item_instance_id | container_id |
 | item_instance | private/RLS | item_instance_id | item_def_id, durability, bound | item_def_id |
 | item_stack | private/RLS | item_instance_id | quantity | quantity |
+| player_inventory_container_view | public | view_key | owner_identity, container_id, slot_count | owner_identity, container_id |
+| player_inventory_slot_view | public | slot_key | owner_identity, container_id, slot_index, item_instance_id | owner_identity, container_id |
+| player_inventory_item_view | public | item_instance_id | owner_identity, container_id, slot_index, item_def_id, quantity | owner_identity, container_id |
 | item_def | public | item_def_id | category, rarity, max_stack | category |
 | inventory_lock | private/RLS | container_id | lock_reason, expires_at | expires_at |
 | escrow_item | private | escrow_id | item_instance_id, qty | escrow_id |
@@ -103,6 +107,7 @@
 | Table | Access | PK | 주요 컬럼 | 인덱스/비고 |
 |---|---|---|---|---|
 | wallet | private/RLS | identity | balance | balance |
+| player_wallet_view | public | identity | balance, updated_at | wallet projection |
 | currency_txn | private | txn_id | identity, amount, reason, ts | identity, ts |
 | trade_session | private/RLS | session_id | a_id, b_id, status, timeout_ts | a_id, b_id |
 | trade_offer | private/RLS | (session_id, item_instance_id) | qty | session_id |
@@ -183,6 +188,7 @@
 |---|---|---|---|---|
 | anti_cheat_event | private | event_id | identity, type, severity, ts | identity, ts |
 | movement_violation | private | violation_id | identity, reason, ts, position | identity |
+| player_movement_feedback_view | public | request_key | identity, request_id, accepted, reason_code, server_pos, processed_at | identity, processed_at |
 | action_rate_violation | private | violation_id | identity, action, ts | identity |
 
 ## 13) 메트릭/관측
@@ -197,18 +203,18 @@
 
 ## 테이블별 RLS 문서 (앵커)
 - 개별 RLS 규칙은 아래 링크의 테이블 문서에 정의.
-- 계정/인증/권한: [account](05-data-model-tables/account.md), [account_profile](05-data-model-tables/account_profile.md), [role_binding](05-data-model-tables/role_binding.md), [session_state](05-data-model-tables/session_state.md), [moderation_flag](05-data-model-tables/moderation_flag.md)
+- 계정/인증/권한: [account](05-data-model-tables/account.md), [account_profile](05-data-model-tables/account_profile.md), [role_binding](05-data-model-tables/role_binding.md), [session_state](05-data-model-tables/session_state.md), [player_session_view](05-data-model-tables/player_session_view.md), [moderation_flag](05-data-model-tables/moderation_flag.md)
 - 플레이어/캐릭터/스탯: [player_state](05-data-model-tables/player_state.md), [character_stats](05-data-model-tables/character_stats.md), [resource_state](05-data-model-tables/resource_state.md), [action_state](05-data-model-tables/action_state.md), [buff_state](05-data-model-tables/buff_state.md), [skill_progress](05-data-model-tables/skill_progress.md), [knowledge_state](05-data-model-tables/knowledge_state.md)
 - 월드/공간/엔티티: [region_state](05-data-model-tables/region_state.md), [instance_state](05-data-model-tables/instance_state.md), [entity_core](05-data-model-tables/entity_core.md), [transform_state](05-data-model-tables/transform_state.md), [terrain_chunk](05-data-model-tables/terrain_chunk.md), [resource_node](05-data-model-tables/resource_node.md), [building_state](05-data-model-tables/building_state.md), [claim_state](05-data-model-tables/claim_state.md), [permission_state](05-data-model-tables/permission_state.md)
 - 전투/위협/상태이상: [combat_state](05-data-model-tables/combat_state.md), [threat_state](05-data-model-tables/threat_state.md), [attack_outcome](05-data-model-tables/attack_outcome.md), [status_effect](05-data-model-tables/status_effect.md)
-- 인벤토리/아이템: [inventory_container](05-data-model-tables/inventory_container.md), [inventory_slot](05-data-model-tables/inventory_slot.md), [item_instance](05-data-model-tables/item_instance.md), [item_stack](05-data-model-tables/item_stack.md), [item_def](05-data-model-tables/item_def.md), [inventory_lock](05-data-model-tables/inventory_lock.md), [escrow_item](05-data-model-tables/escrow_item.md)
-- 제작/경제/거래: [wallet](05-data-model-tables/wallet.md), [currency_txn](05-data-model-tables/currency_txn.md), [trade_session](05-data-model-tables/trade_session.md), [trade_offer](05-data-model-tables/trade_offer.md), [market_order](05-data-model-tables/market_order.md), [order_fill](05-data-model-tables/order_fill.md), [tax_policy](05-data-model-tables/tax_policy.md), [price_index](05-data-model-tables/price_index.md)
+- 인벤토리/아이템: [inventory_container](05-data-model-tables/inventory_container.md), [inventory_slot](05-data-model-tables/inventory_slot.md), [item_instance](05-data-model-tables/item_instance.md), [item_stack](05-data-model-tables/item_stack.md), [player_inventory_container_view](05-data-model-tables/player_inventory_container_view.md), [player_inventory_slot_view](05-data-model-tables/player_inventory_slot_view.md), [player_inventory_item_view](05-data-model-tables/player_inventory_item_view.md), [item_def](05-data-model-tables/item_def.md), [inventory_lock](05-data-model-tables/inventory_lock.md), [escrow_item](05-data-model-tables/escrow_item.md)
+- 제작/경제/거래: [wallet](05-data-model-tables/wallet.md), [player_wallet_view](05-data-model-tables/player_wallet_view.md), [currency_txn](05-data-model-tables/currency_txn.md), [trade_session](05-data-model-tables/trade_session.md), [trade_offer](05-data-model-tables/trade_offer.md), [market_order](05-data-model-tables/market_order.md), [order_fill](05-data-model-tables/order_fill.md), [tax_policy](05-data-model-tables/tax_policy.md), [price_index](05-data-model-tables/price_index.md)
 - 퀘스트/업적: [quest_chain_def](05-data-model-tables/quest_chain_def.md), [quest_stage_def](05-data-model-tables/quest_stage_def.md), [quest_state](05-data-model-tables/quest_state.md), [achievement_def](05-data-model-tables/achievement_def.md), [achievement_state](05-data-model-tables/achievement_state.md)
 - 커뮤니티/소셜: [chat_channel](05-data-model-tables/chat_channel.md), [chat_message](05-data-model-tables/chat_message.md), [friend_edge](05-data-model-tables/friend_edge.md), [party_state](05-data-model-tables/party_state.md), [party_member](05-data-model-tables/party_member.md), [guild_state](05-data-model-tables/guild_state.md), [guild_member](05-data-model-tables/guild_member.md), [guild_project](05-data-model-tables/guild_project.md), [social_feed](05-data-model-tables/social_feed.md)
 - 운영/중재/신고: [report_queue](05-data-model-tables/report_queue.md), [moderation_action](05-data-model-tables/moderation_action.md), [ban_list](05-data-model-tables/ban_list.md), [rate_limit_bucket](05-data-model-tables/rate_limit_bucket.md), [audit_log](05-data-model-tables/audit_log.md)
 - LLM/VLM NPC: [npc_state](05-data-model-tables/npc_state.md), [npc_relation](05-data-model-tables/npc_relation.md), [npc_memory_short](05-data-model-tables/npc_memory_short.md), [npc_memory_long](05-data-model-tables/npc_memory_long.md), [npc_conversation_session](05-data-model-tables/npc_conversation_session.md), [npc_conversation_turn](05-data-model-tables/npc_conversation_turn.md), [npc_policy_violation](05-data-model-tables/npc_policy_violation.md), [npc_cost_metrics](05-data-model-tables/npc_cost_metrics.md), [npc_action_request](05-data-model-tables/npc_action_request.md), [npc_action_result](05-data-model-tables/npc_action_result.md), [npc_response_cache](05-data-model-tables/npc_response_cache.md)
 - 밸런싱/파라미터: [balance_params](05-data-model-tables/balance_params.md), [economy_params](05-data-model-tables/economy_params.md), [anti_cheat_params](05-data-model-tables/anti_cheat_params.md), [llm_params](05-data-model-tables/llm_params.md), [feature_flags](05-data-model-tables/feature_flags.md), [param_change_log](05-data-model-tables/param_change_log.md), [param_guardrail](05-data-model-tables/param_guardrail.md)
-- 치트 방지/동기화: [anti_cheat_event](05-data-model-tables/anti_cheat_event.md), [movement_violation](05-data-model-tables/movement_violation.md), [action_rate_violation](05-data-model-tables/action_rate_violation.md)
+- 치트 방지/동기화: [anti_cheat_event](05-data-model-tables/anti_cheat_event.md), [movement_violation](05-data-model-tables/movement_violation.md), [player_movement_feedback_view](05-data-model-tables/player_movement_feedback_view.md), [action_rate_violation](05-data-model-tables/action_rate_violation.md)
 - 메트릭/관측: [metric_daily](05-data-model-tables/metric_daily.md), [economy_metric](05-data-model-tables/economy_metric.md), [combat_metric](05-data-model-tables/combat_metric.md)
 
 

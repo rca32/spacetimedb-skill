@@ -1,5 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
+use crate::services::projection_views;
 use crate::tables::movement::movement_actor_state;
 use crate::tables::movement::movement_request_log;
 use crate::tables::session_state::session_state;
@@ -112,8 +113,8 @@ pub fn move_to(
         identity: ctx.sender,
         region_id,
         last_client_ts_ms: client_ts_ms,
-        last_request_id: request_id,
-        last_position: next_position,
+        last_request_id: request_id.clone(),
+        last_position: next_position.clone(),
         updated_at: ctx.timestamp,
     };
     if ctx
@@ -130,6 +131,15 @@ pub fn move_to(
     } else {
         ctx.db.movement_actor_state().insert(next_actor_state);
     }
+
+    projection_views::upsert_movement_feedback(
+        ctx,
+        ctx.sender,
+        &request_id,
+        true,
+        "ok",
+        next_position,
+    );
 
     Ok(())
 }

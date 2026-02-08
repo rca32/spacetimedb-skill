@@ -1,6 +1,7 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::services::economy;
+use crate::services::projection_views;
 use crate::tables::trade_market::market_fill;
 use crate::tables::trade_market::market_order;
 use crate::tables::MarketFill;
@@ -101,6 +102,9 @@ pub fn market_order_match(
             created_at: ctx.timestamp,
         });
     }
+
+    projection_views::sync_player_wallet_view(ctx, buyer_identity);
+    projection_views::sync_player_wallet_view(ctx, seller_identity);
 
     Ok(())
 }

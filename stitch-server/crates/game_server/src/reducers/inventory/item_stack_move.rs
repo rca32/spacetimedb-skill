@@ -1,6 +1,7 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::services::economy;
+use crate::services::projection_views;
 use crate::tables::inventory_slot::inventory_slot;
 use crate::tables::item_def::item_def;
 use crate::tables::item_instance::item_instance;
@@ -129,6 +130,7 @@ pub fn item_stack_move(
             ctx.db.item_stack().item_instance_id().update(src_stack);
         }
 
+        projection_views::sync_player_inventory_views(ctx, ctx.sender);
         return Ok(());
     }
 
@@ -141,6 +143,7 @@ pub fn item_stack_move(
         to_slot.item_instance_id = src_instance.item_instance_id;
         ctx.db.inventory_slot().slot_key().update(from_slot);
         ctx.db.inventory_slot().slot_key().update(to_slot);
+        projection_views::sync_player_inventory_views(ctx, ctx.sender);
         return Ok(());
     }
 
@@ -162,6 +165,8 @@ pub fn item_stack_move(
 
     to_slot.item_instance_id = new_item_instance_id;
     ctx.db.inventory_slot().slot_key().update(to_slot);
+
+    projection_views::sync_player_inventory_views(ctx, ctx.sender);
 
     Ok(())
 }

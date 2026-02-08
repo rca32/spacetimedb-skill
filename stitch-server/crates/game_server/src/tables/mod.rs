@@ -20,6 +20,7 @@ pub mod ops_moderation;
 pub mod permission_state;
 pub mod player_progression;
 pub mod player_state;
+pub mod player_views;
 pub mod role_binding;
 pub mod session_state;
 pub mod social;
@@ -70,6 +71,10 @@ pub use player_progression::{
     StatusEffect,
 };
 pub use player_state::PlayerState;
+pub use player_views::{
+    PlayerInventoryContainerView, PlayerInventoryItemView, PlayerInventorySlotView,
+    PlayerMovementFeedbackView, PlayerSessionView, PlayerWalletView,
+};
 pub use role_binding::RoleBinding;
 pub use session_state::SessionState;
 pub use social::{

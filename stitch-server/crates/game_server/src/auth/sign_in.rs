@@ -1,5 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
+use crate::services::projection_views;
 use crate::tables::account::account;
 use crate::tables::session_state::session_state;
 use crate::tables::SessionState;
@@ -34,5 +35,7 @@ pub fn sign_in(ctx: &ReducerContext, region_id: u64) -> Result<(), String> {
 
     super::ensure_player_state_exists(ctx, "new-player".to_string());
     super::ensure_transform_exists(ctx, region_id);
+    projection_views::sync_player_session_view(ctx, ctx.sender);
+    projection_views::sync_player_wallet_view(ctx, ctx.sender);
     Ok(())
 }

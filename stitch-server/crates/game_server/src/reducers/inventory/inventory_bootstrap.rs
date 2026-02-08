@@ -2,6 +2,7 @@ use std::hash::{Hash, Hasher};
 
 use spacetimedb::{ReducerContext, Table};
 
+use crate::services::projection_views;
 use crate::tables::inventory_container::inventory_container;
 use crate::tables::inventory_slot::inventory_slot;
 use crate::tables::item_instance::item_instance;
@@ -22,6 +23,7 @@ pub fn inventory_bootstrap(ctx: &ReducerContext) -> Result<(), String> {
         .find(container_id)
         .is_some()
     {
+        projection_views::sync_player_inventory_views(ctx, ctx.sender);
         return Ok(());
     }
 
@@ -69,6 +71,8 @@ pub fn inventory_bootstrap(ctx: &ReducerContext) -> Result<(), String> {
         .ok_or("slot 0 missing".to_string())?;
     slot0.item_instance_id = starter_instance_id;
     ctx.db.inventory_slot().slot_key().update(slot0);
+
+    projection_views::sync_player_inventory_views(ctx, ctx.sender);
 
     Ok(())
 }

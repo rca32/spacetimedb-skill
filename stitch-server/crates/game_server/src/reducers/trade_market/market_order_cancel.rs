@@ -1,5 +1,6 @@
 use spacetimedb::ReducerContext;
 
+use crate::services::projection_views;
 use crate::tables::trade_market::market_order;
 
 #[spacetimedb::reducer]
@@ -21,6 +22,7 @@ pub fn market_order_cancel(ctx: &ReducerContext, order_id: String) -> Result<(),
     order.status = 1;
     order.updated_at = ctx.timestamp;
     ctx.db.market_order().order_id().update(order);
+    projection_views::sync_player_wallet_view(ctx, ctx.sender);
 
     Ok(())
 }

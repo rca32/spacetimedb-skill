@@ -1,5 +1,6 @@
 use spacetimedb::{Identity, ReducerContext, Table, Timestamp};
 
+use crate::services::projection_views;
 use crate::tables::movement::movement_request_log;
 use crate::tables::movement::movement_violation;
 use crate::tables::{MovementActorState, MovementRequestLog, MovementViolation};
@@ -63,7 +64,7 @@ pub(crate) fn log_movement_violation(
         identity: ctx.sender,
         reason: reason.to_string(),
         ts: ctx.timestamp,
-        attempted_position: position,
+        attempted_position: position.clone(),
     });
 
     let req_key = request_key(ctx.sender, request_id);
@@ -84,6 +85,10 @@ pub(crate) fn log_movement_violation(
             processed_at: ctx.timestamp,
         });
     }
+
+    projection_views::upsert_movement_feedback(
+        ctx, ctx.sender, request_id, false, reason, position,
+    );
 
     log::warn!(
         "movement denied: identity={} reason={} request_id={} region_id={}",

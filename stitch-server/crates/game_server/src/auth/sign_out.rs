@@ -1,3 +1,4 @@
+use crate::services::projection_views;
 use crate::tables::session_state::session_state;
 use spacetimedb::ReducerContext;
 
@@ -16,5 +17,6 @@ pub fn sign_out(ctx: &ReducerContext) -> Result<(), String> {
     }
 
     ctx.db.session_state().identity().delete(ctx.sender);
+    projection_views::sync_player_session_view(ctx, ctx.sender);
     Ok(())
 }
