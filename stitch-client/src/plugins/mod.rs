@@ -1,0 +1,21 @@
+pub mod build_claim_housing;
+pub mod combat;
+pub mod core;
+pub mod diagnostics;
+pub mod inventory_trade;
+pub mod net;
+pub mod social_npc_quest;
+pub mod sync;
+pub mod ui;
+pub mod world;
+
+pub use build_claim_housing::BuildClaimHousingPlugin;
+pub use combat::CombatPlugin;
+pub use core::CorePlugin;
+pub use diagnostics::DiagnosticsPlugin;
+pub use inventory_trade::InventoryTradePlugin;
+pub use net::NetPlugin;
+pub use social_npc_quest::SocialNpcQuestPlugin;
+pub use sync::SyncPlugin;
+pub use ui::UiPlugin;
+pub use world::WorldPlugin;
