@@ -1,5 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
+use crate::services::economy;
 use crate::tables::trade_market::market_fill;
 use crate::tables::trade_market::market_order;
 use crate::tables::MarketFill;
@@ -67,6 +68,16 @@ pub fn market_order_match(
     let buyer_identity = buy.owner_identity;
     let seller_identity = sell.owner_identity;
     let fill_unit_price = sell.unit_price;
+
+    economy::settle_market_fill(
+        ctx,
+        buyer_identity,
+        seller_identity,
+        buy_item_def_id,
+        fill_qty,
+        fill_unit_price,
+    )?;
+
     ctx.db.market_order().order_id().update(buy);
     ctx.db.market_order().order_id().update(sell);
 

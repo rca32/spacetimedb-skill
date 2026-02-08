@@ -175,15 +175,17 @@ intents:
         completed_at: 2026-02-08T04:33:29.540Z
       - id: implement-economy-wallet-tax-price-index-and-market-settlement
         title: 월렛/세금/가격지수 기반 경제 정산 루프 구현
-        status: pending
+        status: completed
         complexity: high
         mode: validate
         depends_on:
           - establish-extended-schema-for-liveops-social-security-domains
           - implement-world-resource-and-regeneration-agent-loops
+        run_id: run-015
+        completed_at: 2026-02-08T07:07:46.128Z
       - id: establish-multi-identity-load-security-regression-suite
         title: 다중 Identity/부하/보안 회귀 스위트 확립
-        status: pending
+        status: completed
         complexity: medium
         mode: confirm
         depends_on:
@@ -193,6 +195,8 @@ intents:
           - implement-social-chat-party-guild-core-loop
           - implement-moderation-audit-and-role-based-admin-controls
           - implement-economy-wallet-tax-price-index-and-market-settlement
+        run_id: run-016
+        completed_at: 2026-02-08T07:13:19.021Z
 runs:
   active: []
   completed:
@@ -314,3 +318,19 @@ runs:
           mode: validate
       started: 2026-02-08T04:23:10.236Z
       completed: 2026-02-08T04:33:29.540Z
+    - id: run-015
+      scope: single
+      work_items:
+        - id: implement-economy-wallet-tax-price-index-and-market-settlement
+          intent: stitch-server-gap-closure-phase2
+          mode: validate
+      started: 2026-02-08T07:03:12.084Z
+      completed: 2026-02-08T07:07:46.128Z
+    - id: run-016
+      scope: single
+      work_items:
+        - id: establish-multi-identity-load-security-regression-suite
+          intent: stitch-server-gap-closure-phase2
+          mode: confirm
+      started: 2026-02-08T07:09:17.281Z
+      completed: 2026-02-08T07:13:19.021Z

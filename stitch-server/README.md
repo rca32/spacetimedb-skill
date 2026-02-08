@@ -103,3 +103,18 @@ REPEAT=3 bash scripts/cli_regression_suite.sh --db stitch-server --server 127.0.
 
 Detailed scenario and failure diagnosis checklist:
 - `stitch-server/docs/cli-regression-suite.md`
+
+## Multi-Identity / Security / Load Regression
+
+Run extended regression flow (SEC-001~003 + load probes):
+
+```bash
+cd /home/rca32/workspaces/spacetimedb-skill/stitch-server
+bash scripts/cli_regression_multi_identity_security.sh --db stitch-server --server 127.0.0.1:3000 --repeat 1
+```
+
+Dry run:
+
+```bash
+bash scripts/cli_regression_multi_identity_security.sh --dry-run --repeat 2
+```

@@ -49,6 +49,17 @@ REPEAT=3 bash scripts/cli_regression_suite.sh --db stitch-server --server 127.0.
 bash scripts/cli_regression_suite.sh --dry-run
 ```
 
+### 2.5 다중 Identity + 보안 + 부하 회귀
+```bash
+cd /home/rca32/workspaces/spacetimedb-skill/stitch-server
+bash scripts/cli_regression_multi_identity_security.sh --db stitch-server --server 127.0.0.1:3000 --repeat 1
+```
+
+반복 실행:
+```bash
+REPEAT=3 bash scripts/cli_regression_multi_identity_security.sh --db stitch-server --server 127.0.0.1:3000
+```
+
 ## 3. 분할 시나리오(수동 확장)
 
 직접 거래(`trade_session_open/trade_item_add/trade_accept`)나 전투 성공 경로(`attack_start/attack_scheduled/attack_impact`)는 2개 identity가 필요하므로 수동/별도 자동화로 확장한다.
@@ -59,6 +70,14 @@ bash scripts/cli_regression_suite.sh --dry-run
 3. 전투: A가 B 대상으로 `attack_start` → `attack_scheduled` → `attack_impact`.
 4. 직접 거래: A가 `trade_session_open` 후 양측 `trade_item_add` 및 `trade_accept`.
 5. `trade_session`, `trade_offer`, `attack_outcome`, `threat_state` SQL 검증.
+
+## 3.1 SEC-001~003 회귀 고정 규칙
+
+- `SEC-001` 권한 상승: 비운영 identity에서 `role_grant`/`role_revoke` 호출은 실패해야 한다.
+- `SEC-002` 세션 하이재킹: 인증되지 않은 상태에서 `sign_out` 또는 타인 세션 관련 reducer 호출은 실패해야 한다.
+- `SEC-003` private/RLS 누출: `role_binding`, `ban_list` 등 private 테이블 직접 SQL 조회는 실패해야 한다.
+
+위 규칙은 `cli_regression_multi_identity_security.sh`에 expected-fail 체크로 포함되어 있다.
 
 ## 4. 실패 진단 SQL 및 점검 순서
 
@@ -94,7 +113,23 @@ SELECT stage_key, stage_index, status FROM quest_stage_state ORDER BY updated_at
 
 SELECT order_id, side, status, quantity_open FROM market_order ORDER BY updated_at DESC LIMIT 10;
 SELECT fill_id, quantity, unit_price FROM market_fill ORDER BY created_at DESC LIMIT 10;
+
+SELECT txn_id, identity, amount, reason FROM currency_txn ORDER BY created_at DESC LIMIT 20;
+SELECT index_key, item_def_id, price_avg, volume FROM price_index ORDER BY recorded_at DESC LIMIT 20;
+
+SELECT report_id, reporter_identity, target_identity, report_type FROM report_queue ORDER BY report_id DESC LIMIT 20;
+SELECT action_id, target_identity, action_type, reason FROM moderation_action ORDER BY action_id DESC LIMIT 20;
+SELECT audit_id, actor_identity, action_type FROM audit_log ORDER BY audit_id DESC LIMIT 50;
 ```
+
+### 4.3 도메인별 실패 triage 순서
+
+1. `auth/session`: `account`, `session_state`, `ban_list` 확인.
+2. `security/role`: `role_binding`, `audit_log`, expected-fail 케이스 로그 확인.
+3. `combat`: `attack_schedule_state`, `attack_outcome`, `threat_state` 확인.
+4. `trade/economy`: `market_order`, `market_fill`, `wallet`, `currency_txn`, `price_index` 확인.
+5. `social/moderation`: `chat_message`, `report_queue`, `moderation_action`, `moderation_flag` 확인.
+6. `world-load`: `transform_state`, `movement_request_log`, agent loop 결과 테이블 확인.
 
 ## 5. stitch-server-ai-tester 정합 포인트
 
