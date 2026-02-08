@@ -49,10 +49,10 @@
   - `cd stitch-client && cargo check` 통과 (Bevy `0.18`)
 
 ## Phase 2: Network Core
-- [ ] `spacetime generate --lang rust` 바인딩 통합
-- [ ] `DbConnection`/재연결 래퍼 구현
-- [ ] `SubscriptionRegistry` 구현
-- [ ] `ReducerCallQueue` 구현
+- [x] `spacetime generate --lang rust` 바인딩 통합
+- [x] `DbConnection`/재연결 래퍼 구현
+- [x] `SubscriptionRegistry` 구현
+- [x] `ReducerCallQueue` 구현
 
 완료 기준:
 - 연결/재연결/기본 구독/기본 reducer 호출이 동작

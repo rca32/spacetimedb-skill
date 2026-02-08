@@ -5,3 +5,5 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.18"
+native-tls = { version = "0.2", features = ["vendored"] }
+spacetimedb-sdk = "=1.11.3"

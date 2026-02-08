@@ -1,6 +1,7 @@
 mod app_state;
 mod domain;
 mod infra;
+mod module_bindings;
 mod net;
 mod plugins;
 mod ui;

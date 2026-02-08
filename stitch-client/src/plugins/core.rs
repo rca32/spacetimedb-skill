@@ -68,28 +68,12 @@ fn drive_bootstrap_state_flow(
     mut timer: ResMut<StateAdvanceTimer>,
     mut next_state: ResMut<NextState<ClientAppState>>,
 ) {
-    match state.get() {
-        ClientAppState::Boot
-        | ClientAppState::Connecting
-        | ClientAppState::Authenticating
-        | ClientAppState::CharacterReady
-        | ClientAppState::Reconnecting => {
-            if timer.0.tick(time.delta()).just_finished() {
-                let target = match state.get() {
-                    ClientAppState::Boot => ClientAppState::Connecting,
-                    ClientAppState::Connecting => ClientAppState::Authenticating,
-                    ClientAppState::Authenticating => ClientAppState::CharacterReady,
-                    ClientAppState::CharacterReady => ClientAppState::InWorld,
-                    ClientAppState::Reconnecting => ClientAppState::InWorld,
-                    ClientAppState::InWorld | ClientAppState::Disconnected => return,
-                };
-                next_state.set(target);
-            }
-        }
-        ClientAppState::InWorld | ClientAppState::Disconnected => {
-            timer.0.reset();
-        }
+    if matches!(state.get(), ClientAppState::Boot) && timer.0.tick(time.delta()).just_finished() {
+        next_state.set(ClientAppState::Connecting);
+        return;
     }
+
+    timer.0.reset();
 }
 
 fn quick_state_shortcuts(

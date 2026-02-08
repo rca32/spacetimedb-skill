@@ -24,4 +24,8 @@ impl ReducerCallQueue {
     pub fn dequeue(&mut self) -> Option<ReducerIntent> {
         self.pending.pop_front()
     }
+
+    pub fn clear(&mut self) {
+        self.pending.clear();
+    }
 }
