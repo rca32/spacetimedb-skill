@@ -156,11 +156,13 @@ intents:
         completed_at: 2026-02-08T11:18:00Z
       - id: implement-social-chat-party-guild-core-loop
         title: 소셜 채팅/파티/길드 코어 루프 구현
-        status: pending
+        status: completed
         complexity: high
         mode: validate
         depends_on:
           - establish-extended-schema-for-liveops-social-security-domains
+        run_id: run-013
+        completed_at: 2026-02-08T01:25:40.700Z
       - id: implement-moderation-audit-and-role-based-admin-controls
         title: 중재/감사/역할 기반 운영 제어 구현
         status: pending
@@ -190,7 +192,17 @@ intents:
           - implement-moderation-audit-and-role-based-admin-controls
           - implement-economy-wallet-tax-price-index-and-market-settlement
 runs:
-  active: []
+  active:
+    - id: run-014
+      scope: single
+      work_items:
+        - id: implement-moderation-audit-and-role-based-admin-controls
+          intent: stitch-server-gap-closure-phase2
+          mode: validate
+          status: in_progress
+          current_phase: plan
+      current_item: implement-moderation-audit-and-role-based-admin-controls
+      started: 2026-02-08T04:23:10.236Z
   completed:
     - id: run-001
       scope: single
@@ -294,3 +306,11 @@ runs:
           mode: validate
       started: 2026-02-08T11:02:00Z
       completed: 2026-02-08T11:18:00Z
+    - id: run-013
+      scope: single
+      work_items:
+        - id: implement-social-chat-party-guild-core-loop
+          intent: stitch-server-gap-closure-phase2
+          mode: validate
+      started: 2026-02-08T01:14:41.967Z
+      completed: 2026-02-08T01:25:40.700Z

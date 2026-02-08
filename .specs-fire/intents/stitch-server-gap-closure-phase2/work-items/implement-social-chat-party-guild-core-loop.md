@@ -4,10 +4,12 @@ title: 소셜 채팅/파티/길드 코어 루프 구현
 intent: stitch-server-gap-closure-phase2
 complexity: high
 mode: validate
-status: pending
+status: completed
 depends_on:
   - establish-extended-schema-for-liveops-social-security-domains
 created: 2026-02-08T09:50:00Z
+run_id: run-013
+completed_at: 2026-02-08T01:25:40.700Z
 ---
 
 # Work Item: 소셜 채팅/파티/길드 코어 루프 구현
