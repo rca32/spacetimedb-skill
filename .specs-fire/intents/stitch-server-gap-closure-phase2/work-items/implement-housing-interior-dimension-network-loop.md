@@ -4,10 +4,12 @@ title: 주거 인테리어 차원 네트워크 루프 구현
 intent: stitch-server-gap-closure-phase2
 complexity: high
 mode: validate
-status: pending
+status: completed
 depends_on:
   - establish-extended-schema-for-liveops-social-security-domains
 created: 2026-02-08T09:50:00Z
+run_id: run-012
+completed_at: 2026-02-08T11:18:00Z
 ---
 
 # Work Item: 주거 인테리어 차원 네트워크 루프 구현
@@ -19,9 +21,9 @@ created: 2026-02-08T09:50:00Z
 
 ## Acceptance Criteria
 
-- [ ] 주거 입장/출구/이동 흐름과 잠금 시간 정책이 동작한다.
-- [ ] 인테리어 붕괴/재생성 타이머가 서버 권위로 처리된다.
-- [ ] 임대 화이트리스트와 `permission_state` 연계 검증이 적용된다.
+- [x] 주거 입장/출구/이동 흐름과 잠금 시간 정책이 동작한다.
+- [x] 인테리어 붕괴/재생성 타이머가 서버 권위로 처리된다.
+- [x] 임대 화이트리스트와 `permission_state` 연계 검증이 적용된다.
 
 ## Technical Notes
 

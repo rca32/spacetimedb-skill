@@ -6,6 +6,7 @@ pub mod claim_state;
 pub mod combat;
 pub mod economy;
 pub mod environment_effect;
+pub mod housing;
 pub mod inventory_container;
 pub mod inventory_lock;
 pub mod inventory_slot;
@@ -39,6 +40,9 @@ pub use combat::{AttackOutcome, AttackScheduled, CombatState, ThreatState};
 pub use economy::{CurrencyTxn, EscrowItem, OrderFill, PriceIndex, TaxPolicy, Wallet};
 pub use environment_effect::{
     EnvironmentEffectDesc, EnvironmentEffectExposure, EnvironmentEffectState,
+};
+pub use housing::{
+    DimensionDesc, DimensionNetwork, HousingState, InteriorCollapseTimer, RentState,
 };
 pub use inventory_container::InventoryContainer;
 pub use inventory_lock::InventoryLock;
