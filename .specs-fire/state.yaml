@@ -17,7 +17,7 @@ workspace:
 intents:
   - id: stitch-full-game-server-development
     title: Stitch 서버 전체 게임 기능 개발 (폴더 구조 상세 설계 기반)
-    status: in_progress
+    status: completed
     work_items:
       - id: scaffold-domain-folder-structure-and-module-entrypoints
         title: 도메인 폴더 구조 및 모듈 엔트리포인트 스캐폴딩
@@ -114,6 +114,77 @@ intents:
           - build-static-data-loader-and-asset-pipeline
         run_id: run-008
         completed_at: 2026-02-08T00:26:55.910Z
+  - id: stitch-server-gap-closure-phase2
+    title: Stitch 서버 누락 시스템 보강 개발 (DESIGN 정합성 2차)
+    status: in_progress
+    work_items:
+      - id: establish-extended-schema-for-liveops-social-security-domains
+        title: 라이브옵스/소셜/보안 도메인 확장 스키마 정립
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on: []
+        run_id: run-009
+        completed_at: 2026-02-08T10:05:00Z
+      - id: implement-world-resource-and-regeneration-agent-loops
+        title: 월드 자원/재생 에이전트 루프 구현
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - establish-extended-schema-for-liveops-social-security-domains
+        run_id: run-010
+        completed_at: 2026-02-08T10:32:00Z
+      - id: implement-environment-debuff-and-status-effect-pipeline
+        title: 환경 디버프 및 상태효과 파이프라인 구현
+        status: pending
+        complexity: high
+        mode: validate
+        depends_on:
+          - establish-extended-schema-for-liveops-social-security-domains
+          - implement-world-resource-and-regeneration-agent-loops
+      - id: implement-housing-interior-dimension-network-loop
+        title: 주거 인테리어 차원 네트워크 루프 구현
+        status: pending
+        complexity: high
+        mode: validate
+        depends_on:
+          - establish-extended-schema-for-liveops-social-security-domains
+      - id: implement-social-chat-party-guild-core-loop
+        title: 소셜 채팅/파티/길드 코어 루프 구현
+        status: pending
+        complexity: high
+        mode: validate
+        depends_on:
+          - establish-extended-schema-for-liveops-social-security-domains
+      - id: implement-moderation-audit-and-role-based-admin-controls
+        title: 중재/감사/역할 기반 운영 제어 구현
+        status: pending
+        complexity: high
+        mode: validate
+        depends_on:
+          - establish-extended-schema-for-liveops-social-security-domains
+          - implement-social-chat-party-guild-core-loop
+      - id: implement-economy-wallet-tax-price-index-and-market-settlement
+        title: 월렛/세금/가격지수 기반 경제 정산 루프 구현
+        status: pending
+        complexity: high
+        mode: validate
+        depends_on:
+          - establish-extended-schema-for-liveops-social-security-domains
+          - implement-world-resource-and-regeneration-agent-loops
+      - id: establish-multi-identity-load-security-regression-suite
+        title: 다중 Identity/부하/보안 회귀 스위트 확립
+        status: pending
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - implement-world-resource-and-regeneration-agent-loops
+          - implement-environment-debuff-and-status-effect-pipeline
+          - implement-housing-interior-dimension-network-loop
+          - implement-social-chat-party-guild-core-loop
+          - implement-moderation-audit-and-role-based-admin-controls
+          - implement-economy-wallet-tax-price-index-and-market-settlement
 runs:
   active: []
   completed:
@@ -187,3 +258,19 @@ runs:
           mode: confirm
       started: 2026-02-08T00:16:21.670Z
       completed: 2026-02-08T00:26:55.910Z
+    - id: run-009
+      scope: single
+      work_items:
+        - id: establish-extended-schema-for-liveops-social-security-domains
+          intent: stitch-server-gap-closure-phase2
+          mode: validate
+      started: 2026-02-08T09:52:00Z
+      completed: 2026-02-08T10:05:00Z
+    - id: run-010
+      scope: single
+      work_items:
+        - id: implement-world-resource-and-regeneration-agent-loops
+          intent: stitch-server-gap-closure-phase2
+          mode: validate
+      started: 2026-02-08T10:18:00Z
+      completed: 2026-02-08T10:32:00Z

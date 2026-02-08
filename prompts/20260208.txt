@@ -1,0 +1,13 @@
+게일 설계가 아래 폴더에 상셍하게 엤는데 이걸 실제 개발을 
+.codex/specsmd-fire-builder.md 방법론(https://specs.md/fire-flow/overview 참조)을 이용서 stitch-server 에 했어
+
+**.specs-fire/intents/stitch-full-game-server-development/brief.md
+
+실제 개발에서  빠진 부분들을 추가 개발 하고 싶어
+fire-flow 방법론을 이용할꺼라서 
+필용한   intent,work_item 등을 구성 해애죠 
+
+
+설계 문서:
+DESIGN
+DESIGN/DETAIL 

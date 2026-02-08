@@ -1,9 +1,11 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::tables::account::account;
+use crate::tables::player_progression::{character_stats, resource_state};
 use crate::tables::player_state::player_state;
 use crate::tables::transform_state::transform_state;
-use crate::tables::{Account, PlayerState, TransformState};
+use crate::tables::{Account, CharacterStats, PlayerState, ResourceState, TransformState};
+use crate::utils::identity_to_entity_id;
 
 pub mod account_bootstrap;
 pub mod sign_in;
@@ -25,6 +27,40 @@ pub(crate) fn ensure_player_state_exists(ctx: &ReducerContext, display_name: Str
             player_id: ctx.sender,
             display_name,
             created_at: ctx.timestamp,
+        });
+    }
+
+    let entity_id = identity_to_entity_id(ctx.sender);
+    if ctx
+        .db
+        .character_stats()
+        .entity_id()
+        .find(entity_id)
+        .is_none()
+    {
+        ctx.db.character_stats().insert(CharacterStats {
+            entity_id,
+            level: 1,
+            max_hp: 100,
+            max_stamina: 100,
+            max_satiation: 100,
+        });
+    }
+    if ctx
+        .db
+        .resource_state()
+        .entity_id()
+        .find(entity_id)
+        .is_none()
+    {
+        ctx.db.resource_state().insert(ResourceState {
+            entity_id,
+            hp: 100,
+            stamina: 100,
+            satiation: 100,
+            last_damage_at: ctx.timestamp,
+            last_stamina_use_at: ctx.timestamp,
+            last_regen_at: ctx.timestamp,
         });
     }
 }
