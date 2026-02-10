@@ -1,1 +1,0 @@
-../../../../game/src/game/static_data/building.rs

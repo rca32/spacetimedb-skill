@@ -3,6 +3,7 @@
 Phase 1 skeleton for web runtime.
 
 ## Scripts
+- `bun run spacetime:generate`
 - `bun run dev`
 - `bun run build`
 - `bun run typecheck`

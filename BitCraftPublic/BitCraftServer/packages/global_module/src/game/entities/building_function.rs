@@ -1,1 +1,0 @@
-../../../../game/src/game/entities/building_function.rs

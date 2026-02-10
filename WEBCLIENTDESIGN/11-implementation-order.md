@@ -37,11 +37,11 @@
 - `bun run dev`
 
 ## Phase 2: SpacetimeDB Network Core
-- [ ] `spacetime generate --lang typescript` 바인딩 통합
-- [ ] `DbConnection.builder` 연결/재연결 래퍼 구현
-- [ ] baseline subscription registry 구현
-- [ ] reducer intent queue 구현
-- [ ] `onConnect`/`onDisconnect`/`onConnectError` 정책 구현
+- [x] `spacetime generate --lang typescript` 바인딩 통합
+- [x] `DbConnection.builder` 연결/재연결 래퍼 구현
+- [x] baseline subscription registry 구현
+- [x] reducer intent queue 구현
+- [x] `onConnect`/`onDisconnect`/`onConnectError` 정책 구현
 
 완료 기준:
 - 연결/재연결/기본 구독/기본 reducer 호출 동작

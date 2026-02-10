@@ -1,7 +1,12 @@
-export interface NetEvent {
-  kind: 'connected' | 'disconnected' | 'subscription-applied' | 'reducer-failed'
-  message?: string
-}
+export type NetEvent =
+  | { kind: 'connected'; identityHex: string }
+  | { kind: 'connect-error'; error: Error }
+  | { kind: 'disconnected'; error?: Error }
+  | { kind: 'reconnect-scheduled'; retryCount: number; delayMs: number }
+  | { kind: 'subscription-applied'; key: string }
+  | { kind: 'subscription-error'; key: string; error: Error }
+  | { kind: 'reducer-dispatched'; reducer: string }
+  | { kind: 'reducer-failed'; reducer: string; error: Error }
 
 export class NetEventQueue {
   private readonly events: NetEvent[] = []

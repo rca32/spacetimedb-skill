@@ -1,1 +1,0 @@
-../../../game/src/messages/static_data.rs
