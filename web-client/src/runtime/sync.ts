@@ -19,7 +19,7 @@ const SPEED_ADAPT_START_MPS = envNumber('VITE_SYNC_SPEED_ADAPT_START_MPS', 2.5)
 const SPEED_ADAPT_MAX_MPS = envNumber('VITE_SYNC_SPEED_ADAPT_MAX_MPS', 7.5)
 const SPEED_ADAPT_MAX_EXTRA_MS = envNumber('VITE_SYNC_SPEED_ADAPT_MAX_EXTRA_MS', 140)
 const SPEED_ADAPT_MAX_LERP_SCALE = envNumber('VITE_SYNC_SPEED_ADAPT_MAX_LERP_SCALE', 1.5)
-const REQUIRED_STABLE_ACCEPTED_FEEDBACKS = 2
+const REQUIRED_STABLE_ACCEPTED_FEEDBACKS = envInt('VITE_SYNC_STABLE_REQUIRED_FEEDBACKS', 3, 1, 8)
 const STABLE_ACCEPTED_POSITION_DELTA_METERS = envNumber('VITE_SYNC_STABLE_POSITION_DELTA_METERS', 0.35)
 const REQUEST_ID_MAX_LENGTH = 64
 const BOOT_NONCE = Math.floor(Math.random() * 0xffff_ffff)
@@ -596,6 +596,11 @@ function envNumber(name: string, fallback: number): number {
   }
   const parsed = Number(raw)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function envInt(name: string, fallback: number, min: number, max: number): number {
+  const value = Math.round(envNumber(name, fallback))
+  return Math.max(min, Math.min(max, value))
 }
 
 function buildMoveRequestId(identity: string, sessionCounter: number, sequence: number, bootNonce: number): string {
