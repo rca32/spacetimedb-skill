@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spacetime Test Debugger"
+  short_description: "SpacetimeDB CLI 테스트/디버깅 워크플로"
+  default_prompt: "SpacetimeDB 테스트/디버깅을 시작하고 원인 분석부터 검증까지 진행해줘."

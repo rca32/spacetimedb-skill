@@ -16,6 +16,8 @@ export default __t.row({
   requestId: __t.string().name("request_id"),
   accepted: __t.bool(),
   reasonCode: __t.string().name("reason_code"),
-  serverPos: __t.array(__t.f32()).name("server_pos"),
+  serverX: __t.f32().name("server_x"),
+  serverY: __t.f32().name("server_y"),
+  serverZ: __t.f32().name("server_z"),
   processedAt: __t.timestamp().name("processed_at"),
 });

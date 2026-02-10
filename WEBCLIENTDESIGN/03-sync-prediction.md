@@ -54,7 +54,7 @@
 - `request_id`
 - `accepted`
 - `reason_code`
-- `server_pos`
+- `server_x`, `server_y`, `server_z`
 - `processed_at`
 
 UI 규칙:

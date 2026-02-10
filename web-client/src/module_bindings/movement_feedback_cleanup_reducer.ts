@@ -10,16 +10,6 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.object("PlayerMovementFeedbackView", {
-  requestKey: __t.string(),
-  identity: __t.identity(),
-  requestId: __t.string(),
-  accepted: __t.bool(),
-  reasonCode: __t.string(),
-  serverX: __t.f32(),
-  serverY: __t.f32(),
-  serverZ: __t.f32(),
-  processedAt: __t.timestamp(),
-});
-
-
+export default {
+  keepRows: __t.u32(),
+};

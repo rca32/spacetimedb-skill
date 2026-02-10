@@ -51,11 +51,11 @@
 - baseline subscription `onApplied` 확인
 
 ## Phase 3: koota World + AOI + Rendering
-- [ ] koota traits/world/query 세트 구현
-- [ ] world upsert/despawn 동기화 구현
-- [ ] AOI query builder 구현 (region/chunk)
-- [ ] terrain/resource/building 렌더 파이프 구현
-- [ ] InstancedMesh/asset cache/dispose 정책 반영
+- [x] koota traits/world/query 세트 구현
+- [x] world upsert/despawn 동기화 구현
+- [x] AOI query builder 구현 (region/chunk)
+- [x] terrain/resource/building 렌더 파이프 구현
+- [x] InstancedMesh/asset cache/dispose 정책 반영
 
 완료 기준:
 - AOI 이동 시 엔티티/청크 스트리밍이 안정 동작
@@ -65,11 +65,11 @@
 - scene unload 시 자원 누수 없음 확인
 
 ## Phase 4: Movement + Combat
-- [ ] `move_to` 예측/보정 구현
-- [ ] `player_movement_feedback_view` UI 연결
-- [ ] 공격 state machine 구현
-- [ ] `attack_*` 호출 체인 구현
-- [ ] `attack_outcome`, `combat_state` HUD 반영
+- [x] `move_to` 예측/보정 구현
+- [x] `player_movement_feedback_view` UI 연결
+- [x] 공격 state machine 구현
+- [x] `attack_*` 호출 체인 구현
+- [x] `attack_outcome`, `combat_state` HUD 반영
 
 완료 기준:
 - 이동/전투 결과가 authoritative 테이블과 일치

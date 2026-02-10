@@ -11,7 +11,19 @@ export function createDiagnosticsRuntime(): RuntimeModule {
     tick(ctx: RuntimeContext, dtSeconds: number) {
       accumulated += dtSeconds
       if (accumulated >= 5) {
-        ctx.logger.info('diagnostics heartbeat', { frame: ctx.frame, state: ctx.appState.value })
+        const stats = ctx.renderer.getStats()
+        ctx.logger.info('diagnostics heartbeat', {
+          frame: ctx.frame,
+          state: ctx.appState.value,
+          drawCalls: stats.calls,
+          triangles: stats.triangles,
+        })
+        if (stats.calls > 100) {
+          ctx.logger.warn('draw call budget exceeded', {
+            drawCalls: stats.calls,
+            budget: 100,
+          })
+        }
         accumulated = 0
       }
     },

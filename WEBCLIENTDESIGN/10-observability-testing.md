@@ -92,6 +92,34 @@
 - 네트워크 단절 후 상태 복구
 - 중복 이벤트 멱등성
 
+### 5.8 Phase 4 수동 검증 (Movement + Combat)
+사전 준비:
+1. `spacetime start`
+2. `cd stitch-server/crates/game_server && spacetime build && spacetime publish --server 127.0.0.1:3000 stitch-server`
+3. `cd web-client && bun run dev`
+
+운영 정리(권장):
+1. 피드백 view 누적 행 정리: `spacetime call stitch-server movement_feedback_cleanup 64`
+2. 전체 identity 기준 정리: `spacetime call stitch-server movement_feedback_cleanup_global 64`
+3. 필요 시 강제 초기화: `spacetime sql stitch-server "DELETE FROM player_movement_feedback_view"`
+4. 스냅샷 수집: `stitch-server/scripts/movement_feedback_debug_snapshot.sh stitch-server <identity_hex>`
+
+검증 시나리오:
+1. 이동 예측/보정
+- `W/A/S/D` 입력 시 즉시 이동(예측)되고 HUD `MOVE`가 갱신된다.
+- 거절 입력 발생 시 HUD `MOVE`에 `reject`와 서버 좌표가 표시된다.
+
+2. 전투 체인
+- `Space` 입력 시 `attack_start -> attack_scheduled -> attack_impact` 체인이 수행된다.
+- HUD `COMBAT`/`OUTCOME`에서 HP, hit/dmg가 갱신된다.
+
+3. 지연/중복
+- 동일 세션에서 빠른 연속 입력 시 크래시/무한 재시도 없이 동작한다.
+- 중복 `request_id`는 서버에서 멱등 처리된다.
+
+4. AOI/렌더
+- 이동에 따라 `world-aoi` 구독이 재설정되고 draw call budget 경고가 과도하게 발생하지 않는다.
+
 ## 6. Exit Criteria
 - 치명 오류 없이 2시간 세션 유지
 - reconnect 20회 반복 시 캐시 파손 없음

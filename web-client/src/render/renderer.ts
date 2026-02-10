@@ -7,6 +7,12 @@ export interface RendererRuntime {
   readonly scene: THREE.Scene
   readonly camera: THREE.PerspectiveCamera
   readonly materials: MaterialPalette
+  getStats: () => {
+    calls: number
+    triangles: number
+    points: number
+    lines: number
+  }
   start: (onTick: (dtSeconds: number) => void) => void
   stop: () => void
 }
@@ -23,15 +29,6 @@ export function createRendererRuntime(root: HTMLElement): RendererRuntime {
   root.innerHTML = ''
   root.appendChild(renderer.domElement)
 
-  // Placeholder mesh for Phase 1 smoke rendering.
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), materials.actor)
-  mesh.position.set(0, 1, 0)
-  bundle.scene.add(mesh)
-
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), materials.ground)
-  ground.rotation.x = -Math.PI * 0.5
-  bundle.scene.add(ground)
-
   let previous = performance.now()
 
   const onResize = () => {
@@ -47,6 +44,14 @@ export function createRendererRuntime(root: HTMLElement): RendererRuntime {
     scene: bundle.scene,
     camera,
     materials,
+    getStats() {
+      return {
+        calls: renderer.info.render.calls,
+        triangles: renderer.info.render.triangles,
+        points: renderer.info.render.points,
+        lines: renderer.info.render.lines,
+      }
+    },
     start(onTick) {
       renderer.setAnimationLoop(() => {
         const now = performance.now()

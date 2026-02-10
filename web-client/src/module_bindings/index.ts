@@ -100,6 +100,10 @@ import ModerationApplyActionReducer from "./moderation_apply_action_reducer";
 export { ModerationApplyActionReducer };
 import MoveToReducer from "./move_to_reducer";
 export { MoveToReducer };
+import MovementFeedbackCleanupReducer from "./movement_feedback_cleanup_reducer";
+export { MovementFeedbackCleanupReducer };
+import MovementFeedbackCleanupGlobalReducer from "./movement_feedback_cleanup_global_reducer";
+export { MovementFeedbackCleanupGlobalReducer };
 import NpcQuestReducer from "./npc_quest_reducer";
 export { NpcQuestReducer };
 import NpcTalkReducer from "./npc_talk_reducer";
@@ -1878,6 +1882,8 @@ const reducersSchema = __reducers(
   __reducerSchema("market_order_place", MarketOrderPlaceReducer),
   __reducerSchema("moderation_apply_action", ModerationApplyActionReducer),
   __reducerSchema("move_to", MoveToReducer),
+  __reducerSchema("movement_feedback_cleanup", MovementFeedbackCleanupReducer),
+  __reducerSchema("movement_feedback_cleanup_global", MovementFeedbackCleanupGlobalReducer),
   __reducerSchema("npc_quest", NpcQuestReducer),
   __reducerSchema("npc_talk", NpcTalkReducer),
   __reducerSchema("npc_trade", NpcTradeReducer),

@@ -39,7 +39,6 @@ export function createNetConnectionRuntime(
       const builder = DbConnection.builder()
         .withUri(config.spacetimeUri)
         .withModuleName(config.spacetimeModuleName)
-        .withCompression('gzip')
         .withToken(token)
         .onConnect((conn, identity, nextToken) => {
           connection = conn

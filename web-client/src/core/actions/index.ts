@@ -1,3 +1,4 @@
+import { ConfigurableTrait, Entity } from 'koota'
 import { CoreWorld } from '../world'
 
 export interface ReducerIntent {
@@ -9,8 +10,6 @@ export function enqueueIntent(queue: ReducerIntent[], intent: ReducerIntent): vo
   queue.push(intent)
 }
 
-export function spawnEntity(world: CoreWorld, seed: Record<string, unknown> = {}): number {
-  const id = world.nextEntityId()
-  world.entities.set(id, { ...seed })
-  return id
+export function spawnEntity(world: CoreWorld, ...traits: ConfigurableTrait[]): Entity {
+  return world.ecs.spawn(...traits)
 }

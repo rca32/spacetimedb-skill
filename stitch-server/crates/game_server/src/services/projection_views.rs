@@ -214,6 +214,7 @@ pub fn upsert_movement_feedback(
     fallback_pos: Vec<f32>,
 ) {
     let request_key = anti_cheat::request_key(identity, request_id);
+    let reason_code = sanitize_reason_code(reason_code);
     let processed_at = ctx
         .db
         .movement_request_log()
@@ -222,21 +223,25 @@ pub fn upsert_movement_feedback(
         .map(|row| row.processed_at)
         .unwrap_or(ctx.timestamp);
 
-    let server_pos = ctx
+    let (server_x, server_y, server_z) = normalize_position(
+        ctx
         .db
         .transform_state()
         .entity_id()
         .find(identity)
         .map(|row| row.position)
-        .unwrap_or(fallback_pos);
+        .unwrap_or(fallback_pos),
+    );
 
     let next = PlayerMovementFeedbackView {
         request_key: request_key.clone(),
         identity,
         request_id: request_id.to_string(),
         accepted,
-        reason_code: reason_code.to_string(),
-        server_pos,
+        reason_code,
+        server_x,
+        server_y,
+        server_z,
         processed_at,
     };
 
@@ -244,7 +249,7 @@ pub fn upsert_movement_feedback(
         .db
         .player_movement_feedback_view()
         .request_key()
-        .find(request_key)
+        .find(request_key.clone())
         .is_some()
     {
         ctx.db
@@ -258,4 +263,28 @@ pub fn upsert_movement_feedback(
 
 fn inventory_container_view_key(owner_identity: Identity, container_id: u64) -> String {
     format!("{owner_identity}:{container_id}")
+}
+
+fn sanitize_reason_code(reason_code: &str) -> String {
+    let trimmed = reason_code.trim();
+    if trimmed.is_empty() {
+        return "unknown".to_string();
+    }
+
+    const MAX_REASON_CHARS: usize = 64;
+    if trimmed.chars().count() <= MAX_REASON_CHARS {
+        return trimmed.to_string();
+    }
+
+    trimmed.chars().take(MAX_REASON_CHARS).collect()
+}
+
+fn normalize_position(position: Vec<f32>) -> (f32, f32, f32) {
+    let mut normalized = [0.0_f32, 0.0_f32, 0.0_f32];
+
+    for (index, value) in position.into_iter().take(3).enumerate() {
+        normalized[index] = if value.is_finite() { value } else { 0.0 };
+    }
+
+    (normalized[0], normalized[1], normalized[2])
 }

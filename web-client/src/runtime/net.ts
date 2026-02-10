@@ -4,22 +4,20 @@ import { ReducerIntentQueue } from '../net/reducers'
 import { SubscriptionRegistry } from '../net/subscriptions'
 import { RuntimeContext, RuntimeModule } from './types'
 
-const BASELINE_SUBSCRIPTIONS: Array<{ key: string; queries: string[] }> = [
-  {
-    key: 'session-baseline',
-    queries: ['SELECT * FROM player_session_view'],
-  },
-  {
-    key: 'movement-feedback',
-    queries: ['SELECT * FROM player_movement_feedback_view'],
-  },
-]
+const BASELINE_SUBSCRIPTIONS: Array<{ key: string; queries: string[] }> = []
+const ENABLE_MOVEMENT_FEEDBACK_SUBSCRIPTION = (import.meta.env.VITE_ENABLE_MOVEMENT_FEEDBACK_SUB ?? '0') === '1'
 
 export function createNetRuntime(): RuntimeModule {
   const events = new NetEventQueue()
   const subscriptions = new SubscriptionRegistry()
   const reducerQueue = new ReducerIntentQueue()
   let runtime: ReturnType<typeof createNetConnectionRuntime> | null = null
+  let identityHex: string | null = null
+
+  const applyCallbacks = {
+    onApplied: (key: string) => events.push({ kind: 'subscription-applied', key }),
+    onError: (key: string, error: Error) => events.push({ kind: 'subscription-error', key, error }),
+  }
 
   return {
     name: 'NetRuntime',
@@ -29,6 +27,29 @@ export function createNetRuntime(): RuntimeModule {
       }
 
       runtime = createNetConnectionRuntime(ctx.config, ctx.logger, ctx.tokenStore, events)
+
+      ctx.net = {
+        getConnection: () => runtime?.getConnection() ?? null,
+        getIdentityHex: () => identityHex,
+        setSubscription: (key, queries) => {
+          const changed = subscriptions.register(key, queries)
+          if (!changed) {
+            return
+          }
+          ctx.logger.debug('subscription updated', {
+            key,
+            queries,
+          })
+          const connection = runtime?.getConnection()
+          if (connection?.isActive) {
+            subscriptions.activate(connection, key, applyCallbacks)
+          }
+        },
+        removeSubscription: (key) => {
+          subscriptions.remove(key)
+        },
+      }
+
       await runtime.connect()
 
       ctx.logger.info('net runtime start', {
@@ -41,6 +62,19 @@ export function createNetRuntime(): RuntimeModule {
       for (const event of events.drain()) {
         switch (event.kind) {
           case 'connected': {
+            identityHex = event.identityHex
+            const sessionBaselineQuery = `SELECT * FROM player_session_view WHERE identity = ${toIdentityLiteral(
+              event.identityHex,
+            )}`
+            subscriptions.register('session-baseline', [sessionBaselineQuery])
+
+            if (ENABLE_MOVEMENT_FEEDBACK_SUBSCRIPTION) {
+              const movementFeedbackQuery = `SELECT * FROM player_movement_feedback_view WHERE identity = ${toIdentityLiteral(
+                event.identityHex,
+              )}`
+              subscriptions.register('movement-feedback', [movementFeedbackQuery])
+            }
+
             if (ctx.appState.value === 'Connecting') {
               ctx.appState.transition('Authenticating')
               enqueueInitialAuth(reducerQueue)
@@ -48,10 +82,7 @@ export function createNetRuntime(): RuntimeModule {
 
             const connection = runtime?.getConnection()
             if (connection) {
-              subscriptions.activateAll(connection, {
-                onApplied: (key) => events.push({ kind: 'subscription-applied', key }),
-                onError: (key, error) => events.push({ kind: 'subscription-error', key, error }),
-              })
+              subscriptions.activateAll(connection, applyCallbacks)
             }
 
             ctx.logger.info('spacetimedb connected', { identity: event.identityHex })
@@ -65,6 +96,7 @@ export function createNetRuntime(): RuntimeModule {
           }
 
           case 'disconnected': {
+            identityHex = null
             subscriptions.deactivateAll()
             transitionToReconnecting(ctx)
             ctx.logger.warn('spacetimedb disconnected', {
@@ -121,14 +153,21 @@ export function createNetRuntime(): RuntimeModule {
       }
     },
     stop(ctx: RuntimeContext) {
+      identityHex = null
       subscriptions.clear()
       runtime?.disconnect()
+      delete ctx.net
       ctx.logger.info('net runtime stop')
     },
   }
 }
 
 function enqueueInitialAuth(queue: ReducerIntentQueue): void {
+  queue.enqueue({
+    name: 'movement_feedback_cleanup_global',
+    payload: { keepRowsPerIdentity: 64 },
+  })
+
   queue.enqueue({
     name: 'account_bootstrap',
     payload: { displayName: 'WebPlayer' },
@@ -137,6 +176,11 @@ function enqueueInitialAuth(queue: ReducerIntentQueue): void {
   queue.enqueue({
     name: 'sign_in',
     payload: { regionId: 1n },
+  })
+
+  queue.enqueue({
+    name: 'movement_feedback_cleanup',
+    payload: { keepRows: 64 },
   })
 }
 
@@ -149,4 +193,8 @@ function transitionToReconnecting(ctx: RuntimeContext): void {
   ) {
     ctx.appState.transition('Reconnecting')
   }
+}
+
+function toIdentityLiteral(identityHex: string): string {
+  return `0x${identityHex}`
 }

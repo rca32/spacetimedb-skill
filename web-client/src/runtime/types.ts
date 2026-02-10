@@ -2,8 +2,16 @@ import { AppStateStore } from '../app/app-state'
 import { CoreWorld } from '../core/world'
 import { AppConfig } from '../infra/config'
 import { Logger } from '../infra/logging'
+import { DbConnection } from '../module_bindings'
 import { TokenStore } from '../infra/token-store'
 import { RendererRuntime } from '../render/renderer'
+
+export interface NetRuntimeBridge {
+  getConnection: () => DbConnection | null
+  getIdentityHex: () => string | null
+  setSubscription: (key: string, queries: string[]) => void
+  removeSubscription: (key: string) => void
+}
 
 export interface RuntimeContext {
   root: HTMLElement
@@ -13,6 +21,7 @@ export interface RuntimeContext {
   appState: AppStateStore
   world: CoreWorld
   renderer: RendererRuntime
+  net?: NetRuntimeBridge
   frame: number
 }
 

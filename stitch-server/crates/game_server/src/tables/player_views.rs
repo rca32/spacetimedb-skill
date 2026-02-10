@@ -61,6 +61,8 @@ pub struct PlayerMovementFeedbackView {
     pub request_id: String,
     pub accepted: bool,
     pub reason_code: String,
-    pub server_pos: Vec<f32>,
+    pub server_x: f32,
+    pub server_y: f32,
+    pub server_z: f32,
     pub processed_at: Timestamp,
 }
