@@ -26,6 +26,11 @@ const DYNAMIC_RADIUS_CHUNKS = 2
 const COMBAT_LIMIT = 500
 const CHUNK_SIZE = 16
 const ENABLE_WORLD_AOI_SUBSCRIPTION = (import.meta.env.VITE_ENABLE_WORLD_AOI_SUB ?? '1') === '1'
+const AOI_UPDATE_MIN_INTERVAL_MS = 500
+const AOI_REANCHOR_DISTANCE = CHUNK_SIZE * 1.5
+const CAMERA_FOLLOW_DISTANCE = 5.5
+const CAMERA_FOLLOW_HEIGHT = 2.0
+const CAMERA_FOLLOW_LERP = 0.12
 
 type TransformStateRow = {
   entityId: unknown
@@ -79,6 +84,8 @@ export function createWorldRuntime(): RuntimeModule {
   let currentAoiHash = ''
   let localRegionId: bigint | null = null
   let localPosition = { x: 0, z: 0 }
+  let aoiAnchorPosition = { x: 0, z: 0 }
+  let lastAoiUpdateAtMs = 0
   let lastConnectionActive = false
 
   return {
@@ -94,8 +101,11 @@ export function createWorldRuntime(): RuntimeModule {
       if (!connection || !connection.isActive) {
         if (lastConnectionActive) {
           clearWorld(ctx, knownKeys)
+          streaming?.clear()
           currentAoiHash = ''
           localRegionId = null
+          aoiAnchorPosition = { x: 0, z: 0 }
+          lastAoiUpdateAtMs = 0
           ctx.net?.removeSubscription(AOI_SUBSCRIPTION_KEY)
         }
         lastConnectionActive = false
@@ -111,10 +121,18 @@ export function createWorldRuntime(): RuntimeModule {
       }
 
       if (ENABLE_WORLD_AOI_SUBSCRIPTION && localRegionId !== null) {
+        const nowMs = Date.now()
+        if (
+          currentAoiHash === '' ||
+          shouldReanchorAoi(localPosition, aoiAnchorPosition, AOI_REANCHOR_DISTANCE)
+        ) {
+          aoiAnchorPosition = { x: localPosition.x, z: localPosition.z }
+        }
+
         const queries = buildWorldAoiQueries({
           regionId: localRegionId,
-          centerX: localPosition.x,
-          centerZ: localPosition.z,
+          centerX: aoiAnchorPosition.x,
+          centerZ: aoiAnchorPosition.z,
           terrainRadius: TERRAIN_RADIUS_CHUNKS,
           dynamicRadius: DYNAMIC_RADIUS_CHUNKS,
           chunkSize: CHUNK_SIZE,
@@ -122,9 +140,11 @@ export function createWorldRuntime(): RuntimeModule {
         })
 
         const nextHash = hashQueries(queries)
-        if (nextHash !== currentAoiHash) {
+        const intervalPassed = nowMs - lastAoiUpdateAtMs >= AOI_UPDATE_MIN_INTERVAL_MS
+        if (nextHash !== currentAoiHash && (intervalPassed || currentAoiHash === '')) {
           ctx.net?.setSubscription(AOI_SUBSCRIPTION_KEY, queries)
           currentAoiHash = nextHash
+          lastAoiUpdateAtMs = nowMs
         }
       }
 
@@ -137,6 +157,7 @@ export function createWorldRuntime(): RuntimeModule {
       syncResourceState(ctx, knownKeys, connection.db.resourceNode.iter())
       syncTerrainChunks(ctx, knownKeys, connection.db.terrainChunk.iter())
       syncClaims(ctx, knownKeys, connection.db.claimState.iter())
+      updateThirdPersonCamera(ctx, localPosition)
 
       streaming?.sync(ctx.world)
     },
@@ -170,21 +191,25 @@ function syncTransformState(
       entity.add(NetEntity, WorldObjectKind, Position, Rotation, PresentationTransform)
       entity.set(NetEntity, { table, serverId: entityHex })
       entity.set(WorldObjectKind, { kind: 'Player' })
-      entity.set(Position, vec3FromArray(row.position))
-      entity.set(Rotation, quatFromArray(row.rotation))
+      const rowPos = vec3FromArray(row.position)
+      const rowRot = quatFromArray(row.rotation)
 
       if (isNew) {
-        const pos = vec3FromArray(row.position)
-        const rot = quatFromArray(row.rotation)
+        entity.set(Position, rowPos)
+        entity.set(Rotation, rowRot)
         entity.set(PresentationTransform, {
-          x: pos.x,
-          y: pos.y,
-          z: pos.z,
-          qx: rot.x,
-          qy: rot.y,
-          qz: rot.z,
-          qw: rot.w,
+          x: rowPos.x,
+          y: rowPos.y,
+          z: rowPos.z,
+          qx: rowRot.x,
+          qy: rowRot.y,
+          qz: rowRot.z,
+          qw: rowRot.w,
         })
+      } else if (!isLocal) {
+        // Remote avatars follow authoritative stream directly.
+        entity.set(Position, rowPos)
+        entity.set(Rotation, rowRot)
       }
 
       if (isLocal) {
@@ -192,7 +217,11 @@ function syncTransformState(
         if (entity.has(IsRemotePlayer)) {
           entity.remove(IsRemotePlayer)
         }
-        localPos = { x: row.position[0] ?? 0, z: row.position[2] ?? 0 }
+        const localPosition = entity.get(Position)
+        localPos = {
+          x: localPosition?.x ?? rowPos.x,
+          z: localPosition?.z ?? rowPos.z,
+        }
       } else {
         entity.add(IsRemotePlayer)
         if (entity.has(IsLocalPlayer)) {
@@ -424,4 +453,26 @@ function seededPosition(seed: bigint): { x: number; z: number } {
   const x = (numeric % 128) - 64
   const z = (Math.floor(numeric / 128) % 128) - 64
   return { x, z }
+}
+
+function updateThirdPersonCamera(ctx: RuntimeContext, localPosition: { x: number; z: number }): void {
+  const camera = ctx.renderer.camera
+  const desiredX = localPosition.x
+  const desiredY = CAMERA_FOLLOW_HEIGHT
+  const desiredZ = localPosition.z + CAMERA_FOLLOW_DISTANCE
+
+  camera.position.x += (desiredX - camera.position.x) * CAMERA_FOLLOW_LERP
+  camera.position.y += (desiredY - camera.position.y) * CAMERA_FOLLOW_LERP
+  camera.position.z += (desiredZ - camera.position.z) * CAMERA_FOLLOW_LERP
+  camera.lookAt(localPosition.x, 1.0, localPosition.z)
+}
+
+function shouldReanchorAoi(
+  localPosition: { x: number; z: number },
+  anchorPosition: { x: number; z: number },
+  distanceThreshold: number,
+): boolean {
+  const dx = localPosition.x - anchorPosition.x
+  const dz = localPosition.z - anchorPosition.z
+  return dx * dx + dz * dz >= distanceThreshold * distanceThreshold
 }

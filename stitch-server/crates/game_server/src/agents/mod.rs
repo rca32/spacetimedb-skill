@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use spacetimedb::{Identity, ReducerContext, ScheduleAt, Table};
+use spacetimedb::{ReducerContext, ScheduleAt, Table};
 
 use crate::tables::agent_timers::{
     environment_effect_loop_timer, player_regen_loop_timer, resource_regen_loop_timer,
@@ -13,14 +13,15 @@ use crate::tables::environment_effect::{
     environment_effect_desc, environment_effect_exposure, environment_effect_state,
 };
 use crate::tables::live_ops::balance_params;
+use crate::tables::npc_quest::npc_state;
 use crate::tables::player_progression::{character_stats, resource_state, status_effect};
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
-use crate::tables::world_state::{resource_node, terrain_chunk};
+use crate::tables::world_state::{region_state, resource_node, terrain_chunk};
 use crate::tables::{
     CharacterStats, EnvironmentEffectDesc, EnvironmentEffectExposure, EnvironmentEffectLoopTimer,
-    EnvironmentEffectState, PlayerRegenLoopTimer, ResourceNode, ResourceRegenLoopTimer,
-    ResourceState, SessionCleanupLoopTimer, StatusEffect, TerrainChunk,
+    EnvironmentEffectState, NpcState, PlayerRegenLoopTimer, RegionState, ResourceNode,
+    ResourceRegenLoopTimer, ResourceState, SessionCleanupLoopTimer, StatusEffect, TerrainChunk,
 };
 use crate::utils::identity_to_entity_id;
 
@@ -130,11 +131,66 @@ pub(crate) fn ensure_default_agent_timers(ctx: &ReducerContext) {
 
 #[spacetimedb::reducer]
 pub fn start_world_agents(ctx: &ReducerContext) -> Result<(), String> {
-    if ctx.sender != Identity::ZERO {
-        return Err("start_world_agents requires server identity".to_string());
-    }
     ensure_default_agent_timers(ctx);
+    seed_world_if_empty(ctx);
     Ok(())
+}
+
+fn seed_world_if_empty(ctx: &ReducerContext) {
+    if ctx.db.region_state().region_id().find(1).is_none() {
+        ctx.db.region_state().insert(RegionState {
+            region_id: 1,
+            name: "starter-region".to_string(),
+            status: 1,
+            shard_load_permille: 100,
+        });
+    }
+
+    if ctx.db.terrain_chunk().iter().next().is_none() {
+        for chunk_x in -3_i32..=3_i32 {
+            for chunk_y in -3_i32..=3_i32 {
+                let biome = ((chunk_x.abs() + chunk_y.abs()) % 5) as u16;
+                ctx.db.terrain_chunk().insert(TerrainChunk {
+                    chunk_key: format!("r1:{chunk_x}:{chunk_y}"),
+                    region_id: 1,
+                    chunk_x,
+                    chunk_y,
+                    biome_id: biome,
+                    seed: 1_337,
+                });
+            }
+        }
+    }
+
+    if ctx.db.resource_node().iter().next().is_none() {
+        for node_id in 1_u64..=24_u64 {
+            ctx.db.resource_node().insert(ResourceNode {
+                entity_id: node_id,
+                resource_type: (node_id % 3) as u8,
+                amount: 100,
+                respawn_at: ctx.timestamp,
+            });
+        }
+    }
+
+    if ctx.db.npc_state().iter().next().is_none() {
+        let npcs = [
+            (10_001_u64, 8.0_f32, 6.0_f32),
+            (10_002_u64, -10.0_f32, 12.0_f32),
+            (10_003_u64, 14.0_f32, -8.0_f32),
+            (10_004_u64, -16.0_f32, -6.0_f32),
+        ];
+        for (npc_id, pos_x, pos_z) in npcs {
+            ctx.db.npc_state().insert(NpcState {
+                npc_id,
+                region_id: 1,
+                pos_x,
+                pos_z,
+                schedule_kind: 1,
+                updated_at: ctx.timestamp,
+            });
+        }
+    }
 }
 
 #[spacetimedb::reducer]

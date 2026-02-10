@@ -84,6 +84,12 @@ class InstancedPool {
     if (index !== lastIndex && lastKey !== undefined) {
       this.mesh.getMatrixAt(lastIndex, DUMMY.matrix)
       this.mesh.setMatrixAt(index, DUMMY.matrix)
+      if (this.mesh.instanceColor) {
+        const color = new THREE.Color()
+        this.mesh.getColorAt(lastIndex, color)
+        this.mesh.setColorAt(index, color)
+        this.mesh.instanceColor.needsUpdate = true
+      }
       this.keyToIndex.set(lastKey, index)
       this.indexToKey[index] = lastKey
     }
@@ -124,6 +130,11 @@ export class WorldStreamingRenderer {
     this.resourcePool = new InstancedPool(resourceGeometry, materials.resource, 4096)
     this.actorPool = new InstancedPool(actorGeometry, materials.actor, 1024)
     this.npcPool = new InstancedPool(actorGeometry, materials.npc, 1024)
+    this.terrainPool.mesh.frustumCulled = false
+    this.buildingPool.mesh.frustumCulled = false
+    this.resourcePool.mesh.frustumCulled = false
+    this.actorPool.mesh.frustumCulled = false
+    this.npcPool.mesh.frustumCulled = false
 
     this.root.add(this.terrainPool.mesh)
     this.root.add(this.buildingPool.mesh)
@@ -255,6 +266,7 @@ export class WorldStreamingRenderer {
     this.buildingPool.mesh.geometry.dispose()
     this.resourcePool.mesh.geometry.dispose()
     this.actorPool.mesh.geometry.dispose()
+    this.npcPool.mesh.geometry.dispose()
   }
 }
 

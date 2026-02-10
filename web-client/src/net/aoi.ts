@@ -52,12 +52,16 @@ export function buildWorldAoiQueries(anchor: AoiAnchor): string[] {
 
   return [
     `SELECT * FROM transform_state WHERE region_id = ${region}`,
-    `SELECT * FROM terrain_chunk WHERE region_id = ${region} AND chunk_x >= ${terrainBounds.minX} AND chunk_x <= ${terrainBounds.maxX} AND chunk_y >= ${terrainBounds.minY} AND chunk_y <= ${terrainBounds.maxY}`,
+    // Keep terrain stable to avoid visible popping/vanishing while moving.
+    `SELECT * FROM terrain_chunk WHERE region_id = ${region}`,
     `SELECT * FROM building_state WHERE region_id = ${region} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
     `SELECT * FROM claim_state WHERE region_id = ${region}`,
     `SELECT * FROM combat_state WHERE region_id = ${region}`,
+    // NOTE: Subscription SQL currently does not support ORDER BY/LIMIT in this runtime.
+    // Cap logic should be handled client-side until server query support is expanded.
     `SELECT * FROM attack_outcome WHERE region_id = ${region}`,
     `SELECT * FROM npc_state WHERE region_id = ${region}`,
+    // resource_node currently has no region_id column in server schema.
     'SELECT * FROM resource_node',
   ]
 }

@@ -11,6 +11,7 @@ export function createNetRuntime(): RuntimeModule {
   const events = new NetEventQueue()
   const subscriptions = new SubscriptionRegistry()
   const reducerQueue = new ReducerIntentQueue()
+  const subscriptionAppliedCount = new Map<string, number>()
   let runtime: ReturnType<typeof createNetConnectionRuntime> | null = null
   let identityHex: string | null = null
 
@@ -114,6 +115,9 @@ export function createNetRuntime(): RuntimeModule {
           }
 
           case 'subscription-applied': {
+            const appliedCount = (subscriptionAppliedCount.get(event.key) ?? 0) + 1
+            subscriptionAppliedCount.set(event.key, appliedCount)
+
             if (ctx.appState.value === 'Authenticating') {
               ctx.appState.transition('CharacterReady')
               ctx.appState.transition('InWorld')
@@ -121,7 +125,11 @@ export function createNetRuntime(): RuntimeModule {
               ctx.appState.transition('InWorld')
             }
 
-            ctx.logger.info('subscription applied', { key: event.key })
+            if (event.key === 'world-aoi') {
+              ctx.logger.debug('subscription applied', { key: event.key, count: appliedCount })
+            } else {
+              ctx.logger.info('subscription applied', { key: event.key, count: appliedCount })
+            }
             break
           }
 
@@ -154,6 +162,7 @@ export function createNetRuntime(): RuntimeModule {
     },
     stop(ctx: RuntimeContext) {
       identityHex = null
+      subscriptionAppliedCount.clear()
       subscriptions.clear()
       runtime?.disconnect()
       delete ctx.net

@@ -42,6 +42,15 @@ Reference these guidelines when:
 
 #### Quick Reference
 
+**SQL Missing Features 쿼리 작성식 반드시 고려**: 
+
+| Category | Missing Features | Status |
+|----------|-----------------|--------|
+| Syntax | Timestamp literals, tuples, arrays, enum literals, `NULL` literal | Partial PRs exist |
+| Compliance | Mixed projections, option compatibility, `BYTEA` escapes, `SELECT` behavior vs PG | Multiple open PRs |
+| Features | `FORMAT`, `EXPLAIN`, `ORDER BY`, foreign keys, `OUTER JOIN`, `ALTER`, `RETURNING`, `GROUP BY`, `CAST`, implicit joins, nested queries | Varied implementation status |
+
+
 ##### Server Module API (TypeScript)
 
 ```typescript
