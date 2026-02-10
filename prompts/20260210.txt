@@ -1,0 +1,11 @@
+설계 문서:
+
+사용스킬[koota,three-best-practices,spacetimedb-korean]
+
+CLIENTDESIGN 디자인즉 bevy (native)게임 설계 문서를 기반으로
+web 버전(threejs,typescript) 버전 개발 계획을 WEBCLIENTDESIGN에 만들어야되
+
+ECS state management 은 koota 사용하고
+3d 관련 작업은 threejs을 사용해서 계획을 하면되
+spacetimedb-korean [typescript-client-sdk-reference]  참조해서 spacetimedb 작업을 하면 될듯
+implementation-order 순서까지 만들어죠

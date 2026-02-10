@@ -27,5 +27,5 @@ spacetimedb-sdk = "=1.11.3"
 
 [profile.dev]
 debug = 0
-codegen-units = 256
 incremental = true
+codegen-units = 256

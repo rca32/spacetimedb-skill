@@ -1,5 +1,6 @@
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
+use bevy::core_pipeline::tonemapping::Tonemapping;
 use spacetimedb_sdk::{DbContext, Identity};
 
 use crate::net::connection::SpacetimeConnectionResource;
@@ -85,12 +86,6 @@ fn setup_world_scene(
         local_actor_material: local_actor_material.clone(),
     });
 
-    commands.insert_resource(AmbientLight {
-        color: Color::WHITE,
-        brightness: 250.0,
-        affects_lightmapped_meshes: true,
-    });
-
     commands.spawn((
         Mesh3d(ground_mesh),
         MeshMaterial3d(ground_material),
@@ -109,6 +104,7 @@ fn setup_world_scene(
 
     commands.spawn((
         Camera3d::default(),
+        Tonemapping::None,
         Transform::from_xyz(0.0, 12.0, 16.0).looking_at(Vec3::ZERO, Vec3::Y),
         GlobalTransform::default(),
     ));

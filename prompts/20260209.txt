@@ -1,0 +1,37 @@
+
+
+
+설계 문서:
+CLIENTDESIGN/00-master.md
+CLIENTDESIGN/11-implementation-order.md
+
+
+warning: `stitch-client` (bin "stitch-client") generated 16 warnings
+    Finished `dev` profile [unoptimized] target(s) in 3.43s
+     Running `target/debug/stitch-client`
+2026-02-09T12:58:30.392018Z  INFO bevy_render::renderer: AdapterInfo { name: "llvmpipe (LLVM 19.1.1, 256 bits)", vendor: 65541, device: 0, device_type: Cpu, driver: "llvmpipe", driver_info: "Mesa 25.0.7-0ubuntu0.24.04.1 (LLVM 19.1.1)", backend: Vulkan }
+2026-02-09T12:58:30.392080Z  WARN bevy_render::renderer: The selected adapter is using a driver that only supports software rendering. This is likely to be very slow. See https://bevy.org/learn/errors/b0006/
+2026-02-09T12:58:31.109176Z  INFO bevy_render::batching::gpu_preprocessing: GPU preprocessing is fully supported on this device.
+2026-02-09T12:58:31.141769Z  INFO bevy_winit::system: Creating new window Stitch Client Skeleton (0v0)
+2026-02-09T12:58:31.181281Z ERROR sctk_adwaita::config: XDG Settings Portal did not return response in time: timeout: 100ms, key: color-scheme
+2026-02-09T12:58:31.390267Z  INFO stitch_client::plugins::social_npc_quest: social/npc/quest plugin ready
+2026-02-09T12:58:31.390297Z  INFO stitch_client::plugins::build_claim_housing: build/claim/housing plugin ready
+2026-02-09T12:58:31.390399Z  WARN stitch_client::plugins::net: net plugin ready (phase2 network core)
+2026-02-09T12:58:31.390467Z  INFO stitch_client::plugins::world: world plugin ready (AOI entity sync)
+2026-02-09T12:58:31.390478Z  INFO stitch_client::plugins::combat: combat plugin ready (attack pipeline skeleton)
+2026-02-09T12:58:31.390496Z  INFO stitch_client::plugins::inventory_trade: inventory/trade plugin ready (projection cache skeleton)
+2026-02-09T12:58:31.390528Z  INFO stitch_client::plugins::sync: sync plugin ready (prediction/reconciliation active)
+2026-02-09T12:58:31.397791Z  WARN stitch_client::plugins::core: core initialized: server=http://127.0.0.1:3000, module=stitch-server, token_path=.stitch-client/token.txt
+2026-02-09T12:58:31.439284Z  WARN stitch_client::plugins::core: client state => Boot
+2026-02-09T12:58:31.821280Z  WARN bevy_render::camera: Camera order ambiguities detected for active cameras with the following priorities: {(0, Some(Window(NormalizedWindowRef(0v0))))}. To fix this, ensure there is exactly one Camera entity spawned with a given order for a given RenderTarget. Ambiguities should be resolved because either (1) multiple active cameras were spawned accidentally, which will result in rendering multiple instances of the scene or (2) for cases where multiple active cameras is intentional, ambiguities could result in unpredictable render results.
+2026-02-09T12:58:31.875860Z ERROR bevy_core_pipeline::tonemapping: TonyMcMapFace tonemapping requires the `tonemapping_luts` feature.
+                    Either enable the `tonemapping_luts` feature for bevy in `Cargo.toml` (recommended),
+                    or use a different `Tonemapping` method for your `Camera2d`/`Camera3d`.
+2026-02-09T12:58:34.050762Z  WARN bevy_render::camera: Camera order ambiguities detected for active cameras with the following priorities: {(0, Some(Window(NormalizedWindowRef(0v0))))}. To fix this, ensure there is exactly one Camera entity spawned with a given order for a given RenderTarget. Ambiguities should be resolved because either (1) multiple active cameras were spawned accidentally, which will result in rendering multiple instances of the scene or (2) for cases where multiple active cameras is intentional, ambiguities could result in unpredictable render results.
+2026-02-09T12:58:34.238538Z  WARN bevy_render::camera: Camera order ambiguities detected for active cameras with the following priorities: {(0, Some(Window(NormalizedWindowRef(0v0))))}. To fix this, ensure there is exactly one Camera entity spawned with a given order for a given RenderTarget. Ambiguities should be resolved because either (1) multiple active cameras were spawned accidentally, which will result in rendering multiple instances of the scene or (2) for cases where multiple active cameras is intentional, ambiguities could result in unpredictable render results.
+2026-02-09T12:58:34.368812Z  WARN bevy_render::camera: Camera order ambiguities detected for active cameras with the following priorities: {(0, Some(Window(NormalizedWindowRef(0v0))))}. To fix this, ensure there is exactly one Camera entity spawned with a given order for a given RenderTarget. Ambiguities should be resolved because either (1) multiple active cameras were spawned accidentally, which will result in rendering multiple instances of the scene or (2) for cases where multiple active cameras is intentional, ambiguities could result in unpredictable render results.
+2026-02-09T12:58:34.642029Z  WARN bevy_render::camera: Camera order ambiguities detected for active cameras with the following priorities: {(0, Some(Window(NormalizedWindowRef(0v0))))}. To fix this, ensure there is exactly one Camera entity spawned with a given order for a given RenderTarget. Ambiguities should be resolved because either (1) multiple active cameras were spawned accidentally, which will result in rendering multiple instances of the scene or (2) for cases where multiple active cameras is intentional, ambiguities could result in unpredictable render results.
+2026-02-09T12:58:34.646334Z  WARN stitch_client::plugins::core: state advance: Boot -> Connecting
+2026-02-09T12:58:34.749904Z  WARN bevy_render::camera: Camera order ambiguities detected for active cameras with the following priorities: {(0, Some(Window(NormalizedWindowRef(0v0))))}. To fix this, ensure there is exactly one Camera entity spawned with a given order for a given RenderTarget. Ambiguities should be resolved because either (1) multiple active cameras were spawned accidentally, which will result in rendering multiple instances of the scene or (2) for cases where multiple active cameras is intentional, ambiguities could result in unpredictable render results.
+2026-02-09T12:58:34.750681Z  WARN stitch_client::plugins::core: client state => Connecting
+2026-02-09T12:58:34.978720Z  WARN stitch_client::plugins::net: spacetime connection initiated: uri=http://127.0.0.1:3000, module=stitch-server

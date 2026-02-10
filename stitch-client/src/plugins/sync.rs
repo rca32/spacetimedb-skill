@@ -9,6 +9,7 @@ use crate::plugins::core::AppConfigResource;
 use crate::plugins::world::{AuthoritativeTransform, LocalIdentityResource, LocalPlayer};
 
 pub struct SyncPlugin;
+const MAX_REQUEST_ID_LEN: usize = 64;
 
 #[derive(Resource, Default)]
 pub struct ServerClockResource {
@@ -110,7 +111,7 @@ fn predict_and_send_move_to(
         return;
     }
 
-    let Some(identity) = local_identity.identity else {
+    let Some(_identity) = local_identity.identity else {
         return;
     };
 
@@ -126,7 +127,7 @@ fn predict_and_send_move_to(
     prediction.request_counter = prediction.request_counter.saturating_add(1);
     prediction.last_send_ts_ms = client_ts_ms;
 
-    let request_id = format!("mv:{identity:?}:{}", prediction.request_counter);
+    let request_id = build_move_request_id(client_ts_ms, prediction.request_counter);
     let pos = transform.translation;
     prediction.pending.push_back(PendingMove {
         request_id: request_id.clone(),
@@ -224,4 +225,14 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+fn build_move_request_id(client_ts_ms: u64, request_counter: u64) -> String {
+    let candidate = format!("mv:{client_ts_ms:x}:{request_counter:x}");
+    if candidate.len() <= MAX_REQUEST_ID_LEN {
+        return candidate;
+    }
+
+    // Keep request ids bounded to satisfy server anti-cheat validation.
+    format!("mv:{request_counter:x}")
 }

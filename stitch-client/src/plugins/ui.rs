@@ -28,8 +28,6 @@ impl Plugin for UiPlugin {
 }
 
 fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn(Camera2d);
-
     commands.spawn((
         Text::new(
             "State: Boot\nMovement: WASD\nDebug Keys: [F8] Disconnected / [F9] Connect / [F10] Reconnect\nMove Feedback: -",
