@@ -4,7 +4,7 @@
 WEBCLIENTDESIGN/11-implementation-order.md
 Phase 3(koota world sync + AOI query builder + Three.js 월드 스트리밍) 바로 진행
 
-
+---------------------------
 사용스킬[$koota,$three-best-practices,$spacetimedb-korean]
 WEBCLIENTDESIGN/00-master.md
 - `01-runtime-architecture.md`: 웹 런타임 구조/모듈/프레임 루프
@@ -19,4 +19,7 @@ WEBCLIENTDESIGN/00-master.md
 - `10-observability-testing.md`: 관측/검증 전략
 - `11-implementation-order.md`: 구현 순서 체크리스트
 
-Phase 4: Movement + Combat 바로 진행
+현재 개발이 아래 분서 대로 제대로 되었는지 부족한게 있으면 추가 개발
+03-sync-prediction.md
+04-world-aoi-rendering.md
+05-ui-hud-flow.md
