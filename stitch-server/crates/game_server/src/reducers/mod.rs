@@ -3,6 +3,7 @@ pub mod claim;
 pub mod combat;
 pub mod economy;
 pub mod housing;
+pub mod id_allocator;
 pub mod inventory;
 pub mod npc_quest;
 pub mod ops_moderation;

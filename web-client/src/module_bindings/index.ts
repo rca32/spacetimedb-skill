@@ -46,14 +46,22 @@ import BuildingAdvanceReducer from "./building_advance_reducer";
 export { BuildingAdvanceReducer };
 import BuildingDeconstructReducer from "./building_deconstruct_reducer";
 export { BuildingDeconstructReducer };
+import BuildingNextIdReducer from "./building_next_id_reducer";
+export { BuildingNextIdReducer };
 import BuildingPlaceReducer from "./building_place_reducer";
 export { BuildingPlaceReducer };
 import ChatSendMessageReducer from "./chat_send_message_reducer";
 export { ChatSendMessageReducer };
 import ClaimExpandReducer from "./claim_expand_reducer";
 export { ClaimExpandReducer };
+import ClaimNextIdReducer from "./claim_next_id_reducer";
+export { ClaimNextIdReducer };
 import ClaimTotemPlaceReducer from "./claim_totem_place_reducer";
 export { ClaimTotemPlaceReducer };
+import DimensionDescNextIdReducer from "./dimension_desc_next_id_reducer";
+export { DimensionDescNextIdReducer };
+import DimensionNetworkNextIdReducer from "./dimension_network_next_id_reducer";
+export { DimensionNetworkNextIdReducer };
 import EconomySetParamReducer from "./economy_set_param_reducer";
 export { EconomySetParamReducer };
 import EnvironmentEffectAgentLoopReducer from "./environment_effect_agent_loop_reducer";
@@ -72,6 +80,8 @@ import HousingCreateReducer from "./housing_create_reducer";
 export { HousingCreateReducer };
 import HousingEnterReducer from "./housing_enter_reducer";
 export { HousingEnterReducer };
+import HousingNextIdReducer from "./housing_next_id_reducer";
+export { HousingNextIdReducer };
 import HousingPropagatePermissionsReducer from "./housing_propagate_permissions_reducer";
 export { HousingPropagatePermissionsReducer };
 import IdentityConnectedReducer from "./identity_connected_reducer";
@@ -242,6 +252,8 @@ import GuildStateRow from "./guild_state_table";
 export { GuildStateRow };
 import HousingStateRow from "./housing_state_table";
 export { HousingStateRow };
+import IdLeaseStateRow from "./id_lease_state_table";
+export { IdLeaseStateRow };
 import InstanceStateRow from "./instance_state_table";
 export { InstanceStateRow };
 import InteriorCollapseTimerRow from "./interior_collapse_timer_table";
@@ -468,6 +480,8 @@ import GuildState from "./guild_state_type";
 export { GuildState };
 import HousingState from "./housing_state_type";
 export { HousingState };
+import IdLeaseState from "./id_lease_state_type";
+export { IdLeaseState };
 import InstanceState from "./instance_state_type";
 export { InstanceState };
 import InteriorCollapseTimer from "./interior_collapse_timer_type";
@@ -1064,6 +1078,17 @@ const tablesSchema = __schema(
       { name: 'housing_state_entity_id_key', constraint: 'unique', columns: ['entityId'] },
     ],
   }, HousingStateRow),
+  __table({
+    name: 'id_lease_state',
+    indexes: [
+      { name: 'lease_key', algorithm: 'btree', columns: [
+        'leaseKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'id_lease_state_lease_key_key', constraint: 'unique', columns: ['leaseKey'] },
+    ],
+  }, IdLeaseStateRow),
   __table({
     name: 'instance_state',
     indexes: [
@@ -1856,10 +1881,14 @@ const reducersSchema = __reducers(
   __reducerSchema("attack_start", AttackStartReducer),
   __reducerSchema("building_advance", BuildingAdvanceReducer),
   __reducerSchema("building_deconstruct", BuildingDeconstructReducer),
+  __reducerSchema("building_next_id", BuildingNextIdReducer),
   __reducerSchema("building_place", BuildingPlaceReducer),
   __reducerSchema("chat_send_message", ChatSendMessageReducer),
   __reducerSchema("claim_expand", ClaimExpandReducer),
+  __reducerSchema("claim_next_id", ClaimNextIdReducer),
   __reducerSchema("claim_totem_place", ClaimTotemPlaceReducer),
+  __reducerSchema("dimension_desc_next_id", DimensionDescNextIdReducer),
+  __reducerSchema("dimension_network_next_id", DimensionNetworkNextIdReducer),
   __reducerSchema("economy_set_param", EconomySetParamReducer),
   __reducerSchema("environment_effect_agent_loop", EnvironmentEffectAgentLoopReducer),
   __reducerSchema("guild_create", GuildCreateReducer),
@@ -1869,6 +1898,7 @@ const reducersSchema = __reducers(
   __reducerSchema("housing_change_entrance", HousingChangeEntranceReducer),
   __reducerSchema("housing_create", HousingCreateReducer),
   __reducerSchema("housing_enter", HousingEnterReducer),
+  __reducerSchema("housing_next_id", HousingNextIdReducer),
   __reducerSchema("housing_propagate_permissions", HousingPropagatePermissionsReducer),
   __reducerSchema("import_csv_by_type", ImportCsvByTypeReducer),
   __reducerSchema("import_csv_data", ImportCsvDataReducer),

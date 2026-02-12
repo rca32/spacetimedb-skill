@@ -78,11 +78,11 @@
 - 지연/역전/중복 request 시나리오 pass
 
 ## Phase 5: Inventory + Trade + Economy
-- [ ] projection 기반 인벤토리 read model 구현
-- [ ] `item_stack_move` UI 액션 연결
-- [ ] 거래 세션/오퍼/수락 UI 구현
-- [ ] 시장 주문/취소/체결 UI 구현
-- [ ] `price_index`, `player_wallet_view` HUD 반영
+- [x] projection 기반 인벤토리 read model 구현
+- [x] `item_stack_move` UI 액션 연결
+- [x] 거래 세션/오퍼/수락 UI 구현
+- [x] 시장 주문/취소/체결 UI 구현
+- [x] `price_index`, `player_wallet_view` HUD 반영
 
 완료 기준:
 - 인벤토리/거래/시장 시나리오 pass

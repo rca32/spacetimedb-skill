@@ -10,6 +10,7 @@ pub mod housing;
 pub mod inventory_container;
 pub mod inventory_lock;
 pub mod inventory_slot;
+pub mod id_lease_state;
 pub mod item_def;
 pub mod item_instance;
 pub mod item_stack;
@@ -48,6 +49,7 @@ pub use housing::{
 pub use inventory_container::InventoryContainer;
 pub use inventory_lock::InventoryLock;
 pub use inventory_slot::InventorySlot;
+pub use id_lease_state::IdLeaseState;
 pub use item_def::ItemDef;
 pub use item_instance::ItemInstance;
 pub use item_stack::ItemStack;

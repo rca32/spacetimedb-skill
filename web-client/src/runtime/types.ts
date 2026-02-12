@@ -183,6 +183,175 @@ export interface InventoryTradeRuntimeBridge {
   actions: InventoryTradeActions
 }
 
+export interface BuildingDefSnapshot {
+  buildingDefId: string
+  requiredItemDefId: string
+  requiredItemQty: number
+  buildRequired: number
+  footprintRadius: number
+}
+
+export interface BuildingStateSnapshot {
+  entityId: string
+  ownerIdentityHex: string
+  regionId: string
+  hexX: number
+  hexZ: number
+  state: number
+  requiredItemDefId: string
+  requiredItemQty: number
+  buildProgress: number
+  buildRequired: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ClaimStateSnapshot {
+  claimId: string
+  ownerIdentityHex: string
+  totemBuildingId: string
+  regionId: string
+  centerX: number
+  centerZ: number
+  radius: number
+  tier: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface HousingStateSnapshot {
+  entityId: string
+  ownerIdentityHex: string
+  entranceBuildingEntityId: string
+  exitPortalEntityId: string
+  networkEntityId: string
+  regionIndex: number
+  lockedUntil: string
+  isEmpty: boolean
+}
+
+export interface DimensionNetworkSnapshot {
+  entityId: string
+  buildingId: string
+  collapseRespawnTimestamp: string
+}
+
+export interface DimensionDescSnapshot {
+  entityId: string
+  dimensionId: number
+  networkEntityId: string
+  interiorInstanceId: string
+  collapseTimestamp: string
+}
+
+export interface RentStateSnapshot {
+  entityId: string
+  whiteListIdentityHexes: string[]
+}
+
+export interface InteriorCollapseTimerSnapshot {
+  scheduledId: string
+  scheduledAt: string
+  housingEntityId: string
+}
+
+export interface IdLeaseSnapshot {
+  leaseKey: string
+  identityHex: string
+  kind: number
+  requestNonce: string
+  leasedId: string
+  updatedAt: string
+}
+
+export interface BuildClaimHousingSnapshot {
+  connected: boolean
+  identityHex: string | null
+  generatedAtMs: number
+  buildingDefs: BuildingDefSnapshot[]
+  buildings: BuildingStateSnapshot[]
+  claims: ClaimStateSnapshot[]
+  housings: HousingStateSnapshot[]
+  dimensionNetworks: DimensionNetworkSnapshot[]
+  dimensionDescs: DimensionDescSnapshot[]
+  rents: RentStateSnapshot[]
+  interiorTimers: InteriorCollapseTimerSnapshot[]
+  leases: IdLeaseSnapshot[]
+  lastStatus: string
+}
+
+export interface BuildClaimHousingActionResult {
+  ok: boolean
+  error?: string
+}
+
+export interface BuildClaimHousingActions {
+  placeBuilding: (input: {
+    regionId: number
+    hexX: number
+    hexZ: number
+    buildingDefId: string
+    buildingId?: string
+  }) => BuildClaimHousingActionResult
+  advanceBuilding: (input: {
+    buildingId: string
+    steps: number
+  }) => BuildClaimHousingActionResult
+  deconstructBuilding: (input: {
+    buildingId: string
+  }) => BuildClaimHousingActionResult
+  placeClaimTotem: (input: {
+    totemBuildingId: string
+    radius: number
+    claimId?: string
+  }) => BuildClaimHousingActionResult
+  expandClaim: (input: {
+    claimId: string
+    radiusDelta: number
+  }) => BuildClaimHousingActionResult
+  createHousing: (input: {
+    entranceBuildingEntityId: string
+    dimensionId: number
+    interiorInstanceId: string
+    housingEntityId?: string
+    networkEntityId?: string
+    dimensionEntityId?: string
+  }) => BuildClaimHousingActionResult
+  enterHousing: (input: {
+    housingEntityId: string
+    portalX: number
+    portalY: number
+    portalZ: number
+  }) => BuildClaimHousingActionResult
+  changeHousingEntrance: (input: {
+    housingEntityId: string
+    newEntranceBuildingEntityId: string
+    targetRegionIndex: number
+    movingMinutes: number
+  }) => BuildClaimHousingActionResult
+  markInteriorEmpty: (input: {
+    housingEntityId: string
+    isEmpty: boolean
+    respawnDelaySeconds: number
+  }) => BuildClaimHousingActionResult
+  propagateHousingPermissions: (input: {
+    housingEntityId: string
+    subjectIdentityHex: string
+    grantUse: boolean
+    grantBuild: boolean
+    grantAdmin: boolean
+  }) => BuildClaimHousingActionResult
+  setRentWhitelist: (input: {
+    housingEntityId: string
+    whiteListIdentityHexes: string[]
+  }) => BuildClaimHousingActionResult
+}
+
+export interface BuildClaimHousingRuntimeBridge {
+  getSnapshot: () => BuildClaimHousingSnapshot
+  actions: BuildClaimHousingActions
+}
+
 export interface RuntimeContext {
   root: HTMLElement
   config: AppConfig
@@ -193,6 +362,7 @@ export interface RuntimeContext {
   renderer: RendererRuntime
   net?: NetRuntimeBridge
   inventoryTrade?: InventoryTradeRuntimeBridge
+  buildClaimHousing?: BuildClaimHousingRuntimeBridge
   sync?: {
     getDiagnostics: () => SyncDiagnosticsSnapshot
   }
