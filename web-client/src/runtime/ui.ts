@@ -67,6 +67,7 @@ export function createUiRuntime(): RuntimeModule {
         hud?.setRegion('offline')
         hud?.setMovement('offline')
         hud?.setSyncError('offline')
+        hud?.setSyncDiagnostics('offline')
         hud?.setCombat('offline')
         hud?.setAttackOutcome('offline')
         hud?.setActionBar('disabled (offline)')
@@ -83,10 +84,12 @@ export function createUiRuntime(): RuntimeModule {
       const outcome = formatAttackOutcome(connection.db.attackOutcome.iter(), localIdentityHex)
       const region = resolveRegion(connection.db.playerSessionView.iter(), localIdentityHex)
       const syncError = formatSyncError(ctx, movement.latestServerPos)
+      const syncDiagnostics = formatSyncDiagnostics(ctx)
 
       hud?.setRegion(region)
       hud?.setMovement(movement.text)
       hud?.setSyncError(syncError)
+      hud?.setSyncDiagnostics(syncDiagnostics)
       hud?.setCombat(combat)
       hud?.setAttackOutcome(outcome)
       hud?.setActionBar(appState === 'InWorld' ? 'enabled' : 'disabled')
@@ -111,6 +114,14 @@ export function createUiRuntime(): RuntimeModule {
       ctx.logger.info('ui runtime stop')
     },
   }
+}
+
+function formatSyncDiagnostics(ctx: RuntimeContext): string {
+  const d = ctx.sync?.getDiagnostics()
+  if (!d) {
+    return 'n/a'
+  }
+  return `ack=${d.ackTotal}/${d.sentTotal} pend=${d.pendingCount} timeout=${d.timeoutExpiredTotal} skip(s=${d.skippedSession},i=${d.skippedIdentity},o=${d.skippedDuplicateOrOld})`
 }
 
 function summarizeMovementFeedback(rows: Iterable<PlayerMovementFeedbackRow>, localIdentityHex: string): MovementSummary {

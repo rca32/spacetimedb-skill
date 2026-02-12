@@ -70,9 +70,9 @@ export function createNetRuntime(): RuntimeModule {
             subscriptions.register('session-baseline', [sessionBaselineQuery])
 
             if (ENABLE_MOVEMENT_FEEDBACK_SUBSCRIPTION) {
-              const movementFeedbackQuery = `SELECT * FROM player_movement_feedback_view WHERE identity = ${toIdentityLiteral(
-                event.identityHex,
-              )}`
+              // Keep this query filter-free for SQL compatibility across SpacetimeDB versions.
+              // Client-side identity filtering is already applied in SyncEngine/UI.
+              const movementFeedbackQuery = 'SELECT * FROM player_movement_feedback_view'
               subscriptions.register('movement-feedback', [movementFeedbackQuery])
             }
 

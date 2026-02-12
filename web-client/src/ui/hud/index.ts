@@ -3,6 +3,7 @@ export class HudLayer {
   private readonly statusLine: HTMLDivElement
   private readonly movementLine: HTMLDivElement
   private readonly syncErrorLine: HTMLDivElement
+  private readonly syncDiagLine: HTMLDivElement
   private readonly combatLine: HTMLDivElement
   private readonly outcomeLine: HTMLDivElement
   private readonly regionLine: HTMLDivElement
@@ -27,6 +28,7 @@ export class HudLayer {
     this.statusLine = this.createLine(topLeft, 'STATE')
     this.movementLine = this.createLine(topLeft, 'MOVE')
     this.syncErrorLine = this.createLine(topLeft, 'SYNCERR')
+    this.syncDiagLine = this.createLine(topLeft, 'SYNCDBG')
     this.combatLine = this.createLine(topLeft, 'COMBAT')
 
     const topRight = this.createBlock({ top: '12px', right: '12px' })
@@ -75,6 +77,7 @@ export class HudLayer {
     this.setRegion('unknown')
     this.setMovement('n/a')
     this.setSyncError('n/a')
+    this.setSyncDiagnostics('n/a')
     this.setCombat('n/a')
     this.setAttackOutcome('n/a')
     this.setActionBar('disabled')
@@ -96,6 +99,10 @@ export class HudLayer {
 
   setSyncError(text: string): void {
     this.syncErrorLine.textContent = `SYNCERR ${text}`
+  }
+
+  setSyncDiagnostics(text: string): void {
+    this.syncDiagLine.textContent = `SYNCDBG ${text}`
   }
 
   setCombat(text: string): void {

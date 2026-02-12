@@ -5,6 +5,7 @@ import { Logger } from '../infra/logging'
 import { DbConnection } from '../module_bindings'
 import { TokenStore } from '../infra/token-store'
 import { RendererRuntime } from '../render/renderer'
+import type { SyncDiagnosticsSnapshot } from './sync-engine'
 
 export interface NetRuntimeBridge {
   getConnection: () => DbConnection | null
@@ -22,6 +23,9 @@ export interface RuntimeContext {
   world: CoreWorld
   renderer: RendererRuntime
   net?: NetRuntimeBridge
+  sync?: {
+    getDiagnostics: () => SyncDiagnosticsSnapshot
+  }
   frame: number
 }
 
