@@ -12,6 +12,7 @@ export function createNetRuntime(): RuntimeModule {
   const subscriptions = new SubscriptionRegistry()
   const reducerQueue = new ReducerIntentQueue()
   const subscriptionAppliedCount = new Map<string, number>()
+  const reducerFailures = new Map<string, { message: string; atMs: number }>()
   let runtime: ReturnType<typeof createNetConnectionRuntime> | null = null
   let identityHex: string | null = null
 
@@ -32,7 +33,14 @@ export function createNetRuntime(): RuntimeModule {
       ctx.net = {
         getConnection: () => runtime?.getConnection() ?? null,
         getIdentityHex: () => identityHex,
-        dispatchReducer: (name, payload) => runtime?.dispatchReducer(name, payload) ?? false,
+        dispatchReducer: (name, payload) => {
+          reducerFailures.delete(name)
+          return runtime?.dispatchReducer(name, payload) ?? false
+        },
+        getReducerFailure: (name) => reducerFailures.get(name) ?? null,
+        clearReducerFailure: (name) => {
+          reducerFailures.delete(name)
+        },
         setSubscription: (key, queries) => {
           const changed = subscriptions.register(key, queries)
           if (!changed) {
@@ -148,6 +156,10 @@ export function createNetRuntime(): RuntimeModule {
           }
 
           case 'reducer-failed': {
+            reducerFailures.set(event.reducer, {
+              message: event.error.message,
+              atMs: Date.now(),
+            })
             ctx.logger.warn('reducer dispatch failed', {
               reducer: event.reducer,
               error: event.error.message,
@@ -164,6 +176,7 @@ export function createNetRuntime(): RuntimeModule {
     stop(ctx: RuntimeContext) {
       identityHex = null
       subscriptionAppliedCount.clear()
+      reducerFailures.clear()
       subscriptions.clear()
       runtime?.disconnect()
       delete ctx.net

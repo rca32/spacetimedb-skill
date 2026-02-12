@@ -1,7 +1,7 @@
 import { HudLayer } from '../ui/hud'
 import { PanelLayer } from '../ui/panels'
 import { IsLocalPlayer, Position } from '../core/traits'
-import { RuntimeContext, RuntimeModule } from './types'
+import type { InventoryTradeSnapshot, RuntimeContext, RuntimeModule } from './types'
 
 type PlayerMovementFeedbackRow = {
   requestId: string
@@ -44,23 +44,48 @@ const REJECT_STREAK_WARNING_THRESHOLD = 3
 export function createUiRuntime(): RuntimeModule {
   let hud: HudLayer | null = null
   let panels: PanelLayer | null = null
+  let onKeyDown: ((event: KeyboardEvent) => void) | null = null
 
   return {
     name: 'UiRuntime',
     start(ctx: RuntimeContext) {
       hud = new HudLayer(ctx.root)
       panels = new PanelLayer(ctx.root)
+      if (ctx.inventoryTrade) {
+        panels.bindInventoryTrade(ctx.inventoryTrade.actions)
+      }
+      if (ctx.net) {
+        panels.bindReducerFailureAccess(
+          (name) => ctx.net?.getReducerFailure(name) ?? null,
+          (name) => ctx.net?.clearReducerFailure(name),
+        )
+      }
+
+      onKeyDown = (event) => {
+        if (event.repeat || isTypingTarget(event.target)) {
+          return
+        }
+        if (panels?.handleShortcut(event.code)) {
+          event.preventDefault()
+        }
+      }
+      window.addEventListener('keydown', onKeyDown)
+
       hud.setStatus('ready')
-      panels.setText('core-only')
+      panels.setText('inventory/trade/market')
       ctx.logger.info('ui runtime start')
     },
     tick(ctx: RuntimeContext) {
       const connection = ctx.net?.getConnection() ?? null
       const localIdentityHex = ctx.net?.getIdentityHex() ?? null
       const appState = ctx.appState.value
+      const inventoryTradeSnapshot = ctx.inventoryTrade?.getSnapshot() ?? null
 
       hud?.setStatus(`${appState} | frame ${ctx.frame}`)
       hud?.setOverlay(resolveOverlay(appState))
+      if (inventoryTradeSnapshot) {
+        panels?.renderInventoryTrade(inventoryTradeSnapshot)
+      }
 
       const isConnected = Boolean(connection && connection.isActive && localIdentityHex)
       if (!isConnected || !connection || !localIdentityHex) {
@@ -70,6 +95,8 @@ export function createUiRuntime(): RuntimeModule {
         hud?.setSyncDiagnostics('offline')
         hud?.setCombat('offline')
         hud?.setAttackOutcome('offline')
+        hud?.setWallet('offline')
+        hud?.setPriceIndex('offline')
         hud?.setActionBar('disabled (offline)')
         hud?.setChat('offline')
         hud?.setQuest('sync paused')
@@ -92,6 +119,8 @@ export function createUiRuntime(): RuntimeModule {
       hud?.setSyncDiagnostics(syncDiagnostics)
       hud?.setCombat(combat)
       hud?.setAttackOutcome(outcome)
+      hud?.setWallet(formatWallet(inventoryTradeSnapshot))
+      hud?.setPriceIndex(formatPriceIndex(inventoryTradeSnapshot))
       hud?.setActionBar(appState === 'InWorld' ? 'enabled' : 'disabled')
       hud?.setChat(appState === 'InWorld' ? 'ready' : 'limited')
       hud?.setQuest(appState === 'InWorld' ? 'active objective pending' : 'loading objective')
@@ -104,9 +133,13 @@ export function createUiRuntime(): RuntimeModule {
 
       const readOnly = appState === 'Reconnecting' || appState === 'CharacterReady' || appState === 'Authenticating'
       panels?.setReadOnly(readOnly)
-      panels?.setText(readOnly ? 'sync lock' : 'interactive')
+      panels?.setText(formatPanelSummary(readOnly, inventoryTradeSnapshot))
     },
     stop(ctx: RuntimeContext) {
+      if (onKeyDown) {
+        window.removeEventListener('keydown', onKeyDown)
+        onKeyDown = null
+      }
       hud?.destroy()
       panels?.destroy()
       hud = null
@@ -266,4 +299,34 @@ function formatSyncError(
     localPos.z - latestServerPos.z,
   )
   return `${distance.toFixed(2)}m`
+}
+
+function formatWallet(snapshot: InventoryTradeSnapshot | null): string {
+  if (!snapshot?.wallet) {
+    return 'n/a'
+  }
+  return snapshot.wallet.balance
+}
+
+function formatPriceIndex(snapshot: InventoryTradeSnapshot | null): string {
+  if (!snapshot || snapshot.priceIndex.length === 0) {
+    return 'n/a'
+  }
+  const first = snapshot.priceIndex[0]
+  return `def=${first.itemDefId} avg=${first.priceAvg} vol=${first.volume}`
+}
+
+function formatPanelSummary(readOnly: boolean, snapshot: InventoryTradeSnapshot | null): string {
+  if (!snapshot) {
+    return readOnly ? 'sync lock' : 'interactive'
+  }
+  return `${readOnly ? 'sync lock' : 'interactive'} inv=${snapshot.items.length} trade=${snapshot.tradeSessions.length} market=${snapshot.marketOrders.length}`
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+  const tag = target.tagName.toLowerCase()
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable
 }

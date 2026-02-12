@@ -13,6 +13,8 @@ export interface NetRuntimeBridge {
   setSubscription: (key: string, queries: string[]) => void
   removeSubscription: (key: string) => void
   dispatchReducer: (name: string, payload: Record<string, unknown>) => boolean
+  getReducerFailure: (name: string) => { message: string; atMs: number } | null
+  clearReducerFailure: (name: string) => void
 }
 
 export interface InventoryContainerSnapshot {
