@@ -3,11 +3,11 @@
 [필수 읽기]
 WEBCLIENTDESIGN/00-master.md
 WEBCLIENTDESIGN/11-implementation-order.md
-WEBCLIENTDESIGN/12-asset-strategy.md
+
 
 
 요청 사항:
-    Phase 5.5: Asset Pipeline 개발 해죠
+    Phase 7: Social + NPC + Quest
 
 
 최근 작업 내역:
