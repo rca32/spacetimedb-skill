@@ -12,8 +12,16 @@ WEBCLIENTDESIGN/00-master.md
 - `10-observability-testing.md`: 관측/검증 전략
 - `11-implementation-order.md`: 구현 순서 체크리스트
 
-최근 작업 내역:
-    20260210_worklog.md
+
 
 요청 사항:
-`06-domain-auth-move-combat.md`: 인증/이동/전투 도메인 개발
+    WEBCLIENTDESIGN/11-implementation-order.md 에 기록된
+    Phase 5: Inventory + Trade + Economy 개발 해죠
+
+
+최근 작업 내역:
+    prompts/20260210_worklog.md
+    prompts/20260211_worklog.md
+
+작업 로그기록:
+    prompts/20260211_worklog.md
