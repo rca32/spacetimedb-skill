@@ -32,6 +32,7 @@ export function createNetRuntime(): RuntimeModule {
       ctx.net = {
         getConnection: () => runtime?.getConnection() ?? null,
         getIdentityHex: () => identityHex,
+        dispatchReducer: (name, payload) => runtime?.dispatchReducer(name, payload) ?? false,
         setSubscription: (key, queries) => {
           const changed = subscriptions.register(key, queries)
           if (!changed) {

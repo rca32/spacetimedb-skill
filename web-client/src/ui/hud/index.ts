@@ -7,6 +7,8 @@ export class HudLayer {
   private readonly combatLine: HTMLDivElement
   private readonly outcomeLine: HTMLDivElement
   private readonly regionLine: HTMLDivElement
+  private readonly walletLine: HTMLDivElement
+  private readonly priceLine: HTMLDivElement
   private readonly actionLine: HTMLDivElement
   private readonly chatLine: HTMLDivElement
   private readonly questLine: HTMLDivElement
@@ -33,6 +35,8 @@ export class HudLayer {
 
     const topRight = this.createBlock({ top: '12px', right: '12px' })
     this.regionLine = this.createLine(topRight, 'REGION')
+    this.walletLine = this.createLine(topRight, 'WALLET')
+    this.priceLine = this.createLine(topRight, 'PRICE')
     this.chatLine = this.createLine(topRight, 'CHAT')
 
     const bottomCenter = this.createBlock({ left: 'calc(50% - 160px)', bottom: '12px' })
@@ -80,6 +84,8 @@ export class HudLayer {
     this.setSyncDiagnostics('n/a')
     this.setCombat('n/a')
     this.setAttackOutcome('n/a')
+    this.setWallet('n/a')
+    this.setPriceIndex('n/a')
     this.setActionBar('disabled')
     this.setChat('ready')
     this.setQuest('no objective')
@@ -95,6 +101,14 @@ export class HudLayer {
 
   setMovement(text: string): void {
     this.movementLine.textContent = `MOVE   ${text}`
+  }
+
+  setWallet(text: string): void {
+    this.walletLine.textContent = `WALLET ${text}`
+  }
+
+  setPriceIndex(text: string): void {
+    this.priceLine.textContent = `PRICE  ${text}`
   }
 
   setSyncError(text: string): void {
