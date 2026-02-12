@@ -1,0 +1,19 @@
+사용스킬[$koota,$three-best-practices,$spacetimedb-korean]
+WEBCLIENTDESIGN/00-master.md
+- `01-runtime-architecture.md`: 웹 런타임 구조/모듈/프레임 루프
+- `02-network-contract.md`: SpacetimeDB 연결/구독/리듀서 계약
+- `03-sync-prediction.md`: 이동/전투 예측·보정
+- `04-world-aoi-rendering.md`: 월드/AOI/렌더링
+- `05-ui-hud-flow.md`: 화면/플로우
+- `06-domain-auth-move-combat.md`: 인증/이동/전투 도메인
+- `07-domain-inventory-trade-economy.md`: 인벤토리/거래/경제 도메인
+- `08-domain-building-claim-housing.md`: 건축/클레임/주거 도메인
+- `09-domain-social-npc-quest.md`: 소셜/NPC/퀘스트 도메인
+- `10-observability-testing.md`: 관측/검증 전략
+- `11-implementation-order.md`: 구현 순서 체크리스트
+
+최근 작업 내역:
+    20260210_worklog.md
+
+요청 사항:
+`06-domain-auth-move-combat.md`: 인증/이동/전투 도메인 개발
