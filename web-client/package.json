@@ -15,7 +15,8 @@
   "dependencies": {
     "koota": "^0.6.5",
     "spacetimedb": "^1.4.0",
-    "three": "^0.182.0"
+    "three": "^0.182.0",
+    "three-stdlib": "^2.36.1"
   },
   "devDependencies": {
     "@types/three": "^0.182.0",

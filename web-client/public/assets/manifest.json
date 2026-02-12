@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "generatedAt": "2026-02-13",
+  "models": {
+    "characters": {
+      "localPlayer": "/assets/models/characters/player_placeholder.glb",
+      "remotePlayer": "/assets/models/characters/player_placeholder.glb",
+      "npc": "/assets/models/characters/player_placeholder.glb"
+    },
+    "buildings": {
+      "fallback": "/assets/models/buildings/box.glb",
+      "textured": "/assets/models/buildings/box_textured.glb",
+      "mapping": {
+        "1": "/assets/models/buildings/box_textured.glb",
+        "2": "/assets/models/buildings/box.glb"
+      }
+    },
+    "props": {
+      "resource_small": "/assets/models/props/resource_small.glb",
+      "resource_medium": "/assets/models/props/resource_medium.glb",
+      "resource_large": "/assets/models/props/resource_large.glb",
+      "resourceMapping": {
+        "1": "/assets/models/props/resource_large.glb",
+        "2": "/assets/models/props/resource_medium.glb",
+        "3": "/assets/models/props/resource_small.glb"
+      }
+    },
+    "effects": {}
+  },
+  "textures": {
+    "terrain": {},
+    "particles": {},
+    "ui": {}
+  },
+  "audio": {
+    "sfx": {
+      "ui_click": "/assets/audio/sfx/ui_click.mp3",
+      "ui_success": "/assets/audio/sfx/ui_success.mp3",
+      "ui_error": "/assets/audio/sfx/ui_error.mp3",
+      "footstep_01": "/assets/audio/sfx/footstep_01.mp3",
+      "footstep_02": "/assets/audio/sfx/footstep_02.mp3",
+      "attack_swing": "/assets/audio/sfx/attack_swing.mp3",
+      "attack_hit": "/assets/audio/sfx/attack_hit.mp3",
+      "gather_harvest": "/assets/audio/sfx/gather_harvest.mp3"
+    },
+    "music": {
+      "ambient_sneaky": "/assets/audio/music/ambient_sneaky.mp3",
+      "gameplay_upbeat": "/assets/audio/music/gameplay_upbeat.mp3"
+    }
+  },
+  "preloadPriority": {
+    "critical": [
+      "/assets/models/characters/player_placeholder.glb"
+    ],
+    "high": [
+      "/assets/models/buildings/box.glb",
+      "/assets/models/props/resource_large.glb",
+      "/assets/audio/sfx/ui_click.mp3"
+    ],
+    "normal": [
+      "/assets/models/buildings/box_textured.glb",
+      "/assets/models/props/resource_medium.glb",
+      "/assets/models/props/resource_small.glb",
+      "/assets/audio/sfx/attack_swing.mp3",
+      "/assets/audio/sfx/attack_hit.mp3",
+      "/assets/audio/sfx/footstep_01.mp3"
+    ],
+    "lazy": [
+      "/assets/audio/music/ambient_sneaky.mp3",
+      "/assets/audio/music/gameplay_upbeat.mp3"
+    ]
+  },
+  "notes": {
+    "source": "Models: Khronos glTF-Sample-Models (CC0-like). Audio SFX: Mixkit (Free). Music: Kevin MacLeod / Incompetech (CC-BY 3.0)",
+    "placeholder": true,
+    "licenseNote": "Kevin MacLeod music requires attribution. See https://incompetech.com",
+    "replacementGuidance": "Replace with production assets from Kenney, Kaykit, or custom models. Update manifest.json paths accordingly."
+  }
+}

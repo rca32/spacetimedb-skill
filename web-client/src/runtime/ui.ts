@@ -1,7 +1,13 @@
 import { HudLayer } from '../ui/hud'
 import { PanelLayer } from '../ui/panels'
 import { IsLocalPlayer, Position } from '../core/traits'
-import type { InventoryTradeSnapshot, RuntimeContext, RuntimeModule } from './types'
+import type {
+  BuildClaimHousingSnapshot,
+  InventoryTradeSnapshot,
+  NetSubscriptionDiagnosticsSnapshot,
+  RuntimeContext,
+  RuntimeModule,
+} from './types'
 
 type PlayerMovementFeedbackRow = {
   requestId: string
@@ -54,6 +60,9 @@ export function createUiRuntime(): RuntimeModule {
       if (ctx.inventoryTrade) {
         panels.bindInventoryTrade(ctx.inventoryTrade.actions)
       }
+      if (ctx.buildClaimHousing) {
+        panels.bindBuildClaimHousing(ctx.buildClaimHousing.actions)
+      }
       if (ctx.net) {
         panels.bindReducerFailureAccess(
           (name) => ctx.net?.getReducerFailure(name) ?? null,
@@ -72,7 +81,7 @@ export function createUiRuntime(): RuntimeModule {
       window.addEventListener('keydown', onKeyDown)
 
       hud.setStatus('ready')
-      panels.setText('inventory/trade/market')
+      panels.setText('inventory/trade/market/build/claim/housing')
       ctx.logger.info('ui runtime start')
     },
     tick(ctx: RuntimeContext) {
@@ -80,11 +89,15 @@ export function createUiRuntime(): RuntimeModule {
       const localIdentityHex = ctx.net?.getIdentityHex() ?? null
       const appState = ctx.appState.value
       const inventoryTradeSnapshot = ctx.inventoryTrade?.getSnapshot() ?? null
+      const buildClaimHousingSnapshot = ctx.buildClaimHousing?.getSnapshot() ?? null
 
       hud?.setStatus(`${appState} | frame ${ctx.frame}`)
       hud?.setOverlay(resolveOverlay(appState))
       if (inventoryTradeSnapshot) {
         panels?.renderInventoryTrade(inventoryTradeSnapshot)
+      }
+      if (buildClaimHousingSnapshot) {
+        panels?.renderBuildClaimHousing(buildClaimHousingSnapshot)
       }
 
       const isConnected = Boolean(connection && connection.isActive && localIdentityHex)
@@ -93,10 +106,14 @@ export function createUiRuntime(): RuntimeModule {
         hud?.setMovement('offline')
         hud?.setSyncError('offline')
         hud?.setSyncDiagnostics('offline')
+        hud?.setSubscriptions('offline')
         hud?.setCombat('offline')
         hud?.setAttackOutcome('offline')
         hud?.setWallet('offline')
         hud?.setPriceIndex('offline')
+        hud?.setBuild('offline')
+        hud?.setClaim('offline')
+        hud?.setHouse('offline')
         hud?.setActionBar('disabled (offline)')
         hud?.setChat('offline')
         hud?.setQuest('sync paused')
@@ -112,15 +129,22 @@ export function createUiRuntime(): RuntimeModule {
       const region = resolveRegion(connection.db.playerSessionView.iter(), localIdentityHex)
       const syncError = formatSyncError(ctx, movement.latestServerPos)
       const syncDiagnostics = formatSyncDiagnostics(ctx)
+      const subscriptionsDiagnostics = formatSubscriptionDiagnostics(
+        ctx.net?.getSubscriptionDiagnostics() ?? null,
+      )
 
       hud?.setRegion(region)
       hud?.setMovement(movement.text)
       hud?.setSyncError(syncError)
       hud?.setSyncDiagnostics(syncDiagnostics)
+      hud?.setSubscriptions(subscriptionsDiagnostics)
       hud?.setCombat(combat)
       hud?.setAttackOutcome(outcome)
       hud?.setWallet(formatWallet(inventoryTradeSnapshot))
       hud?.setPriceIndex(formatPriceIndex(inventoryTradeSnapshot))
+      hud?.setBuild(formatBuildStatus(buildClaimHousingSnapshot))
+      hud?.setClaim(formatClaimStatus(buildClaimHousingSnapshot))
+      hud?.setHouse(formatHouseStatus(buildClaimHousingSnapshot))
       hud?.setActionBar(appState === 'InWorld' ? 'enabled' : 'disabled')
       hud?.setChat(appState === 'InWorld' ? 'ready' : 'limited')
       hud?.setQuest(appState === 'InWorld' ? 'active objective pending' : 'loading objective')
@@ -133,7 +157,7 @@ export function createUiRuntime(): RuntimeModule {
 
       const readOnly = appState === 'Reconnecting' || appState === 'CharacterReady' || appState === 'Authenticating'
       panels?.setReadOnly(readOnly)
-      panels?.setText(formatPanelSummary(readOnly, inventoryTradeSnapshot))
+      panels?.setText(formatPanelSummary(readOnly, inventoryTradeSnapshot, buildClaimHousingSnapshot))
     },
     stop(ctx: RuntimeContext) {
       if (onKeyDown) {
@@ -155,6 +179,72 @@ function formatSyncDiagnostics(ctx: RuntimeContext): string {
     return 'n/a'
   }
   return `ack=${d.ackTotal}/${d.sentTotal} pend=${d.pendingCount} timeout=${d.timeoutExpiredTotal} skip(s=${d.skippedSession},i=${d.skippedIdentity},o=${d.skippedDuplicateOrOld})`
+}
+
+function formatSubscriptionDiagnostics(snapshot: NetSubscriptionDiagnosticsSnapshot | null): string {
+  if (!snapshot) {
+    return 'n/a'
+  }
+  if (snapshot.keys.length === 0) {
+    return 'none'
+  }
+
+  const parts = snapshot.keys.map((entry) => {
+    const alias = shortSubscriptionKey(entry.key)
+    const state = entry.active ? 'on' : 'off'
+    const error = entry.lastError ? 'err' : 'ok'
+    return `${alias}:${state}/a${entry.appliedCount}/${error}`
+  })
+
+  const latestError = snapshot.keys.find((entry) => entry.lastError)
+  if (!latestError || !latestError.lastError) {
+    return parts.join(' ')
+  }
+
+  return `${parts.join(' ')} !${shortSubscriptionKey(latestError.key)}:${truncateText(
+    latestError.lastError,
+    28,
+  )}`
+}
+
+function shortSubscriptionKey(key: string): string {
+  switch (key) {
+    case 'session-baseline':
+      return 'sess'
+    case 'movement-feedback':
+      return 'mvfb'
+    case 'inventory-trade-domain':
+      return 'inv'
+    case 'world-aoi':
+      return 'aoi'
+    case 'bch-building-def':
+      return 'bch:def'
+    case 'bch-building-state':
+      return 'bch:build'
+    case 'bch-claim-state':
+      return 'bch:claim'
+    case 'bch-housing-state':
+      return 'bch:house'
+    case 'bch-dimension-network':
+      return 'bch:net'
+    case 'bch-dimension-desc':
+      return 'bch:desc'
+    case 'bch-rent-whitelist-entry':
+      return 'bch:rent'
+    case 'bch-rent-state':
+      return 'bch:rent'
+    case 'bch-id-lease-state':
+      return 'bch:lease'
+    default:
+      return key
+  }
+}
+
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text
+  }
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`
 }
 
 function summarizeMovementFeedback(rows: Iterable<PlayerMovementFeedbackRow>, localIdentityHex: string): MovementSummary {
@@ -316,11 +406,44 @@ function formatPriceIndex(snapshot: InventoryTradeSnapshot | null): string {
   return `def=${first.itemDefId} avg=${first.priceAvg} vol=${first.volume}`
 }
 
-function formatPanelSummary(readOnly: boolean, snapshot: InventoryTradeSnapshot | null): string {
+function formatPanelSummary(
+  readOnly: boolean,
+  inventorySnapshot: InventoryTradeSnapshot | null,
+  buildClaimHousingSnapshot: BuildClaimHousingSnapshot | null,
+): string {
+  const mode = readOnly ? 'sync lock' : 'interactive'
+  const inv = inventorySnapshot
+    ? `inv=${inventorySnapshot.items.length} trade=${inventorySnapshot.tradeSessions.length} market=${inventorySnapshot.marketOrders.length}`
+    : 'inv=na trade=na market=na'
+  const bch = buildClaimHousingSnapshot
+    ? `build=${buildClaimHousingSnapshot.buildings.length} claim=${buildClaimHousingSnapshot.claims.length} housing=${buildClaimHousingSnapshot.housings.length}`
+    : 'build=na claim=na housing=na'
+  return `${mode} ${inv} ${bch}`
+}
+
+function formatBuildStatus(snapshot: BuildClaimHousingSnapshot | null): string {
   if (!snapshot) {
-    return readOnly ? 'sync lock' : 'interactive'
+    return 'n/a'
   }
-  return `${readOnly ? 'sync lock' : 'interactive'} inv=${snapshot.items.length} trade=${snapshot.tradeSessions.length} market=${snapshot.marketOrders.length}`
+  const projectCount = snapshot.buildings.filter((row) => row.state === 0).length
+  const completeCount = snapshot.buildings.filter((row) => row.state === 1).length
+  return `project=${projectCount} complete=${completeCount}`
+}
+
+function formatClaimStatus(snapshot: BuildClaimHousingSnapshot | null): string {
+  if (!snapshot) {
+    return 'n/a'
+  }
+  const maxRadius = snapshot.claims.reduce((max, row) => Math.max(max, row.radius), 0)
+  return `count=${snapshot.claims.length} maxR=${maxRadius}`
+}
+
+function formatHouseStatus(snapshot: BuildClaimHousingSnapshot | null): string {
+  if (!snapshot) {
+    return 'n/a'
+  }
+  const emptyCount = snapshot.housings.filter((row) => row.isEmpty).length
+  return `count=${snapshot.housings.length} empty=${emptyCount} ${snapshot.lastStatus}`
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {

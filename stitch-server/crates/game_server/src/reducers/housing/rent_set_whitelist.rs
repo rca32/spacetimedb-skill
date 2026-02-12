@@ -1,5 +1,6 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
+use super::sync_rent_whitelist_entries;
 use crate::services::permissions;
 use crate::tables::housing::{housing_state, rent_state};
 use crate::tables::RentState;
@@ -31,14 +32,15 @@ pub fn rent_set_whitelist(
     if ctx.db.rent_state().entity_id().find(housing_entity_id).is_some() {
         ctx.db.rent_state().entity_id().update(RentState {
             entity_id: housing_entity_id,
-            white_list: next,
+            white_list: next.clone(),
         });
     } else {
         ctx.db.rent_state().insert(RentState {
             entity_id: housing_entity_id,
-            white_list: next,
+            white_list: next.clone(),
         });
     }
+    sync_rent_whitelist_entries(ctx, housing_entity_id, &next);
 
     Ok(())
 }

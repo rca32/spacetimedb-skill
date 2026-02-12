@@ -3,6 +3,7 @@ import { buildWorldAoiQueries, hashQueries } from '../net/aoi'
 import { WorldStreamingRenderer } from '../render/world-streaming'
 import {
   BuildingData,
+  ClaimData,
   ChunkData,
   IsBuilding,
   IsClaim,
@@ -74,8 +75,13 @@ type TerrainChunkRow = {
 
 type ClaimStateRow = {
   claimId: bigint
+  ownerIdentity: unknown
+  totemBuildingId: unknown
+  regionId: unknown
   centerX: number
   centerZ: number
+  radius: number
+  tier: number
 }
 
 export function createWorldRuntime(): RuntimeModule {
@@ -368,11 +374,18 @@ function syncClaims(ctx: RuntimeContext, knownKeys: Map<string, Set<string>>, ro
     seen.add(key)
 
     upsertWorldEntity(ctx, key, (entity) => {
-      entity.add(NetEntity, WorldObjectKind, Position, Rotation)
+      entity.add(NetEntity, WorldObjectKind, Position, Rotation, ClaimData)
       entity.set(NetEntity, { table, serverId: row.claimId.toString() })
       entity.set(WorldObjectKind, { kind: 'Claim' })
       entity.set(Position, { x: row.centerX, y: 0, z: row.centerZ })
       entity.set(Rotation, { x: 0, y: 0, z: 0, w: 1 })
+      entity.set(ClaimData, {
+        radius: row.radius,
+        tier: row.tier,
+        ownerIdentityHex: toKeyString(row.ownerIdentity),
+        totemBuildingId: toKeyString(row.totemBuildingId),
+        regionId: toKeyString(row.regionId),
+      })
       entity.add(IsClaim)
     })
   }

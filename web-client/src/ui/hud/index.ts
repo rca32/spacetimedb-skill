@@ -4,11 +4,15 @@ export class HudLayer {
   private readonly movementLine: HTMLDivElement
   private readonly syncErrorLine: HTMLDivElement
   private readonly syncDiagLine: HTMLDivElement
+  private readonly subscriptionsLine: HTMLDivElement
   private readonly combatLine: HTMLDivElement
   private readonly outcomeLine: HTMLDivElement
   private readonly regionLine: HTMLDivElement
   private readonly walletLine: HTMLDivElement
   private readonly priceLine: HTMLDivElement
+  private readonly buildLine: HTMLDivElement
+  private readonly claimLine: HTMLDivElement
+  private readonly houseLine: HTMLDivElement
   private readonly actionLine: HTMLDivElement
   private readonly chatLine: HTMLDivElement
   private readonly questLine: HTMLDivElement
@@ -31,12 +35,16 @@ export class HudLayer {
     this.movementLine = this.createLine(topLeft, 'MOVE')
     this.syncErrorLine = this.createLine(topLeft, 'SYNCERR')
     this.syncDiagLine = this.createLine(topLeft, 'SYNCDBG')
+    this.subscriptionsLine = this.createLine(topLeft, 'SUBS')
     this.combatLine = this.createLine(topLeft, 'COMBAT')
 
     const topRight = this.createBlock({ top: '12px', right: '12px' })
     this.regionLine = this.createLine(topRight, 'REGION')
     this.walletLine = this.createLine(topRight, 'WALLET')
     this.priceLine = this.createLine(topRight, 'PRICE')
+    this.buildLine = this.createLine(topRight, 'BUILD')
+    this.claimLine = this.createLine(topRight, 'CLAIM')
+    this.houseLine = this.createLine(topRight, 'HOUSE')
     this.chatLine = this.createLine(topRight, 'CHAT')
 
     const bottomCenter = this.createBlock({ left: 'calc(50% - 160px)', bottom: '12px' })
@@ -82,10 +90,14 @@ export class HudLayer {
     this.setMovement('n/a')
     this.setSyncError('n/a')
     this.setSyncDiagnostics('n/a')
+    this.setSubscriptions('n/a')
     this.setCombat('n/a')
     this.setAttackOutcome('n/a')
     this.setWallet('n/a')
     this.setPriceIndex('n/a')
+    this.setBuild('n/a')
+    this.setClaim('n/a')
+    this.setHouse('n/a')
     this.setActionBar('disabled')
     this.setChat('ready')
     this.setQuest('no objective')
@@ -111,12 +123,28 @@ export class HudLayer {
     this.priceLine.textContent = `PRICE  ${text}`
   }
 
+  setBuild(text: string): void {
+    this.buildLine.textContent = `BUILD  ${text}`
+  }
+
+  setClaim(text: string): void {
+    this.claimLine.textContent = `CLAIM  ${text}`
+  }
+
+  setHouse(text: string): void {
+    this.houseLine.textContent = `HOUSE  ${text}`
+  }
+
   setSyncError(text: string): void {
     this.syncErrorLine.textContent = `SYNCERR ${text}`
   }
 
   setSyncDiagnostics(text: string): void {
     this.syncDiagLine.textContent = `SYNCDBG ${text}`
+  }
+
+  setSubscriptions(text: string): void {
+    this.subscriptionsLine.textContent = `SUBS   ${text}`
   }
 
   setCombat(text: string): void {

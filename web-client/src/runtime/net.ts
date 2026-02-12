@@ -12,6 +12,8 @@ export function createNetRuntime(): RuntimeModule {
   const subscriptions = new SubscriptionRegistry()
   const reducerQueue = new ReducerIntentQueue()
   const subscriptionAppliedCount = new Map<string, number>()
+  const subscriptionLastAppliedAtMs = new Map<string, number>()
+  const subscriptionLastError = new Map<string, { message: string; atMs: number }>()
   const reducerFailures = new Map<string, { message: string; atMs: number }>()
   let runtime: ReturnType<typeof createNetConnectionRuntime> | null = null
   let identityHex: string | null = null
@@ -33,6 +35,25 @@ export function createNetRuntime(): RuntimeModule {
       ctx.net = {
         getConnection: () => runtime?.getConnection() ?? null,
         getIdentityHex: () => identityHex,
+        getSubscriptionDiagnostics: () => {
+          const keys = subscriptions.snapshot().map((entry) => {
+            const lastError = subscriptionLastError.get(entry.key) ?? null
+            return {
+              key: entry.key,
+              queryCount: entry.queryCount,
+              active: entry.active,
+              appliedCount: subscriptionAppliedCount.get(entry.key) ?? 0,
+              lastAppliedAtMs: subscriptionLastAppliedAtMs.get(entry.key) ?? null,
+              lastError: lastError?.message ?? null,
+              lastErrorAtMs: lastError?.atMs ?? null,
+            }
+          })
+
+          return {
+            generatedAtMs: Date.now(),
+            keys,
+          }
+        },
         dispatchReducer: (name, payload) => {
           reducerFailures.delete(name)
           return runtime?.dispatchReducer(name, payload) ?? false
@@ -57,6 +78,9 @@ export function createNetRuntime(): RuntimeModule {
         },
         removeSubscription: (key) => {
           subscriptions.remove(key)
+          subscriptionAppliedCount.delete(key)
+          subscriptionLastAppliedAtMs.delete(key)
+          subscriptionLastError.delete(key)
         },
       }
 
@@ -126,6 +150,8 @@ export function createNetRuntime(): RuntimeModule {
           case 'subscription-applied': {
             const appliedCount = (subscriptionAppliedCount.get(event.key) ?? 0) + 1
             subscriptionAppliedCount.set(event.key, appliedCount)
+            subscriptionLastAppliedAtMs.set(event.key, Date.now())
+            subscriptionLastError.delete(event.key)
 
             if (ctx.appState.value === 'Authenticating') {
               ctx.appState.transition('CharacterReady')
@@ -143,6 +169,10 @@ export function createNetRuntime(): RuntimeModule {
           }
 
           case 'subscription-error': {
+            subscriptionLastError.set(event.key, {
+              message: event.error.message,
+              atMs: Date.now(),
+            })
             ctx.logger.error('subscription failed', {
               key: event.key,
               error: event.error.message,
@@ -176,6 +206,8 @@ export function createNetRuntime(): RuntimeModule {
     stop(ctx: RuntimeContext) {
       identityHex = null
       subscriptionAppliedCount.clear()
+      subscriptionLastAppliedAtMs.clear()
+      subscriptionLastError.clear()
       reducerFailures.clear()
       subscriptions.clear()
       runtime?.disconnect()

@@ -45,6 +45,7 @@ pub use environment_effect::{
 };
 pub use housing::{
     DimensionDesc, DimensionNetwork, HousingState, InteriorCollapseTimer, RentState,
+    RentWhitelistEntry,
 };
 pub use inventory_container::InventoryContainer;
 pub use inventory_lock::InventoryLock;

@@ -1,8 +1,10 @@
 import * as THREE from 'three'
 import { CoreWorld } from '../core/world'
 import {
+  ClaimData,
   ChunkData,
   IsBuilding,
+  IsClaim,
   IsLocalPlayer,
   IsNpc,
   IsRemotePlayer,
@@ -18,6 +20,8 @@ const DUMMY = new THREE.Object3D()
 const LOCAL_PLAYER_COLOR = new THREE.Color(0x8fc9ff)
 const REMOTE_PLAYER_COLOR = new THREE.Color(0x6ec0ff)
 const NPC_COLOR = new THREE.Color(0xffc788)
+const CLAIM_OWNER_COLOR = new THREE.Color(0x8effb2)
+const CLAIM_OTHER_COLOR = new THREE.Color(0xff9b85)
 const BIOME_COLORS = [0x284032, 0x395629, 0x5b4d2d, 0x30495e, 0x4d3b55, 0x6c5e39].map(
   (hex) => new THREE.Color(hex),
 )
@@ -113,6 +117,7 @@ export class WorldStreamingRenderer {
   private readonly root = new THREE.Group()
   private readonly terrainPool: InstancedPool
   private readonly buildingPool: InstancedPool
+  private readonly claimPool: InstancedPool
   private readonly resourcePool: InstancedPool
   private readonly actorPool: InstancedPool
   private readonly npcPool: InstancedPool
@@ -122,22 +127,27 @@ export class WorldStreamingRenderer {
     terrainGeometry.rotateX(-Math.PI * 0.5)
 
     const buildingGeometry = new THREE.BoxGeometry(1.6, 1.6, 1.6)
+    const claimGeometry = new THREE.RingGeometry(0.9, 1.0, 32)
+    claimGeometry.rotateX(-Math.PI * 0.5)
     const resourceGeometry = new THREE.CylinderGeometry(0.25, 0.42, 1.2, 6)
     const actorGeometry = new THREE.BoxGeometry(0.8, 1.6, 0.8)
 
     this.terrainPool = new InstancedPool(terrainGeometry, materials.ground, 2048)
     this.buildingPool = new InstancedPool(buildingGeometry, materials.building, 2048)
+    this.claimPool = new InstancedPool(claimGeometry, materials.claim, 1024)
     this.resourcePool = new InstancedPool(resourceGeometry, materials.resource, 4096)
     this.actorPool = new InstancedPool(actorGeometry, materials.actor, 1024)
     this.npcPool = new InstancedPool(actorGeometry, materials.npc, 1024)
     this.terrainPool.mesh.frustumCulled = false
     this.buildingPool.mesh.frustumCulled = false
+    this.claimPool.mesh.frustumCulled = false
     this.resourcePool.mesh.frustumCulled = false
     this.actorPool.mesh.frustumCulled = false
     this.npcPool.mesh.frustumCulled = false
 
     this.root.add(this.terrainPool.mesh)
     this.root.add(this.buildingPool.mesh)
+    this.root.add(this.claimPool.mesh)
     this.root.add(this.resourcePool.mesh)
     this.root.add(this.actorPool.mesh)
     this.root.add(this.npcPool.mesh)
@@ -147,9 +157,11 @@ export class WorldStreamingRenderer {
   sync(world: CoreWorld): void {
     const seenTerrain = new Set<string>()
     const seenBuildings = new Set<string>()
+    const seenClaims = new Set<string>()
     const seenResources = new Set<string>()
     const seenActors = new Set<string>()
     const seenNpcs = new Set<string>()
+    const localIdentityHex = resolveLocalIdentityHex(world)
 
     world.ecs.query(IsTerrainChunk, NetEntity, Position, ChunkData).readEach(([net, position, chunk]) => {
       const key = `${net.table}:${net.serverId}`
@@ -172,6 +184,28 @@ export class WorldStreamingRenderer {
         sy: 1,
         sz: 1,
       })
+    })
+
+    world.ecs.query(IsClaim, NetEntity, Position, ClaimData).readEach(([net, position, claim]) => {
+      const key = `${net.table}:${net.serverId}`
+      seenClaims.add(key)
+      const color =
+        localIdentityHex.length > 0 && claim.ownerIdentityHex === localIdentityHex
+          ? CLAIM_OWNER_COLOR
+          : CLAIM_OTHER_COLOR
+      const radius = Math.max(1, claim.radius)
+      this.claimPool.upsert(
+        key,
+        {
+          x: position.x,
+          y: position.y + 0.05,
+          z: position.z,
+          sx: radius,
+          sy: 1,
+          sz: radius,
+        },
+        color,
+      )
     })
 
     world.ecs.query(IsResourceNode, NetEntity, Position).readEach(([net, position]) => {
@@ -240,12 +274,14 @@ export class WorldStreamingRenderer {
 
     this.terrainPool.removeMissing(seenTerrain)
     this.buildingPool.removeMissing(seenBuildings)
+    this.claimPool.removeMissing(seenClaims)
     this.resourcePool.removeMissing(seenResources)
     this.actorPool.removeMissing(seenActors)
     this.npcPool.removeMissing(seenNpcs)
 
     this.terrainPool.mesh.instanceMatrix.needsUpdate = true
     this.buildingPool.mesh.instanceMatrix.needsUpdate = true
+    this.claimPool.mesh.instanceMatrix.needsUpdate = true
     this.resourcePool.mesh.instanceMatrix.needsUpdate = true
     this.actorPool.mesh.instanceMatrix.needsUpdate = true
     this.npcPool.mesh.instanceMatrix.needsUpdate = true
@@ -254,6 +290,7 @@ export class WorldStreamingRenderer {
   clear(): void {
     this.terrainPool.removeMissing(new Set())
     this.buildingPool.removeMissing(new Set())
+    this.claimPool.removeMissing(new Set())
     this.resourcePool.removeMissing(new Set())
     this.actorPool.removeMissing(new Set())
     this.npcPool.removeMissing(new Set())
@@ -264,10 +301,17 @@ export class WorldStreamingRenderer {
     scene.remove(this.root)
     this.terrainPool.mesh.geometry.dispose()
     this.buildingPool.mesh.geometry.dispose()
+    this.claimPool.mesh.geometry.dispose()
     this.resourcePool.mesh.geometry.dispose()
     this.actorPool.mesh.geometry.dispose()
     this.npcPool.mesh.geometry.dispose()
   }
+}
+
+function resolveLocalIdentityHex(world: CoreWorld): string {
+  const localPlayer = world.ecs.queryFirst(IsLocalPlayer, NetEntity)
+  const localNet = localPlayer?.get(NetEntity)
+  return localNet?.serverId ?? ''
 }
 
 function biomeColor(biomeId: number): THREE.Color {

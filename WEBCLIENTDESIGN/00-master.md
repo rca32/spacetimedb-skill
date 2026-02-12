@@ -44,6 +44,7 @@
 - `09-domain-social-npc-quest.md`: 소셜/NPC/퀘스트 도메인
 - `10-observability-testing.md`: 관측/검증 전략
 - `11-implementation-order.md`: 구현 순서 체크리스트
+- `12-asset-strategy.md`: 에셋 로딩/관리 전략
 
 ## 6. High-Level Runtime States
 `WebClientAppState`:

@@ -362,6 +362,8 @@ import RegionStateRow from "./region_state_table";
 export { RegionStateRow };
 import RentStateRow from "./rent_state_table";
 export { RentStateRow };
+import RentWhitelistEntryRow from "./rent_whitelist_entry_table";
+export { RentWhitelistEntryRow };
 import ReportQueueRow from "./report_queue_table";
 export { ReportQueueRow };
 import ResourceNodeRow from "./resource_node_table";
@@ -590,6 +592,8 @@ import RegionState from "./region_state_type";
 export { RegionState };
 import RentState from "./rent_state_type";
 export { RentState };
+import RentWhitelistEntry from "./rent_whitelist_entry_type";
+export { RentWhitelistEntry };
 import ReportQueue from "./report_queue_type";
 export { ReportQueue };
 import ResourceNode from "./resource_node_type";
@@ -1683,6 +1687,17 @@ const tablesSchema = __schema(
       { name: 'rent_state_entity_id_key', constraint: 'unique', columns: ['entityId'] },
     ],
   }, RentStateRow),
+  __table({
+    name: 'rent_whitelist_entry',
+    indexes: [
+      { name: 'entry_key', algorithm: 'btree', columns: [
+        'entryKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'rent_whitelist_entry_entry_key_key', constraint: 'unique', columns: ['entryKey'] },
+    ],
+  }, RentWhitelistEntryRow),
   __table({
     name: 'report_queue',
     indexes: [

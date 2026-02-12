@@ -2,3 +2,5 @@
 BitCraftPublic/
 stitch-server/target/
 stitch-client/target/
+web-client/node_modules/
+web-client/dist/

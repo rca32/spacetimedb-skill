@@ -3,17 +3,17 @@
 [필수 읽기]
 WEBCLIENTDESIGN/00-master.md
 WEBCLIENTDESIGN/11-implementation-order.md
-
+WEBCLIENTDESIGN/12-asset-strategy.md
 
 
 요청 사항:
-    Phase 6: Building + Claim + Housing 개발 해죠
+    Phase 5.5: Asset Pipeline 개발 해죠
 
 
 최근 작업 내역:
-    prompts/20260210_worklog.md
     prompts/20260211_worklog.md
+    prompts/20260212_worklog.md
 
 
 
-작업 로그기록 해죠:prompts/20260211_worklog.md
+작업 로그기록 해죠:prompts/20260212_worklog.md

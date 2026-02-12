@@ -10,11 +10,27 @@ import type { SyncDiagnosticsSnapshot } from './sync-engine'
 export interface NetRuntimeBridge {
   getConnection: () => DbConnection | null
   getIdentityHex: () => string | null
+  getSubscriptionDiagnostics: () => NetSubscriptionDiagnosticsSnapshot
   setSubscription: (key: string, queries: string[]) => void
   removeSubscription: (key: string) => void
   dispatchReducer: (name: string, payload: Record<string, unknown>) => boolean
   getReducerFailure: (name: string) => { message: string; atMs: number } | null
   clearReducerFailure: (name: string) => void
+}
+
+export interface NetSubscriptionKeyDiagnostics {
+  key: string
+  queryCount: number
+  active: boolean
+  appliedCount: number
+  lastAppliedAtMs: number | null
+  lastError: string | null
+  lastErrorAtMs: number | null
+}
+
+export interface NetSubscriptionDiagnosticsSnapshot {
+  generatedAtMs: number
+  keys: NetSubscriptionKeyDiagnostics[]
 }
 
 export interface InventoryContainerSnapshot {

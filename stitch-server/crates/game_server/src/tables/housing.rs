@@ -39,6 +39,14 @@ pub struct RentState {
     pub white_list: Vec<Identity>,
 }
 
+#[spacetimedb::table(name = rent_whitelist_entry, public)]
+pub struct RentWhitelistEntry {
+    #[primary_key]
+    pub entry_key: String,
+    pub housing_entity_id: u64,
+    pub identity: Identity,
+}
+
 #[spacetimedb::table(name = interior_collapse_timer, scheduled(interior_collapse_rebuild))]
 pub struct InteriorCollapseTimer {
     #[primary_key]

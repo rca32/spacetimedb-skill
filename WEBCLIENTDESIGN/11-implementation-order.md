@@ -91,11 +91,30 @@
 - 스택 조작 반복 무결성
 - 거래 양측 UI 정합성
 
+## Phase 5.5: Asset Pipeline
+- [x] `public/assets/` 디렉토리 구조 생성
+- [x] `WEBCLIENTDESIGN/12-asset-strategy.md` 작성
+- [x] `src/render/asset-loader.ts` 구현 (GLTFLoader, 캐싱)
+- [x] `src/render/asset-mapping.ts` 구현 (타입, 매핑 함수)
+- [x] `manifest.json` 및 플레이스홀더 에셋 배치
+- [ ] `three-stdlib` 의존성 추가
+- [ ] `LoadingAssets` 상태에서 `AssetLoader.loadCriticalAssets()` 통합
+- [ ] 캐릭터(플레이어/NPC) glTF 모델 교체 (선택)
+
+완료 기준:
+- 필수 에셋 manifest 로딩 완료
+- 에셋 로딩 실패 시 fallback(프리미티브) 동작
+
+검증 예시:
+- `AssetLoader.loadManifest()` 성공
+- `AssetLoader.loadCriticalAssets()` 콘솔 로그 확인
+- 개발자 도구 Network 탭에서 .glb 파일 로드 확인
+
 ## Phase 6: Building + Claim + Housing
-- [ ] 건축 배치/진행/해체 구현
-- [ ] 클레임 생성/확장 구현
-- [ ] 주거 입장/입구변경/권한/화이트리스트 구현
-- [ ] 권한 부족/거리 초과 오류 UX 구현
+- [x] 건축 배치/진행/해체 구현
+- [x] 클레임 생성/확장 구현
+- [x] 주거 입장/입구변경/권한/화이트리스트 구현
+- [x] 권한 부족/거리 초과 오류 UX 구현
 
 완료 기준:
 - 건축/클레임/주거 시나리오 pass

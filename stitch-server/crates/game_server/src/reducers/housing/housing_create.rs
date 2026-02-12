@@ -1,5 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
+use super::sync_rent_whitelist_entries;
 use crate::services::permissions;
 use crate::tables::building_state::building_state;
 use crate::tables::housing::{dimension_desc, dimension_network, housing_state, rent_state};
@@ -63,10 +64,12 @@ pub fn housing_create(
         collapse_timestamp: ctx.timestamp,
     });
 
+    let white_list = vec![ctx.sender];
     ctx.db.rent_state().insert(RentState {
         entity_id: housing_entity_id,
-        white_list: vec![ctx.sender],
+        white_list: white_list.clone(),
     });
+    sync_rent_whitelist_entries(ctx, housing_entity_id, &white_list);
 
     Ok(())
 }

@@ -1,11 +1,14 @@
 import type {
+  BuildClaimHousingActionResult,
+  BuildClaimHousingActions,
+  BuildClaimHousingSnapshot,
   InventoryTradeActionResult,
   InventoryTradeActions,
   InventoryTradeSnapshot,
   TradeSessionSnapshot,
 } from '../../runtime/types'
 
-type PanelTab = 'inventory' | 'trade' | 'market'
+type PanelTab = 'inventory' | 'trade' | 'market' | 'build' | 'claim' | 'housing'
 
 interface SelectOption {
   value: string
@@ -23,7 +26,12 @@ interface ReducerFailure {
   atMs: number
 }
 
-const PENDING_TIMEOUT_MS = 1500
+interface ActionResultLike {
+  ok: boolean
+  error?: string
+}
+
+const PENDING_TIMEOUT_MS = 1_500
 const ENABLE_MARKET_MATCH_TEST_ONLY =
   (import.meta.env.VITE_ENABLE_MARKET_MATCH_TEST ?? '0') === '1' || import.meta.env.DEV
 
@@ -38,10 +46,16 @@ export class PanelLayer {
   private readonly inventoryTabButton: HTMLButtonElement
   private readonly tradeTabButton: HTMLButtonElement
   private readonly marketTabButton: HTMLButtonElement
+  private readonly buildTabButton: HTMLButtonElement
+  private readonly claimTabButton: HTMLButtonElement
+  private readonly housingTabButton: HTMLButtonElement
 
   private readonly inventorySection: HTMLDivElement
   private readonly tradeSection: HTMLDivElement
   private readonly marketSection: HTMLDivElement
+  private readonly buildSection: HTMLDivElement
+  private readonly claimSection: HTMLDivElement
+  private readonly housingSection: HTMLDivElement
 
   private readonly inventoryBootstrapButton: HTMLButtonElement
   private readonly inventoryFromSelect: HTMLSelectElement
@@ -75,13 +89,64 @@ export class PanelLayer {
   private readonly marketMatchQuantityInput: HTMLInputElement
   private readonly marketMatchButton: HTMLButtonElement
 
-  private actions: InventoryTradeActions | null = null
+  private readonly buildRegionInput: HTMLInputElement
+  private readonly buildHexXInput: HTMLInputElement
+  private readonly buildHexZInput: HTMLInputElement
+  private readonly buildDefSelect: HTMLSelectElement
+  private readonly buildIdInput: HTMLInputElement
+  private readonly buildPlaceButton: HTMLButtonElement
+  private readonly buildAdvanceTargetSelect: HTMLSelectElement
+  private readonly buildAdvanceStepsInput: HTMLInputElement
+  private readonly buildAdvanceButton: HTMLButtonElement
+  private readonly buildDeconstructTargetSelect: HTMLSelectElement
+  private readonly buildDeconstructButton: HTMLButtonElement
+
+  private readonly claimTotemBuildingSelect: HTMLSelectElement
+  private readonly claimIdInput: HTMLInputElement
+  private readonly claimRadiusInput: HTMLInputElement
+  private readonly claimPlaceButton: HTMLButtonElement
+  private readonly claimTargetSelect: HTMLSelectElement
+  private readonly claimRadiusDeltaInput: HTMLInputElement
+  private readonly claimExpandButton: HTMLButtonElement
+
+  private readonly housingEntranceBuildingSelect: HTMLSelectElement
+  private readonly housingEntityIdInput: HTMLInputElement
+  private readonly housingNetworkIdInput: HTMLInputElement
+  private readonly housingDimensionEntityIdInput: HTMLInputElement
+  private readonly housingDimensionIdInput: HTMLInputElement
+  private readonly housingInteriorInstanceIdInput: HTMLInputElement
+  private readonly housingCreateButton: HTMLButtonElement
+  private readonly housingSelect: HTMLSelectElement
+  private readonly housingPortalXInput: HTMLInputElement
+  private readonly housingPortalYInput: HTMLInputElement
+  private readonly housingPortalZInput: HTMLInputElement
+  private readonly housingEnterButton: HTMLButtonElement
+  private readonly housingNewEntranceSelect: HTMLSelectElement
+  private readonly housingTargetRegionInput: HTMLInputElement
+  private readonly housingMovingMinutesInput: HTMLInputElement
+  private readonly housingChangeEntranceButton: HTMLButtonElement
+  private readonly housingIsEmptyCheckbox: HTMLInputElement
+  private readonly housingRespawnDelayInput: HTMLInputElement
+  private readonly housingMarkEmptyButton: HTMLButtonElement
+  private readonly housingSubjectIdentityInput: HTMLInputElement
+  private readonly housingGrantUseCheckbox: HTMLInputElement
+  private readonly housingGrantBuildCheckbox: HTMLInputElement
+  private readonly housingGrantAdminCheckbox: HTMLInputElement
+  private readonly housingPropagateButton: HTMLButtonElement
+  private readonly housingWhitelistInput: HTMLInputElement
+  private readonly housingSetWhitelistButton: HTMLButtonElement
+
+  private inventoryTradeActions: InventoryTradeActions | null = null
+  private buildClaimHousingActions: BuildClaimHousingActions | null = null
   private reducerFailureLookup: ((name: string) => ReducerFailure | null) | null = null
   private reducerFailureClear: ((name: string) => void) | null = null
-  private currentSnapshot: InventoryTradeSnapshot | null = null
+  private currentInventorySnapshot: InventoryTradeSnapshot | null = null
+  private currentBuildClaimHousingSnapshot: BuildClaimHousingSnapshot | null = null
   private currentTab: PanelTab | null = null
   private readOnly = true
   private pending: PendingAction | null = null
+  private inventoryDigest = ''
+  private buildClaimHousingDigest = ''
   private latestDigest = ''
   private tradeAcceptDraft: boolean | null = null
 
@@ -90,8 +155,8 @@ export class PanelLayer {
     this.root.style.position = 'absolute'
     this.root.style.right = '12px'
     this.root.style.bottom = '12px'
-    this.root.style.width = '360px'
-    this.root.style.maxHeight = '58vh'
+    this.root.style.width = '390px'
+    this.root.style.maxHeight = '60vh'
     this.root.style.padding = '10px 12px'
     this.root.style.background = 'rgba(8, 14, 24, 0.82)'
     this.root.style.border = '1px solid rgba(126, 169, 216, 0.45)'
@@ -119,19 +184,30 @@ export class PanelLayer {
     this.toastLine.style.color = '#f4bf68'
 
     this.toolbar = document.createElement('div')
-    this.toolbar.style.display = 'flex'
+    this.toolbar.style.display = 'grid'
+    this.toolbar.style.gridTemplateColumns = 'repeat(3, 1fr)'
     this.toolbar.style.gap = '6px'
 
     this.inventoryTabButton = this.createTabButton('I Inventory')
     this.tradeTabButton = this.createTabButton('T Trade')
     this.marketTabButton = this.createTabButton('M Market')
-    this.toolbar.append(this.inventoryTabButton, this.tradeTabButton, this.marketTabButton)
+    this.buildTabButton = this.createTabButton('B Build')
+    this.claimTabButton = this.createTabButton('C Claim')
+    this.housingTabButton = this.createTabButton('H Housing')
+    this.toolbar.append(
+      this.inventoryTabButton,
+      this.tradeTabButton,
+      this.marketTabButton,
+      this.buildTabButton,
+      this.claimTabButton,
+      this.housingTabButton,
+    )
 
     this.body = document.createElement('div')
     this.body.style.display = 'none'
     this.body.style.flexDirection = 'column'
     this.body.style.gap = '10px'
-    this.body.style.maxHeight = '44vh'
+    this.body.style.maxHeight = '46vh'
     this.body.style.overflow = 'auto'
     this.body.style.padding = '8px'
     this.body.style.border = '1px solid rgba(137, 185, 255, 0.35)'
@@ -175,7 +251,67 @@ export class PanelLayer {
     this.marketMatchQuantityInput = marketUi.matchQuantityInput
     this.marketMatchButton = marketUi.matchButton
 
-    this.body.append(this.inventorySection, this.tradeSection, this.marketSection)
+    const buildUi = this.createBuildSection()
+    this.buildSection = buildUi.section
+    this.buildRegionInput = buildUi.regionInput
+    this.buildHexXInput = buildUi.hexXInput
+    this.buildHexZInput = buildUi.hexZInput
+    this.buildDefSelect = buildUi.defSelect
+    this.buildIdInput = buildUi.buildingIdInput
+    this.buildPlaceButton = buildUi.placeButton
+    this.buildAdvanceTargetSelect = buildUi.advanceTargetSelect
+    this.buildAdvanceStepsInput = buildUi.advanceStepsInput
+    this.buildAdvanceButton = buildUi.advanceButton
+    this.buildDeconstructTargetSelect = buildUi.deconstructTargetSelect
+    this.buildDeconstructButton = buildUi.deconstructButton
+
+    const claimUi = this.createClaimSection()
+    this.claimSection = claimUi.section
+    this.claimTotemBuildingSelect = claimUi.totemBuildingSelect
+    this.claimIdInput = claimUi.claimIdInput
+    this.claimRadiusInput = claimUi.radiusInput
+    this.claimPlaceButton = claimUi.placeButton
+    this.claimTargetSelect = claimUi.claimTargetSelect
+    this.claimRadiusDeltaInput = claimUi.radiusDeltaInput
+    this.claimExpandButton = claimUi.expandButton
+
+    const housingUi = this.createHousingSection()
+    this.housingSection = housingUi.section
+    this.housingEntranceBuildingSelect = housingUi.entranceBuildingSelect
+    this.housingEntityIdInput = housingUi.housingEntityIdInput
+    this.housingNetworkIdInput = housingUi.networkEntityIdInput
+    this.housingDimensionEntityIdInput = housingUi.dimensionEntityIdInput
+    this.housingDimensionIdInput = housingUi.dimensionIdInput
+    this.housingInteriorInstanceIdInput = housingUi.interiorInstanceIdInput
+    this.housingCreateButton = housingUi.createHousingButton
+    this.housingSelect = housingUi.housingSelect
+    this.housingPortalXInput = housingUi.portalXInput
+    this.housingPortalYInput = housingUi.portalYInput
+    this.housingPortalZInput = housingUi.portalZInput
+    this.housingEnterButton = housingUi.enterButton
+    this.housingNewEntranceSelect = housingUi.newEntranceSelect
+    this.housingTargetRegionInput = housingUi.targetRegionInput
+    this.housingMovingMinutesInput = housingUi.movingMinutesInput
+    this.housingChangeEntranceButton = housingUi.changeEntranceButton
+    this.housingIsEmptyCheckbox = housingUi.isEmptyCheckbox
+    this.housingRespawnDelayInput = housingUi.respawnDelayInput
+    this.housingMarkEmptyButton = housingUi.markEmptyButton
+    this.housingSubjectIdentityInput = housingUi.subjectIdentityInput
+    this.housingGrantUseCheckbox = housingUi.grantUseCheckbox
+    this.housingGrantBuildCheckbox = housingUi.grantBuildCheckbox
+    this.housingGrantAdminCheckbox = housingUi.grantAdminCheckbox
+    this.housingPropagateButton = housingUi.propagateButton
+    this.housingWhitelistInput = housingUi.whitelistInput
+    this.housingSetWhitelistButton = housingUi.setWhitelistButton
+
+    this.body.append(
+      this.inventorySection,
+      this.tradeSection,
+      this.marketSection,
+      this.buildSection,
+      this.claimSection,
+      this.housingSection,
+    )
     this.root.append(this.summaryLine, this.modeLine, this.toastLine, this.toolbar, this.body)
     container.appendChild(this.root)
 
@@ -185,7 +321,11 @@ export class PanelLayer {
   }
 
   bindInventoryTrade(actions: InventoryTradeActions): void {
-    this.actions = actions
+    this.inventoryTradeActions = actions
+  }
+
+  bindBuildClaimHousing(actions: BuildClaimHousingActions): void {
+    this.buildClaimHousingActions = actions
   }
 
   bindReducerFailureAccess(
@@ -197,11 +337,21 @@ export class PanelLayer {
   }
 
   renderInventoryTrade(snapshot: InventoryTradeSnapshot): void {
-    this.currentSnapshot = snapshot
-    this.latestDigest = computeDigest(snapshot)
+    this.currentInventorySnapshot = snapshot
+    this.inventoryDigest = computeInventoryDigest(snapshot)
+    this.syncCombinedDigest()
     this.refreshInventoryUi(snapshot)
     this.refreshTradeUi(snapshot)
     this.refreshMarketUi(snapshot)
+    this.updatePendingStatus()
+    this.updateVisibility()
+  }
+
+  renderBuildClaimHousing(snapshot: BuildClaimHousingSnapshot): void {
+    this.currentBuildClaimHousingSnapshot = snapshot
+    this.buildClaimHousingDigest = computeBuildClaimHousingDigest(snapshot)
+    this.syncCombinedDigest()
+    this.refreshBuildClaimHousingUi(snapshot)
     this.updatePendingStatus()
     this.updateVisibility()
   }
@@ -217,6 +367,18 @@ export class PanelLayer {
     }
     if (code === 'KeyM') {
       this.toggleTab('market')
+      return true
+    }
+    if (code === 'KeyB') {
+      this.toggleTab('build')
+      return true
+    }
+    if (code === 'KeyC') {
+      this.toggleTab('claim')
+      return true
+    }
+    if (code === 'KeyH') {
+      this.toggleTab('housing')
       return true
     }
     return false
@@ -241,24 +403,27 @@ export class PanelLayer {
     this.inventoryTabButton.addEventListener('click', () => this.toggleTab('inventory'))
     this.tradeTabButton.addEventListener('click', () => this.toggleTab('trade'))
     this.marketTabButton.addEventListener('click', () => this.toggleTab('market'))
+    this.buildTabButton.addEventListener('click', () => this.toggleTab('build'))
+    this.claimTabButton.addEventListener('click', () => this.toggleTab('claim'))
+    this.housingTabButton.addEventListener('click', () => this.toggleTab('housing'))
 
     this.inventoryBootstrapButton.addEventListener('click', () => {
-      this.dispatchAction('inventory_bootstrap', () => this.actions?.bootstrapInventory())
+      this.dispatchAction('inventory_bootstrap', () => this.inventoryTradeActions?.bootstrapInventory())
     })
 
     this.inventoryMoveButton.addEventListener('click', () => {
-      if (!this.currentSnapshot) {
+      if (!this.currentInventorySnapshot) {
         return
       }
-      const fromSlot = this.currentSnapshot.slots.find((slot) => slot.slotKey === this.inventoryFromSelect.value)
-      const toSlot = this.currentSnapshot.slots.find((slot) => slot.slotKey === this.inventoryToSelect.value)
+      const fromSlot = this.currentInventorySnapshot.slots.find((slot) => slot.slotKey === this.inventoryFromSelect.value)
+      const toSlot = this.currentInventorySnapshot.slots.find((slot) => slot.slotKey === this.inventoryToSelect.value)
       const quantity = Number.parseInt(this.inventoryQuantityInput.value, 10)
       if (!fromSlot || !toSlot) {
         this.setToast('slot selection is required')
         return
       }
       this.dispatchAction('item_stack_move', () =>
-        this.actions?.moveItemStack({
+        this.inventoryTradeActions?.moveItemStack({
           containerId: fromSlot.containerId,
           fromSlotIndex: fromSlot.slotIndex,
           toSlotIndex: toSlot.slotIndex,
@@ -275,7 +440,7 @@ export class PanelLayer {
         return
       }
       this.dispatchAction('trade_session_open', () =>
-        this.actions?.openTradeSession({
+        this.inventoryTradeActions?.openTradeSession({
           partnerIdentityHex,
           sessionId: this.tradeSessionIdInput.value.trim() || undefined,
         }),
@@ -291,7 +456,7 @@ export class PanelLayer {
         return
       }
       this.dispatchAction('trade_item_add', () =>
-        this.actions?.addTradeItem({
+        this.inventoryTradeActions?.addTradeItem({
           sessionId,
           itemInstanceId,
           quantity: Number.isFinite(quantity) ? quantity : 0,
@@ -306,7 +471,7 @@ export class PanelLayer {
         return
       }
       this.dispatchAction('trade_accept', () =>
-        this.actions?.setTradeAccept({
+        this.inventoryTradeActions?.setTradeAccept({
           sessionId,
           accepted: this.tradeAcceptedCheckbox.checked,
         }),
@@ -320,7 +485,7 @@ export class PanelLayer {
       const itemDefId = this.marketItemDefSelect.value
       const unitPrice = this.marketUnitPriceInput.value.trim()
       this.dispatchAction('market_order_place', () =>
-        this.actions?.placeMarketOrder({
+        this.inventoryTradeActions?.placeMarketOrder({
           orderId: this.marketOrderIdInput.value.trim() || undefined,
           side: Number.isFinite(side) ? side : -1,
           itemDefId,
@@ -336,7 +501,7 @@ export class PanelLayer {
         this.setToast('select an order to cancel')
         return
       }
-      this.dispatchAction('market_order_cancel', () => this.actions?.cancelMarketOrder({ orderId }))
+      this.dispatchAction('market_order_cancel', () => this.inventoryTradeActions?.cancelMarketOrder({ orderId }))
     })
 
     this.marketMatchButton.addEventListener('click', () => {
@@ -347,24 +512,216 @@ export class PanelLayer {
         this.setToast('buy/sell orders are required')
         return
       }
-      if (this.currentSnapshot) {
-        const buyOrder = this.currentSnapshot.marketOrders.find((order) => order.orderId === buyOrderId)
-        if (buyOrder && this.currentSnapshot.wallet === null) {
+      if (this.currentInventorySnapshot) {
+        const buyOrder = this.currentInventorySnapshot.marketOrders.find((order) => order.orderId === buyOrderId)
+        if (buyOrder && this.currentInventorySnapshot.wallet === null) {
           this.setToast('wallet not initialized; buyer wallet funding is required for market match')
           return
         }
       }
       this.dispatchAction('market_order_match', () =>
-        this.actions?.matchMarketOrderTestOnly({
+        this.inventoryTradeActions?.matchMarketOrderTestOnly({
           buyOrderId,
           sellOrderId,
           quantity: Number.isFinite(quantity) ? quantity : 0,
         }),
       )
     })
+
+    this.buildPlaceButton.addEventListener('click', () => {
+      const regionId = Number.parseInt(this.buildRegionInput.value, 10)
+      const hexX = Number.parseInt(this.buildHexXInput.value, 10)
+      const hexZ = Number.parseInt(this.buildHexZInput.value, 10)
+      const buildingDefId = this.buildDefSelect.value
+      if (!buildingDefId) {
+        this.setToast('building def is required')
+        return
+      }
+      this.dispatchAction('building_place', () =>
+        this.buildClaimHousingActions?.placeBuilding({
+          regionId: Number.isFinite(regionId) ? regionId : 0,
+          hexX: Number.isFinite(hexX) ? hexX : 0,
+          hexZ: Number.isFinite(hexZ) ? hexZ : 0,
+          buildingDefId,
+          buildingId: this.buildIdInput.value.trim() || undefined,
+        }),
+      )
+    })
+
+    this.buildAdvanceButton.addEventListener('click', () => {
+      const buildingId = this.buildAdvanceTargetSelect.value
+      const steps = Number.parseInt(this.buildAdvanceStepsInput.value, 10)
+      if (!buildingId) {
+        this.setToast('select building to advance')
+        return
+      }
+      this.dispatchAction('building_advance', () =>
+        this.buildClaimHousingActions?.advanceBuilding({
+          buildingId,
+          steps: Number.isFinite(steps) ? steps : 0,
+        }),
+      )
+    })
+
+    this.buildDeconstructButton.addEventListener('click', () => {
+      const buildingId = this.buildDeconstructTargetSelect.value
+      if (!buildingId) {
+        this.setToast('select building to deconstruct')
+        return
+      }
+      this.dispatchAction('building_deconstruct', () =>
+        this.buildClaimHousingActions?.deconstructBuilding({ buildingId }),
+      )
+    })
+
+    this.claimPlaceButton.addEventListener('click', () => {
+      const totemBuildingId = this.claimTotemBuildingSelect.value
+      const radius = Number.parseInt(this.claimRadiusInput.value, 10)
+      if (!totemBuildingId) {
+        this.setToast('select complete totem building')
+        return
+      }
+      this.dispatchAction('claim_totem_place', () =>
+        this.buildClaimHousingActions?.placeClaimTotem({
+          totemBuildingId,
+          radius: Number.isFinite(radius) ? radius : 0,
+          claimId: this.claimIdInput.value.trim() || undefined,
+        }),
+      )
+    })
+
+    this.claimExpandButton.addEventListener('click', () => {
+      const claimId = this.claimTargetSelect.value
+      const radiusDelta = Number.parseInt(this.claimRadiusDeltaInput.value, 10)
+      if (!claimId) {
+        this.setToast('select claim to expand')
+        return
+      }
+      this.dispatchAction('claim_expand', () =>
+        this.buildClaimHousingActions?.expandClaim({
+          claimId,
+          radiusDelta: Number.isFinite(radiusDelta) ? radiusDelta : 0,
+        }),
+      )
+    })
+
+    this.housingCreateButton.addEventListener('click', () => {
+      const entranceBuildingEntityId = this.housingEntranceBuildingSelect.value
+      const dimensionId = Number.parseInt(this.housingDimensionIdInput.value, 10)
+      const interiorInstanceId = this.housingInteriorInstanceIdInput.value.trim()
+      if (!entranceBuildingEntityId) {
+        this.setToast('select entrance building')
+        return
+      }
+      if (!interiorInstanceId) {
+        this.setToast('interior instance id is required')
+        return
+      }
+      this.dispatchAction('housing_create', () =>
+        this.buildClaimHousingActions?.createHousing({
+          entranceBuildingEntityId,
+          dimensionId: Number.isFinite(dimensionId) ? dimensionId : 0,
+          interiorInstanceId,
+          housingEntityId: this.housingEntityIdInput.value.trim() || undefined,
+          networkEntityId: this.housingNetworkIdInput.value.trim() || undefined,
+          dimensionEntityId: this.housingDimensionEntityIdInput.value.trim() || undefined,
+        }),
+      )
+    })
+
+    this.housingEnterButton.addEventListener('click', () => {
+      const housingEntityId = this.resolveHousingTargetId()
+      const portalX = Number.parseFloat(this.housingPortalXInput.value)
+      const portalY = Number.parseFloat(this.housingPortalYInput.value)
+      const portalZ = Number.parseFloat(this.housingPortalZInput.value)
+      if (!housingEntityId) {
+        this.setToast('select housing first')
+        return
+      }
+      this.dispatchAction('housing_enter', () =>
+        this.buildClaimHousingActions?.enterHousing({
+          housingEntityId,
+          portalX: Number.isFinite(portalX) ? portalX : 0,
+          portalY: Number.isFinite(portalY) ? portalY : 0,
+          portalZ: Number.isFinite(portalZ) ? portalZ : 0,
+        }),
+      )
+    })
+
+    this.housingChangeEntranceButton.addEventListener('click', () => {
+      const housingEntityId = this.resolveHousingTargetId()
+      const newEntranceBuildingEntityId = this.housingNewEntranceSelect.value
+      const targetRegionIndex = Number.parseInt(this.housingTargetRegionInput.value, 10)
+      const movingMinutes = Number.parseInt(this.housingMovingMinutesInput.value, 10)
+      if (!housingEntityId || !newEntranceBuildingEntityId) {
+        this.setToast('housing and new entrance are required')
+        return
+      }
+      this.dispatchAction('housing_change_entrance', () =>
+        this.buildClaimHousingActions?.changeHousingEntrance({
+          housingEntityId,
+          newEntranceBuildingEntityId,
+          targetRegionIndex: Number.isFinite(targetRegionIndex) ? targetRegionIndex : 0,
+          movingMinutes: Number.isFinite(movingMinutes) ? movingMinutes : 0,
+        }),
+      )
+    })
+
+    this.housingMarkEmptyButton.addEventListener('click', () => {
+      const housingEntityId = this.resolveHousingTargetId()
+      const respawnDelaySeconds = Number.parseInt(this.housingRespawnDelayInput.value, 10)
+      if (!housingEntityId) {
+        this.setToast('select housing first')
+        return
+      }
+      this.dispatchAction('interior_mark_empty', () =>
+        this.buildClaimHousingActions?.markInteriorEmpty({
+          housingEntityId,
+          isEmpty: this.housingIsEmptyCheckbox.checked,
+          respawnDelaySeconds: Number.isFinite(respawnDelaySeconds) ? respawnDelaySeconds : 0,
+        }),
+      )
+    })
+
+    this.housingPropagateButton.addEventListener('click', () => {
+      const housingEntityId = this.resolveHousingTargetId()
+      const subjectIdentityHex = this.housingSubjectIdentityInput.value.trim()
+      if (!housingEntityId || !subjectIdentityHex) {
+        this.setToast('housing and subject identity are required')
+        return
+      }
+      this.dispatchAction('housing_propagate_permissions', () =>
+        this.buildClaimHousingActions?.propagateHousingPermissions({
+          housingEntityId,
+          subjectIdentityHex,
+          grantUse: this.housingGrantUseCheckbox.checked,
+          grantBuild: this.housingGrantBuildCheckbox.checked,
+          grantAdmin: this.housingGrantAdminCheckbox.checked,
+        }),
+      )
+    })
+
+    this.housingSetWhitelistButton.addEventListener('click', () => {
+      const housingEntityId = this.resolveHousingTargetId()
+      if (!housingEntityId) {
+        this.setToast('select housing first')
+        return
+      }
+      const whiteListIdentityHexes = this.housingWhitelistInput.value
+        .split(',')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+
+      this.dispatchAction('rent_set_whitelist', () =>
+        this.buildClaimHousingActions?.setRentWhitelist({
+          housingEntityId,
+          whiteListIdentityHexes,
+        }),
+      )
+    })
   }
 
-  private dispatchAction(name: string, dispatch: () => InventoryTradeActionResult | undefined): void {
+  private dispatchAction(name: string, dispatch: () => ActionResultLike | undefined): void {
     if (this.readOnly) {
       this.setToast('panel is read-only during reconnect/auth')
       return
@@ -454,15 +811,72 @@ export class PanelLayer {
     syncSelect(this.marketMatchSellSelect, sellOptions)
   }
 
+  private refreshBuildClaimHousingUi(snapshot: BuildClaimHousingSnapshot): void {
+    const buildDefOptions = snapshot.buildingDefs.map((row) => ({
+      value: row.buildingDefId,
+      label: `def=${row.buildingDefId} req=${row.requiredItemDefId}x${row.requiredItemQty} build=${row.buildRequired}`,
+    }))
+    syncSelect(this.buildDefSelect, buildDefOptions)
+
+    const buildingOptions = snapshot.buildings.map((row) => ({
+      value: row.entityId,
+      label: `id=${row.entityId} st=${row.state} p=${row.buildProgress}/${row.buildRequired} r=${row.regionId}`,
+    }))
+    syncSelect(this.buildAdvanceTargetSelect, buildingOptions)
+    syncSelect(this.buildDeconstructTargetSelect, buildingOptions)
+
+    const completeBuildingOptions = snapshot.buildings
+      .filter((row) => row.state === 1)
+      .map((row) => ({
+        value: row.entityId,
+        label: `id=${row.entityId} region=${row.regionId} (${row.hexX},${row.hexZ})`,
+      }))
+    syncSelect(this.claimTotemBuildingSelect, completeBuildingOptions)
+    syncSelect(this.housingEntranceBuildingSelect, completeBuildingOptions)
+    syncSelect(this.housingNewEntranceSelect, completeBuildingOptions)
+
+    const claimOptions = snapshot.claims.map((row) => ({
+      value: row.claimId,
+      label: `id=${row.claimId} tier=${row.tier} r=${row.radius} (${row.centerX},${row.centerZ})`,
+    }))
+    syncSelect(this.claimTargetSelect, claimOptions)
+
+    const housingOptions = snapshot.housings.map((row) => ({
+      value: row.entityId,
+      label: `id=${row.entityId} region=${row.regionIndex} empty=${row.isEmpty ? 'Y' : 'N'}`,
+    }))
+    syncSelect(this.housingSelect, housingOptions)
+
+    const selectedHousing = snapshot.housings.find((row) => row.entityId === this.housingSelect.value)
+    if (selectedHousing) {
+      this.housingTargetRegionInput.value = selectedHousing.regionIndex.toString()
+      this.housingIsEmptyCheckbox.checked = selectedHousing.isEmpty
+      const rent = snapshot.rents.find((row) => row.entityId === selectedHousing.entityId)
+      if (rent && this.housingWhitelistInput.value.trim() === '') {
+        this.housingWhitelistInput.value = rent.whiteListIdentityHexes.join(',')
+      }
+    }
+  }
+
   private updateVisibility(): void {
     this.inventorySection.style.display = this.currentTab === 'inventory' ? 'grid' : 'none'
     this.tradeSection.style.display = this.currentTab === 'trade' ? 'grid' : 'none'
     this.marketSection.style.display = this.currentTab === 'market' ? 'grid' : 'none'
+    this.buildSection.style.display = this.currentTab === 'build' ? 'grid' : 'none'
+    this.claimSection.style.display = this.currentTab === 'claim' ? 'grid' : 'none'
+    this.housingSection.style.display = this.currentTab === 'housing' ? 'grid' : 'none'
     this.body.style.display = this.currentTab ? 'flex' : 'none'
 
-    this.inventoryTabButton.style.background = this.currentTab === 'inventory' ? 'rgba(117, 171, 255, 0.28)' : 'rgba(19, 30, 48, 0.9)'
-    this.tradeTabButton.style.background = this.currentTab === 'trade' ? 'rgba(117, 171, 255, 0.28)' : 'rgba(19, 30, 48, 0.9)'
-    this.marketTabButton.style.background = this.currentTab === 'market' ? 'rgba(117, 171, 255, 0.28)' : 'rgba(19, 30, 48, 0.9)'
+    this.inventoryTabButton.style.background = this.tabBackground('inventory')
+    this.tradeTabButton.style.background = this.tabBackground('trade')
+    this.marketTabButton.style.background = this.tabBackground('market')
+    this.buildTabButton.style.background = this.tabBackground('build')
+    this.claimTabButton.style.background = this.tabBackground('claim')
+    this.housingTabButton.style.background = this.tabBackground('housing')
+  }
+
+  private tabBackground(tab: PanelTab): string {
+    return this.currentTab === tab ? 'rgba(117, 171, 255, 0.28)' : 'rgba(19, 30, 48, 0.9)'
   }
 
   private toggleTab(tab: PanelTab): void {
@@ -475,7 +889,14 @@ export class PanelLayer {
     for (const element of this.root.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>(
       'input, button, select',
     )) {
-      if (element === this.inventoryTabButton || element === this.tradeTabButton || element === this.marketTabButton) {
+      if (
+        element === this.inventoryTabButton ||
+        element === this.tradeTabButton ||
+        element === this.marketTabButton ||
+        element === this.buildTabButton ||
+        element === this.claimTabButton ||
+        element === this.housingTabButton
+      ) {
         continue
       }
       element.disabled = disabled
@@ -483,7 +904,7 @@ export class PanelLayer {
   }
 
   private updatePendingStatus(): void {
-    if (!this.pending || !this.currentSnapshot) {
+    if (!this.pending) {
       return
     }
     if (this.pending.digestBefore !== this.latestDigest) {
@@ -501,6 +922,14 @@ export class PanelLayer {
     }
   }
 
+  private syncCombinedDigest(): void {
+    this.latestDigest = `${this.inventoryDigest}|${this.buildClaimHousingDigest}`
+  }
+
+  private resolveHousingTargetId(): string {
+    return this.housingSelect.value || this.housingEntityIdInput.value.trim()
+  }
+
   private setToast(message: string): void {
     this.toastLine.textContent = message
   }
@@ -509,7 +938,6 @@ export class PanelLayer {
     const button = document.createElement('button')
     button.type = 'button'
     button.textContent = label
-    button.style.flex = '1'
     button.style.padding = '6px 8px'
     button.style.borderRadius = '8px'
     button.style.border = '1px solid rgba(137, 185, 255, 0.45)'
@@ -530,7 +958,6 @@ export class PanelLayer {
     moveButton: HTMLButtonElement
   } {
     const section = createSection('Inventory')
-
     const bootstrapButton = createButton('Bootstrap Inventory')
     const fromSelect = createSelect()
     const toSelect = createSelect()
@@ -561,7 +988,6 @@ export class PanelLayer {
     acceptButton: HTMLButtonElement
   } {
     const section = createSection('Trade')
-
     const partnerSelect = createSelect()
     const partnerManualInput = createTextInput('manual partner identity (optional)')
     const sessionIdInput = createTextInput('session id (optional)')
@@ -589,7 +1015,6 @@ export class PanelLayer {
       createLabeled('Accepted', acceptedCheckbox),
       acceptButton,
     )
-
     return {
       section,
       partnerSelect,
@@ -677,6 +1102,225 @@ export class PanelLayer {
       matchButton,
     }
   }
+
+  private createBuildSection(): {
+    section: HTMLDivElement
+    regionInput: HTMLInputElement
+    hexXInput: HTMLInputElement
+    hexZInput: HTMLInputElement
+    defSelect: HTMLSelectElement
+    buildingIdInput: HTMLInputElement
+    placeButton: HTMLButtonElement
+    advanceTargetSelect: HTMLSelectElement
+    advanceStepsInput: HTMLInputElement
+    advanceButton: HTMLButtonElement
+    deconstructTargetSelect: HTMLSelectElement
+    deconstructButton: HTMLButtonElement
+  } {
+    const section = createSection('Build')
+    const regionInput = createNumberInput('1')
+    const hexXInput = createNumberInput('0')
+    const hexZInput = createNumberInput('0')
+    const defSelect = createSelect()
+    const buildingIdInput = createTextInput('building id (optional)')
+    const placeButton = createButton('Place Building')
+    const advanceTargetSelect = createSelect()
+    const advanceStepsInput = createNumberInput('1')
+    const advanceButton = createButton('Advance Progress')
+    const deconstructTargetSelect = createSelect()
+    const deconstructButton = createButton('Deconstruct')
+
+    section.append(
+      createLabeled('Region', regionInput),
+      createLabeled('Hex X', hexXInput),
+      createLabeled('Hex Z', hexZInput),
+      createLabeled('Building Def', defSelect),
+      createLabeled('Building Id', buildingIdInput),
+      placeButton,
+      createLabeled('Advance Target', advanceTargetSelect),
+      createLabeled('Advance Steps', advanceStepsInput),
+      advanceButton,
+      createLabeled('Deconstruct Target', deconstructTargetSelect),
+      deconstructButton,
+    )
+
+    return {
+      section,
+      regionInput,
+      hexXInput,
+      hexZInput,
+      defSelect,
+      buildingIdInput,
+      placeButton,
+      advanceTargetSelect,
+      advanceStepsInput,
+      advanceButton,
+      deconstructTargetSelect,
+      deconstructButton,
+    }
+  }
+
+  private createClaimSection(): {
+    section: HTMLDivElement
+    totemBuildingSelect: HTMLSelectElement
+    claimIdInput: HTMLInputElement
+    radiusInput: HTMLInputElement
+    placeButton: HTMLButtonElement
+    claimTargetSelect: HTMLSelectElement
+    radiusDeltaInput: HTMLInputElement
+    expandButton: HTMLButtonElement
+  } {
+    const section = createSection('Claim')
+    const totemBuildingSelect = createSelect()
+    const claimIdInput = createTextInput('claim id (optional)')
+    const radiusInput = createNumberInput('3')
+    const placeButton = createButton('Place Totem')
+    const claimTargetSelect = createSelect()
+    const radiusDeltaInput = createNumberInput('1')
+    const expandButton = createButton('Expand Claim')
+
+    section.append(
+      createLabeled('Totem Building', totemBuildingSelect),
+      createLabeled('Claim Id', claimIdInput),
+      createLabeled('Radius', radiusInput),
+      placeButton,
+      createLabeled('Claim Target', claimTargetSelect),
+      createLabeled('Radius Delta', radiusDeltaInput),
+      expandButton,
+    )
+
+    return {
+      section,
+      totemBuildingSelect,
+      claimIdInput,
+      radiusInput,
+      placeButton,
+      claimTargetSelect,
+      radiusDeltaInput,
+      expandButton,
+    }
+  }
+
+  private createHousingSection(): {
+    section: HTMLDivElement
+    entranceBuildingSelect: HTMLSelectElement
+    housingEntityIdInput: HTMLInputElement
+    networkEntityIdInput: HTMLInputElement
+    dimensionEntityIdInput: HTMLInputElement
+    dimensionIdInput: HTMLInputElement
+    interiorInstanceIdInput: HTMLInputElement
+    createHousingButton: HTMLButtonElement
+    housingSelect: HTMLSelectElement
+    portalXInput: HTMLInputElement
+    portalYInput: HTMLInputElement
+    portalZInput: HTMLInputElement
+    enterButton: HTMLButtonElement
+    newEntranceSelect: HTMLSelectElement
+    targetRegionInput: HTMLInputElement
+    movingMinutesInput: HTMLInputElement
+    changeEntranceButton: HTMLButtonElement
+    isEmptyCheckbox: HTMLInputElement
+    respawnDelayInput: HTMLInputElement
+    markEmptyButton: HTMLButtonElement
+    subjectIdentityInput: HTMLInputElement
+    grantUseCheckbox: HTMLInputElement
+    grantBuildCheckbox: HTMLInputElement
+    grantAdminCheckbox: HTMLInputElement
+    propagateButton: HTMLButtonElement
+    whitelistInput: HTMLInputElement
+    setWhitelistButton: HTMLButtonElement
+  } {
+    const section = createSection('Housing')
+    const entranceBuildingSelect = createSelect()
+    const housingEntityIdInput = createTextInput('housing id (optional)')
+    const networkEntityIdInput = createTextInput('network id (optional)')
+    const dimensionEntityIdInput = createTextInput('dimension entity id (optional)')
+    const dimensionIdInput = createNumberInput('1')
+    const interiorInstanceIdInput = createTextInput('interior instance id')
+    const createHousingButton = createButton('Create Housing')
+    const housingSelect = createSelect()
+    const portalXInput = createFloatInput('0')
+    const portalYInput = createFloatInput('0')
+    const portalZInput = createFloatInput('0')
+    const enterButton = createButton('Enter Housing')
+    const newEntranceSelect = createSelect()
+    const targetRegionInput = createNumberInput('1')
+    const movingMinutesInput = createNumberInput('0')
+    const changeEntranceButton = createButton('Change Entrance')
+    const isEmptyCheckbox = document.createElement('input')
+    isEmptyCheckbox.type = 'checkbox'
+    const respawnDelayInput = createNumberInput('300')
+    const markEmptyButton = createButton('Mark Interior Empty')
+    const subjectIdentityInput = createTextInput('subject identity hex')
+    const grantUseCheckbox = document.createElement('input')
+    grantUseCheckbox.type = 'checkbox'
+    const grantBuildCheckbox = document.createElement('input')
+    grantBuildCheckbox.type = 'checkbox'
+    const grantAdminCheckbox = document.createElement('input')
+    grantAdminCheckbox.type = 'checkbox'
+    const propagateButton = createButton('Propagate Permissions')
+    const whitelistInput = createTextInput('identity_hex_a,identity_hex_b,...')
+    const setWhitelistButton = createButton('Set Whitelist')
+
+    section.append(
+      createLabeled('Entrance Building', entranceBuildingSelect),
+      createLabeled('Housing Id', housingEntityIdInput),
+      createLabeled('Network Id', networkEntityIdInput),
+      createLabeled('Dimension Entity Id', dimensionEntityIdInput),
+      createLabeled('Dimension Id', dimensionIdInput),
+      createLabeled('Interior Instance Id', interiorInstanceIdInput),
+      createHousingButton,
+      createLabeled('Housing Target', housingSelect),
+      createLabeled('Portal X', portalXInput),
+      createLabeled('Portal Y', portalYInput),
+      createLabeled('Portal Z', portalZInput),
+      enterButton,
+      createLabeled('New Entrance', newEntranceSelect),
+      createLabeled('Target Region', targetRegionInput),
+      createLabeled('Moving Minutes', movingMinutesInput),
+      changeEntranceButton,
+      createLabeled('Is Empty', isEmptyCheckbox),
+      createLabeled('Respawn Delay (s)', respawnDelayInput),
+      markEmptyButton,
+      createLabeled('Subject Identity', subjectIdentityInput),
+      createLabeled('Grant Use', grantUseCheckbox),
+      createLabeled('Grant Build', grantBuildCheckbox),
+      createLabeled('Grant Admin', grantAdminCheckbox),
+      propagateButton,
+      createLabeled('Whitelist', whitelistInput),
+      setWhitelistButton,
+    )
+
+    return {
+      section,
+      entranceBuildingSelect,
+      housingEntityIdInput,
+      networkEntityIdInput,
+      dimensionEntityIdInput,
+      dimensionIdInput,
+      interiorInstanceIdInput,
+      createHousingButton,
+      housingSelect,
+      portalXInput,
+      portalYInput,
+      portalZInput,
+      enterButton,
+      newEntranceSelect,
+      targetRegionInput,
+      movingMinutesInput,
+      changeEntranceButton,
+      isEmptyCheckbox,
+      respawnDelayInput,
+      markEmptyButton,
+      subjectIdentityInput,
+      grantUseCheckbox,
+      grantBuildCheckbox,
+      grantAdminCheckbox,
+      propagateButton,
+      whitelistInput,
+      setWhitelistButton,
+    }
+  }
 }
 
 function deriveAcceptedByLocalIdentity(
@@ -718,7 +1362,7 @@ function syncSelect(select: HTMLSelectElement, options: SelectOption[]): void {
   select.dataset.signature = signature
 }
 
-function computeDigest(snapshot: InventoryTradeSnapshot): string {
+function computeInventoryDigest(snapshot: InventoryTradeSnapshot): string {
   return [
     snapshot.containers
       .map((row) => `${row.containerId}:${row.slotCount}`)
@@ -742,6 +1386,27 @@ function computeDigest(snapshot: InventoryTradeSnapshot): string {
       .map((row) => `${row.indexKey}:${row.priceAvg}:${row.volume}`)
       .join(','),
     snapshot.wallet?.balance ?? 'none',
+  ].join('|')
+}
+
+function computeBuildClaimHousingDigest(snapshot: BuildClaimHousingSnapshot): string {
+  return [
+    snapshot.buildings
+      .map((row) => `${row.entityId}:${row.state}:${row.buildProgress}:${row.buildRequired}`)
+      .join(','),
+    snapshot.claims
+      .map((row) => `${row.claimId}:${row.radius}:${row.tier}`)
+      .join(','),
+    snapshot.housings
+      .map((row) => `${row.entityId}:${row.regionIndex}:${row.isEmpty ? 1 : 0}:${row.lockedUntil}`)
+      .join(','),
+    snapshot.rents
+      .map((row) => `${row.entityId}:${row.whiteListIdentityHexes.join(';')}`)
+      .join(','),
+    snapshot.leases
+      .map((row) => `${row.requestNonce}:${row.leasedId}:${row.kind}`)
+      .join(','),
+    snapshot.lastStatus,
   ].join('|')
 }
 
@@ -826,8 +1491,16 @@ function createTextInput(placeholder: string): HTMLInputElement {
 function createNumberInput(value: string): HTMLInputElement {
   const input = createTextInput('')
   input.type = 'number'
-  input.min = '1'
+  input.min = '0'
   input.step = '1'
+  input.value = value
+  return input
+}
+
+function createFloatInput(value: string): HTMLInputElement {
+  const input = createTextInput('')
+  input.type = 'number'
+  input.step = '0.1'
   input.value = value
   return input
 }

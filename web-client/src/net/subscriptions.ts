@@ -11,6 +11,12 @@ interface SubscriptionCallbacks {
   onError: (key: string, error: Error) => void
 }
 
+interface SubscriptionDebugSnapshot {
+  key: string
+  queryCount: number
+  active: boolean
+}
+
 export class SubscriptionRegistry {
   private readonly specs = new Map<string, SubscriptionSpec>()
 
@@ -69,6 +75,16 @@ export class SubscriptionRegistry {
 
   values(): string[] {
     return [...this.specs.keys()]
+  }
+
+  snapshot(): SubscriptionDebugSnapshot[] {
+    return [...this.specs.values()]
+      .map((spec) => ({
+        key: spec.key,
+        queryCount: spec.queries.length,
+        active: Boolean(spec.handle && !spec.handle.isEnded()),
+      }))
+      .sort((left, right) => left.key.localeCompare(right.key))
   }
 
   private activateSpec(connection: DbConnection, spec: SubscriptionSpec, callbacks: SubscriptionCallbacks): void {
