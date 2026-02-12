@@ -1,14 +1,14 @@
 import type {
-  BuildClaimHousingActionResult,
   BuildClaimHousingActions,
   BuildClaimHousingSnapshot,
-  InventoryTradeActionResult,
   InventoryTradeActions,
   InventoryTradeSnapshot,
+  SocialNpcQuestActions,
+  SocialNpcQuestSnapshot,
   TradeSessionSnapshot,
 } from '../../runtime/types'
 
-type PanelTab = 'inventory' | 'trade' | 'market' | 'build' | 'claim' | 'housing'
+type PanelTab = 'inventory' | 'trade' | 'market' | 'build' | 'claim' | 'housing' | 'social' | 'npc' | 'quest'
 
 interface SelectOption {
   value: string
@@ -49,6 +49,9 @@ export class PanelLayer {
   private readonly buildTabButton: HTMLButtonElement
   private readonly claimTabButton: HTMLButtonElement
   private readonly housingTabButton: HTMLButtonElement
+  private readonly socialTabButton: HTMLButtonElement
+  private readonly npcTabButton: HTMLButtonElement
+  private readonly questTabButton: HTMLButtonElement
 
   private readonly inventorySection: HTMLDivElement
   private readonly tradeSection: HTMLDivElement
@@ -56,6 +59,9 @@ export class PanelLayer {
   private readonly buildSection: HTMLDivElement
   private readonly claimSection: HTMLDivElement
   private readonly housingSection: HTMLDivElement
+  private readonly socialSection: HTMLDivElement
+  private readonly npcSection: HTMLDivElement
+  private readonly questSection: HTMLDivElement
 
   private readonly inventoryBootstrapButton: HTMLButtonElement
   private readonly inventoryFromSelect: HTMLSelectElement
@@ -136,17 +142,59 @@ export class PanelLayer {
   private readonly housingWhitelistInput: HTMLInputElement
   private readonly housingSetWhitelistButton: HTMLButtonElement
 
+  private readonly socialChatChannelSelect: HTMLSelectElement
+  private readonly socialChatBodyInput: HTMLInputElement
+  private readonly socialChatSendButton: HTMLButtonElement
+  private readonly socialPartyIdInput: HTMLInputElement
+  private readonly socialPartyCreateButton: HTMLButtonElement
+  private readonly socialPartyJoinSelect: HTMLSelectElement
+  private readonly socialPartyJoinManualInput: HTMLInputElement
+  private readonly socialPartyJoinButton: HTMLButtonElement
+  private readonly socialPartyLeaveButton: HTMLButtonElement
+  private readonly socialPartyTransferIdentityInput: HTMLInputElement
+  private readonly socialPartyTransferButton: HTMLButtonElement
+  private readonly socialGuildCreateIdInput: HTMLInputElement
+  private readonly socialGuildCreateNameInput: HTMLInputElement
+  private readonly socialGuildCreateButton: HTMLButtonElement
+  private readonly socialGuildJoinSelect: HTMLSelectElement
+  private readonly socialGuildJoinManualInput: HTMLInputElement
+  private readonly socialGuildJoinButton: HTMLButtonElement
+  private readonly socialGuildRoleGuildSelect: HTMLSelectElement
+  private readonly socialGuildRoleMemberSelect: HTMLSelectElement
+  private readonly socialGuildRoleSelect: HTMLSelectElement
+  private readonly socialGuildSetRoleButton: HTMLButtonElement
+  private readonly socialGuildProjectGuildSelect: HTMLSelectElement
+  private readonly socialGuildProjectIdInput: HTMLInputElement
+  private readonly socialGuildProjectTitleInput: HTMLInputElement
+  private readonly socialGuildProjectProgressInput: HTMLInputElement
+  private readonly socialGuildProjectUpdateButton: HTMLButtonElement
+
+  private readonly npcNpcSelect: HTMLSelectElement
+  private readonly npcRequestIdInput: HTMLInputElement
+  private readonly npcTalkButton: HTMLButtonElement
+  private readonly npcTradeButton: HTMLButtonElement
+  private readonly npcQuestButton: HTMLButtonElement
+
+  private readonly questChainSelect: HTMLSelectElement
+  private readonly questChainStartButton: HTMLButtonElement
+  private readonly questStageChainSelect: HTMLSelectElement
+  private readonly questStageIndexInput: HTMLInputElement
+  private readonly questStageCompleteButton: HTMLButtonElement
+
   private inventoryTradeActions: InventoryTradeActions | null = null
   private buildClaimHousingActions: BuildClaimHousingActions | null = null
+  private socialNpcQuestActions: SocialNpcQuestActions | null = null
   private reducerFailureLookup: ((name: string) => ReducerFailure | null) | null = null
   private reducerFailureClear: ((name: string) => void) | null = null
   private currentInventorySnapshot: InventoryTradeSnapshot | null = null
   private currentBuildClaimHousingSnapshot: BuildClaimHousingSnapshot | null = null
+  private currentSocialNpcQuestSnapshot: SocialNpcQuestSnapshot | null = null
   private currentTab: PanelTab | null = null
   private readOnly = true
   private pending: PendingAction | null = null
   private inventoryDigest = ''
   private buildClaimHousingDigest = ''
+  private socialNpcQuestDigest = ''
   private latestDigest = ''
   private tradeAcceptDraft: boolean | null = null
 
@@ -194,6 +242,9 @@ export class PanelLayer {
     this.buildTabButton = this.createTabButton('B Build')
     this.claimTabButton = this.createTabButton('C Claim')
     this.housingTabButton = this.createTabButton('H Housing')
+    this.socialTabButton = this.createTabButton('J Social')
+    this.npcTabButton = this.createTabButton('N NPC')
+    this.questTabButton = this.createTabButton('K Quest')
     this.toolbar.append(
       this.inventoryTabButton,
       this.tradeTabButton,
@@ -201,6 +252,9 @@ export class PanelLayer {
       this.buildTabButton,
       this.claimTabButton,
       this.housingTabButton,
+      this.socialTabButton,
+      this.npcTabButton,
+      this.questTabButton,
     )
 
     this.body = document.createElement('div')
@@ -304,6 +358,51 @@ export class PanelLayer {
     this.housingWhitelistInput = housingUi.whitelistInput
     this.housingSetWhitelistButton = housingUi.setWhitelistButton
 
+    const socialUi = this.createSocialSection()
+    this.socialSection = socialUi.section
+    this.socialChatChannelSelect = socialUi.chatChannelSelect
+    this.socialChatBodyInput = socialUi.chatBodyInput
+    this.socialChatSendButton = socialUi.chatSendButton
+    this.socialPartyIdInput = socialUi.partyIdInput
+    this.socialPartyCreateButton = socialUi.partyCreateButton
+    this.socialPartyJoinSelect = socialUi.partyJoinSelect
+    this.socialPartyJoinManualInput = socialUi.partyJoinManualInput
+    this.socialPartyJoinButton = socialUi.partyJoinButton
+    this.socialPartyLeaveButton = socialUi.partyLeaveButton
+    this.socialPartyTransferIdentityInput = socialUi.partyTransferIdentityInput
+    this.socialPartyTransferButton = socialUi.partyTransferButton
+    this.socialGuildCreateIdInput = socialUi.guildCreateIdInput
+    this.socialGuildCreateNameInput = socialUi.guildCreateNameInput
+    this.socialGuildCreateButton = socialUi.guildCreateButton
+    this.socialGuildJoinSelect = socialUi.guildJoinSelect
+    this.socialGuildJoinManualInput = socialUi.guildJoinManualInput
+    this.socialGuildJoinButton = socialUi.guildJoinButton
+    this.socialGuildRoleGuildSelect = socialUi.guildRoleGuildSelect
+    this.socialGuildRoleMemberSelect = socialUi.guildRoleMemberSelect
+    this.socialGuildRoleSelect = socialUi.guildRoleSelect
+    this.socialGuildSetRoleButton = socialUi.guildSetRoleButton
+    this.socialGuildProjectGuildSelect = socialUi.guildProjectGuildSelect
+    this.socialGuildProjectIdInput = socialUi.guildProjectIdInput
+    this.socialGuildProjectTitleInput = socialUi.guildProjectTitleInput
+    this.socialGuildProjectProgressInput = socialUi.guildProjectProgressInput
+    this.socialGuildProjectUpdateButton = socialUi.guildProjectUpdateButton
+
+    const npcUi = this.createNpcSection()
+    this.npcSection = npcUi.section
+    this.npcNpcSelect = npcUi.npcSelect
+    this.npcRequestIdInput = npcUi.requestIdInput
+    this.npcTalkButton = npcUi.talkButton
+    this.npcTradeButton = npcUi.tradeButton
+    this.npcQuestButton = npcUi.questButton
+
+    const questUi = this.createQuestSection()
+    this.questSection = questUi.section
+    this.questChainSelect = questUi.chainSelect
+    this.questChainStartButton = questUi.chainStartButton
+    this.questStageChainSelect = questUi.stageChainSelect
+    this.questStageIndexInput = questUi.stageIndexInput
+    this.questStageCompleteButton = questUi.stageCompleteButton
+
     this.body.append(
       this.inventorySection,
       this.tradeSection,
@@ -311,6 +410,9 @@ export class PanelLayer {
       this.buildSection,
       this.claimSection,
       this.housingSection,
+      this.socialSection,
+      this.npcSection,
+      this.questSection,
     )
     this.root.append(this.summaryLine, this.modeLine, this.toastLine, this.toolbar, this.body)
     container.appendChild(this.root)
@@ -326,6 +428,10 @@ export class PanelLayer {
 
   bindBuildClaimHousing(actions: BuildClaimHousingActions): void {
     this.buildClaimHousingActions = actions
+  }
+
+  bindSocialNpcQuest(actions: SocialNpcQuestActions): void {
+    this.socialNpcQuestActions = actions
   }
 
   bindReducerFailureAccess(
@@ -356,6 +462,15 @@ export class PanelLayer {
     this.updateVisibility()
   }
 
+  renderSocialNpcQuest(snapshot: SocialNpcQuestSnapshot): void {
+    this.currentSocialNpcQuestSnapshot = snapshot
+    this.socialNpcQuestDigest = computeSocialNpcQuestDigest(snapshot)
+    this.syncCombinedDigest()
+    this.refreshSocialNpcQuestUi(snapshot)
+    this.updatePendingStatus()
+    this.updateVisibility()
+  }
+
   handleShortcut(code: string): boolean {
     if (code === 'KeyI') {
       this.toggleTab('inventory')
@@ -379,6 +494,18 @@ export class PanelLayer {
     }
     if (code === 'KeyH') {
       this.toggleTab('housing')
+      return true
+    }
+    if (code === 'KeyJ') {
+      this.toggleTab('social')
+      return true
+    }
+    if (code === 'KeyN') {
+      this.toggleTab('npc')
+      return true
+    }
+    if (code === 'KeyK') {
+      this.toggleTab('quest')
       return true
     }
     return false
@@ -406,6 +533,9 @@ export class PanelLayer {
     this.buildTabButton.addEventListener('click', () => this.toggleTab('build'))
     this.claimTabButton.addEventListener('click', () => this.toggleTab('claim'))
     this.housingTabButton.addEventListener('click', () => this.toggleTab('housing'))
+    this.socialTabButton.addEventListener('click', () => this.toggleTab('social'))
+    this.npcTabButton.addEventListener('click', () => this.toggleTab('npc'))
+    this.questTabButton.addEventListener('click', () => this.toggleTab('quest'))
 
     this.inventoryBootstrapButton.addEventListener('click', () => {
       this.dispatchAction('inventory_bootstrap', () => this.inventoryTradeActions?.bootstrapInventory())
@@ -719,6 +849,157 @@ export class PanelLayer {
         }),
       )
     })
+
+    this.socialChatSendButton.addEventListener('click', () => {
+      const channelId = this.socialChatChannelSelect.value
+      const body = this.socialChatBodyInput.value.trim()
+      if (!channelId) {
+        this.setToast('select chat channel')
+        return
+      }
+      this.dispatchAction('chat_send_message', () =>
+        this.socialNpcQuestActions?.sendChatMessage({
+          channelId,
+          body,
+        }),
+      )
+    })
+
+    this.socialPartyCreateButton.addEventListener('click', () => {
+      const partyId = this.socialPartyIdInput.value.trim()
+      this.dispatchAction('party_create', () =>
+        this.socialNpcQuestActions?.partyCreate({
+          partyId,
+        }),
+      )
+    })
+
+    this.socialPartyJoinButton.addEventListener('click', () => {
+      const partyId = this.socialPartyJoinManualInput.value.trim() || this.socialPartyJoinSelect.value
+      this.dispatchAction('party_join', () =>
+        this.socialNpcQuestActions?.partyJoin({
+          partyId,
+        }),
+      )
+    })
+
+    this.socialPartyLeaveButton.addEventListener('click', () => {
+      const partyId = this.currentSocialNpcQuestSnapshot?.activePartyId ?? this.socialPartyIdInput.value.trim()
+      this.dispatchAction('party_leave', () =>
+        this.socialNpcQuestActions?.partyLeave({
+          partyId,
+        }),
+      )
+    })
+
+    this.socialPartyTransferButton.addEventListener('click', () => {
+      const partyId = this.currentSocialNpcQuestSnapshot?.activePartyId ?? this.socialPartyIdInput.value.trim()
+      const newLeaderIdentityHex = this.socialPartyTransferIdentityInput.value.trim()
+      this.dispatchAction('party_transfer_leader', () =>
+        this.socialNpcQuestActions?.partyTransferLeader({
+          partyId,
+          newLeaderIdentityHex,
+        }),
+      )
+    })
+
+    this.socialGuildCreateButton.addEventListener('click', () => {
+      const guildId = this.socialGuildCreateIdInput.value.trim()
+      const name = this.socialGuildCreateNameInput.value.trim()
+      this.dispatchAction('guild_create', () =>
+        this.socialNpcQuestActions?.guildCreate({
+          guildId,
+          name,
+        }),
+      )
+    })
+
+    this.socialGuildJoinButton.addEventListener('click', () => {
+      const guildId = this.socialGuildJoinManualInput.value.trim() || this.socialGuildJoinSelect.value
+      this.dispatchAction('guild_join', () =>
+        this.socialNpcQuestActions?.guildJoin({
+          guildId,
+        }),
+      )
+    })
+
+    this.socialGuildSetRoleButton.addEventListener('click', () => {
+      const guildId = this.socialGuildRoleGuildSelect.value
+      const memberIdentityHex = this.socialGuildRoleMemberSelect.value
+      const role = Number.parseInt(this.socialGuildRoleSelect.value, 10)
+      this.dispatchAction('guild_set_role', () =>
+        this.socialNpcQuestActions?.guildSetRole({
+          guildId,
+          memberIdentityHex,
+          role: Number.isFinite(role) ? role : -1,
+        }),
+      )
+    })
+
+    this.socialGuildProjectUpdateButton.addEventListener('click', () => {
+      const guildId = this.socialGuildProjectGuildSelect.value
+      const projectId = this.socialGuildProjectIdInput.value.trim()
+      const title = this.socialGuildProjectTitleInput.value.trim()
+      const progressPermille = Number.parseInt(this.socialGuildProjectProgressInput.value, 10)
+      this.dispatchAction('guild_project_update', () =>
+        this.socialNpcQuestActions?.guildProjectUpdate({
+          guildId,
+          projectId,
+          title,
+          progressPermille: Number.isFinite(progressPermille) ? progressPermille : -1,
+        }),
+      )
+    })
+
+    this.npcTalkButton.addEventListener('click', () => {
+      const npcId = this.npcNpcSelect.value
+      this.dispatchAction('npc_talk', () =>
+        this.socialNpcQuestActions?.npcTalk({
+          npcId,
+          requestId: this.npcRequestIdInput.value.trim() || undefined,
+        }),
+      )
+    })
+
+    this.npcTradeButton.addEventListener('click', () => {
+      const npcId = this.npcNpcSelect.value
+      this.dispatchAction('npc_trade', () =>
+        this.socialNpcQuestActions?.npcTrade({
+          npcId,
+          requestId: this.npcRequestIdInput.value.trim() || undefined,
+        }),
+      )
+    })
+
+    this.npcQuestButton.addEventListener('click', () => {
+      const npcId = this.npcNpcSelect.value
+      this.dispatchAction('npc_quest', () =>
+        this.socialNpcQuestActions?.npcQuest({
+          npcId,
+          requestId: this.npcRequestIdInput.value.trim() || undefined,
+        }),
+      )
+    })
+
+    this.questChainStartButton.addEventListener('click', () => {
+      const chainId = this.questChainSelect.value
+      this.dispatchAction('quest_chain_start', () =>
+        this.socialNpcQuestActions?.questChainStart({
+          chainId,
+        }),
+      )
+    })
+
+    this.questStageCompleteButton.addEventListener('click', () => {
+      const chainId = this.questStageChainSelect.value
+      const stageIndex = Number.parseInt(this.questStageIndexInput.value, 10)
+      this.dispatchAction('quest_stage_complete', () =>
+        this.socialNpcQuestActions?.questStageComplete({
+          chainId,
+          stageIndex: Number.isFinite(stageIndex) ? stageIndex : -1,
+        }),
+      )
+    })
   }
 
   private dispatchAction(name: string, dispatch: () => ActionResultLike | undefined): void {
@@ -858,6 +1139,74 @@ export class PanelLayer {
     }
   }
 
+  private refreshSocialNpcQuestUi(snapshot: SocialNpcQuestSnapshot): void {
+    this.refreshSocialUi(snapshot)
+    this.refreshNpcUi(snapshot)
+    this.refreshQuestUi(snapshot)
+  }
+
+  private refreshSocialUi(snapshot: SocialNpcQuestSnapshot): void {
+    const channelOptions = snapshot.chatChannels.map((row) => ({
+      value: row.channelId,
+      label: `${row.channelId} [${chatChannelTypeLabel(row.channelType)}:${row.scopeId}]`,
+    }))
+    syncSelect(this.socialChatChannelSelect, channelOptions)
+
+    const partyOptions = snapshot.partyStates.map((row) => ({
+      value: row.partyId,
+      label: `${row.partyId} leader=${shortIdentity(row.leaderIdentityHex)} region=${row.regionId}`,
+    }))
+    syncSelect(this.socialPartyJoinSelect, partyOptions)
+
+    if (!this.socialPartyIdInput.value.trim() && snapshot.activePartyId) {
+      this.socialPartyIdInput.value = snapshot.activePartyId
+    }
+
+    const guildOptions = snapshot.guildStates.map((row) => ({
+      value: row.guildId,
+      label: `${row.guildId} (${row.name})`,
+    }))
+    syncSelect(this.socialGuildJoinSelect, guildOptions)
+    syncSelect(this.socialGuildRoleGuildSelect, guildOptions)
+    syncSelect(this.socialGuildProjectGuildSelect, guildOptions)
+
+    const selectedGuildId =
+      this.socialGuildRoleGuildSelect.value ||
+      this.socialGuildProjectGuildSelect.value ||
+      snapshot.activeGuildId ||
+      guildOptions[0]?.value ||
+      ''
+    const memberOptions = snapshot.guildMembers
+      .filter((row) => row.guildId === selectedGuildId)
+      .map((row) => ({
+        value: row.memberIdentityHex,
+        label: `${shortIdentity(row.memberIdentityHex)} role=${row.role}`,
+      }))
+    syncSelect(this.socialGuildRoleMemberSelect, memberOptions)
+  }
+
+  private refreshNpcUi(snapshot: SocialNpcQuestSnapshot): void {
+    const npcOptions = snapshot.npcs.map((row) => ({
+      value: row.npcId,
+      label: `npc=${row.npcId} region=${row.regionId} pos=(${fixed1(row.posX)},${fixed1(row.posZ)})`,
+    }))
+    syncSelect(this.npcNpcSelect, npcOptions)
+  }
+
+  private refreshQuestUi(snapshot: SocialNpcQuestSnapshot): void {
+    const chainDefOptions = snapshot.questChainDefs.map((row) => ({
+      value: row.chainId,
+      label: `chain=${row.chainId} npc=${row.startNpcId} stageCount=${row.stageCount}`,
+    }))
+    syncSelect(this.questChainSelect, chainDefOptions)
+
+    const activeChainOptions = snapshot.questChains.map((row) => ({
+      value: row.chainId,
+      label: `chain=${row.chainId} status=${row.status}`,
+    }))
+    syncSelect(this.questStageChainSelect, activeChainOptions)
+  }
+
   private updateVisibility(): void {
     this.inventorySection.style.display = this.currentTab === 'inventory' ? 'grid' : 'none'
     this.tradeSection.style.display = this.currentTab === 'trade' ? 'grid' : 'none'
@@ -865,6 +1214,9 @@ export class PanelLayer {
     this.buildSection.style.display = this.currentTab === 'build' ? 'grid' : 'none'
     this.claimSection.style.display = this.currentTab === 'claim' ? 'grid' : 'none'
     this.housingSection.style.display = this.currentTab === 'housing' ? 'grid' : 'none'
+    this.socialSection.style.display = this.currentTab === 'social' ? 'grid' : 'none'
+    this.npcSection.style.display = this.currentTab === 'npc' ? 'grid' : 'none'
+    this.questSection.style.display = this.currentTab === 'quest' ? 'grid' : 'none'
     this.body.style.display = this.currentTab ? 'flex' : 'none'
 
     this.inventoryTabButton.style.background = this.tabBackground('inventory')
@@ -873,6 +1225,9 @@ export class PanelLayer {
     this.buildTabButton.style.background = this.tabBackground('build')
     this.claimTabButton.style.background = this.tabBackground('claim')
     this.housingTabButton.style.background = this.tabBackground('housing')
+    this.socialTabButton.style.background = this.tabBackground('social')
+    this.npcTabButton.style.background = this.tabBackground('npc')
+    this.questTabButton.style.background = this.tabBackground('quest')
   }
 
   private tabBackground(tab: PanelTab): string {
@@ -895,7 +1250,10 @@ export class PanelLayer {
         element === this.marketTabButton ||
         element === this.buildTabButton ||
         element === this.claimTabButton ||
-        element === this.housingTabButton
+        element === this.housingTabButton ||
+        element === this.socialTabButton ||
+        element === this.npcTabButton ||
+        element === this.questTabButton
       ) {
         continue
       }
@@ -923,7 +1281,7 @@ export class PanelLayer {
   }
 
   private syncCombinedDigest(): void {
-    this.latestDigest = `${this.inventoryDigest}|${this.buildClaimHousingDigest}`
+    this.latestDigest = `${this.inventoryDigest}|${this.buildClaimHousingDigest}|${this.socialNpcQuestDigest}`
   }
 
   private resolveHousingTargetId(): string {
@@ -1321,6 +1679,196 @@ export class PanelLayer {
       setWhitelistButton,
     }
   }
+
+  private createSocialSection(): {
+    section: HTMLDivElement
+    chatChannelSelect: HTMLSelectElement
+    chatBodyInput: HTMLInputElement
+    chatSendButton: HTMLButtonElement
+    partyIdInput: HTMLInputElement
+    partyCreateButton: HTMLButtonElement
+    partyJoinSelect: HTMLSelectElement
+    partyJoinManualInput: HTMLInputElement
+    partyJoinButton: HTMLButtonElement
+    partyLeaveButton: HTMLButtonElement
+    partyTransferIdentityInput: HTMLInputElement
+    partyTransferButton: HTMLButtonElement
+    guildCreateIdInput: HTMLInputElement
+    guildCreateNameInput: HTMLInputElement
+    guildCreateButton: HTMLButtonElement
+    guildJoinSelect: HTMLSelectElement
+    guildJoinManualInput: HTMLInputElement
+    guildJoinButton: HTMLButtonElement
+    guildRoleGuildSelect: HTMLSelectElement
+    guildRoleMemberSelect: HTMLSelectElement
+    guildRoleSelect: HTMLSelectElement
+    guildSetRoleButton: HTMLButtonElement
+    guildProjectGuildSelect: HTMLSelectElement
+    guildProjectIdInput: HTMLInputElement
+    guildProjectTitleInput: HTMLInputElement
+    guildProjectProgressInput: HTMLInputElement
+    guildProjectUpdateButton: HTMLButtonElement
+  } {
+    const section = createSection('Social')
+    const chatChannelSelect = createSelect()
+    const chatBodyInput = createTextInput('message body')
+    const chatSendButton = createButton('Send Chat')
+
+    const partyIdInput = createTextInput('party id')
+    const partyCreateButton = createButton('Create Party')
+    const partyJoinSelect = createSelect()
+    const partyJoinManualInput = createTextInput('party id (manual)')
+    const partyJoinButton = createButton('Join Party')
+    const partyLeaveButton = createButton('Leave Party')
+    const partyTransferIdentityInput = createTextInput('new leader identity hex')
+    const partyTransferButton = createButton('Transfer Leader')
+
+    const guildCreateIdInput = createTextInput('guild id')
+    const guildCreateNameInput = createTextInput('guild name')
+    const guildCreateButton = createButton('Create Guild')
+    const guildJoinSelect = createSelect()
+    const guildJoinManualInput = createTextInput('guild id (manual)')
+    const guildJoinButton = createButton('Join Guild')
+    const guildRoleGuildSelect = createSelect()
+    const guildRoleMemberSelect = createSelect()
+    const guildRoleSelect = createSelect([
+      { value: '1', label: '1 (Member)' },
+      { value: '2', label: '2 (Officer)' },
+      { value: '3', label: '3 (Leader)' },
+    ])
+    const guildSetRoleButton = createButton('Set Guild Role')
+    const guildProjectGuildSelect = createSelect()
+    const guildProjectIdInput = createTextInput('project id')
+    const guildProjectTitleInput = createTextInput('project title')
+    const guildProjectProgressInput = createNumberInput('0')
+    guildProjectProgressInput.max = '1000'
+    const guildProjectUpdateButton = createButton('Update Guild Project')
+
+    section.append(
+      createLabeled('Chat Channel', chatChannelSelect),
+      createLabeled('Chat Body', chatBodyInput),
+      chatSendButton,
+      createLabeled('Party Id', partyIdInput),
+      partyCreateButton,
+      createLabeled('Join Party', partyJoinSelect),
+      createLabeled('Join Party Manual', partyJoinManualInput),
+      partyJoinButton,
+      partyLeaveButton,
+      createLabeled('Transfer New Leader', partyTransferIdentityInput),
+      partyTransferButton,
+      createLabeled('Guild Create Id', guildCreateIdInput),
+      createLabeled('Guild Create Name', guildCreateNameInput),
+      guildCreateButton,
+      createLabeled('Join Guild', guildJoinSelect),
+      createLabeled('Join Guild Manual', guildJoinManualInput),
+      guildJoinButton,
+      createLabeled('Role Guild', guildRoleGuildSelect),
+      createLabeled('Role Member', guildRoleMemberSelect),
+      createLabeled('Role', guildRoleSelect),
+      guildSetRoleButton,
+      createLabeled('Project Guild', guildProjectGuildSelect),
+      createLabeled('Project Id', guildProjectIdInput),
+      createLabeled('Project Title', guildProjectTitleInput),
+      createLabeled('Project Progress', guildProjectProgressInput),
+      guildProjectUpdateButton,
+    )
+
+    return {
+      section,
+      chatChannelSelect,
+      chatBodyInput,
+      chatSendButton,
+      partyIdInput,
+      partyCreateButton,
+      partyJoinSelect,
+      partyJoinManualInput,
+      partyJoinButton,
+      partyLeaveButton,
+      partyTransferIdentityInput,
+      partyTransferButton,
+      guildCreateIdInput,
+      guildCreateNameInput,
+      guildCreateButton,
+      guildJoinSelect,
+      guildJoinManualInput,
+      guildJoinButton,
+      guildRoleGuildSelect,
+      guildRoleMemberSelect,
+      guildRoleSelect,
+      guildSetRoleButton,
+      guildProjectGuildSelect,
+      guildProjectIdInput,
+      guildProjectTitleInput,
+      guildProjectProgressInput,
+      guildProjectUpdateButton,
+    }
+  }
+
+  private createNpcSection(): {
+    section: HTMLDivElement
+    npcSelect: HTMLSelectElement
+    requestIdInput: HTMLInputElement
+    talkButton: HTMLButtonElement
+    tradeButton: HTMLButtonElement
+    questButton: HTMLButtonElement
+  } {
+    const section = createSection('NPC')
+    const npcSelect = createSelect()
+    const requestIdInput = createTextInput('request id (optional)')
+    const talkButton = createButton('NPC Talk')
+    const tradeButton = createButton('NPC Trade')
+    const questButton = createButton('NPC Quest')
+
+    section.append(
+      createLabeled('NPC', npcSelect),
+      createLabeled('Request Id', requestIdInput),
+      talkButton,
+      tradeButton,
+      questButton,
+    )
+
+    return {
+      section,
+      npcSelect,
+      requestIdInput,
+      talkButton,
+      tradeButton,
+      questButton,
+    }
+  }
+
+  private createQuestSection(): {
+    section: HTMLDivElement
+    chainSelect: HTMLSelectElement
+    chainStartButton: HTMLButtonElement
+    stageChainSelect: HTMLSelectElement
+    stageIndexInput: HTMLInputElement
+    stageCompleteButton: HTMLButtonElement
+  } {
+    const section = createSection('Quest')
+    const chainSelect = createSelect()
+    const chainStartButton = createButton('Start Chain')
+    const stageChainSelect = createSelect()
+    const stageIndexInput = createNumberInput('0')
+    const stageCompleteButton = createButton('Complete Stage')
+
+    section.append(
+      createLabeled('Chain Def', chainSelect),
+      chainStartButton,
+      createLabeled('Chain State', stageChainSelect),
+      createLabeled('Stage Index', stageIndexInput),
+      stageCompleteButton,
+    )
+
+    return {
+      section,
+      chainSelect,
+      chainStartButton,
+      stageChainSelect,
+      stageIndexInput,
+      stageCompleteButton,
+    }
+  }
 }
 
 function deriveAcceptedByLocalIdentity(
@@ -1407,6 +1955,23 @@ function computeBuildClaimHousingDigest(snapshot: BuildClaimHousingSnapshot): st
       .map((row) => `${row.requestNonce}:${row.leasedId}:${row.kind}`)
       .join(','),
     snapshot.lastStatus,
+  ].join('|')
+}
+
+function computeSocialNpcQuestDigest(snapshot: SocialNpcQuestSnapshot): string {
+  return [
+    snapshot.chatChannels.map((row) => `${row.channelId}:${row.channelType}:${row.scopeId}`).join(','),
+    snapshot.chatMessages.map((row) => `${row.messageId}:${row.channelId}`).join(','),
+    snapshot.partyStates.map((row) => `${row.partyId}:${row.leaderIdentityHex}`).join(','),
+    snapshot.partyMembers.map((row) => `${row.memberKey}:${row.role}`).join(','),
+    snapshot.guildStates.map((row) => `${row.guildId}:${row.name}`).join(','),
+    snapshot.guildMembers.map((row) => `${row.memberKey}:${row.role}`).join(','),
+    snapshot.guildProjects.map((row) => `${row.projectId}:${row.progressPermille}`).join(','),
+    snapshot.npcInteractions.map((row) => `${row.interactionKey}:${row.status}`).join(','),
+    snapshot.questChains.map((row) => `${row.chainKey}:${row.status}`).join(','),
+    snapshot.questStages.map((row) => `${row.stageKey}:${row.status}`).join(','),
+    snapshot.activePartyId ?? 'none',
+    snapshot.activeGuildId ?? 'none',
   ].join('|')
 }
 
@@ -1503,4 +2068,33 @@ function createFloatInput(value: string): HTMLInputElement {
   input.step = '0.1'
   input.value = value
   return input
+}
+
+function chatChannelTypeLabel(channelType: number): string {
+  switch (channelType) {
+    case 0:
+      return 'general'
+    case 1:
+      return 'region'
+    case 2:
+      return 'party'
+    case 3:
+      return 'guild'
+    default:
+      return `type-${channelType}`
+  }
+}
+
+function shortIdentity(identityHex: string): string {
+  if (identityHex.length <= 12) {
+    return identityHex
+  }
+  return `${identityHex.slice(0, 6)}...${identityHex.slice(-4)}`
+}
+
+function fixed1(value: number): string {
+  if (Number.isNaN(value)) {
+    return '0.0'
+  }
+  return value.toFixed(1)
 }

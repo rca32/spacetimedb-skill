@@ -45,21 +45,35 @@
 - leader만 역할 변경
 - officer/leader만 프로젝트 갱신
 
-## 5. NPC Interaction
+## 5. NPC State & Movement
+### 5.1 NPC 이동 구독
+`npc_state` 테이블에서 위치 변경을 구독:
+- `hex_x`, `hex_z`: 현재 위치
+- `dest_hex_x`, `dest_hex_z`: 목적지 (이동 중 표시용)
+- `schedule_kind`: 0=idle, 1=wander, 2=patrol, 3=fixed
+
+### 5.2 NPC 렌더링
+- `npc_state` 변경 시 월드에 NPC 엔티티 생성/갱신
+- 이동 중: `hex` → `dest_hex` 보간 애니메이션
+- `schedule_kind == 3` (fixed): 이동 애니메이션 없이 고정 위치
+
+## 6. NPC Interaction
 - 대화: `npc_talk`
 - 거래: `npc_trade`
 - 퀘스트: `npc_quest`
 
 모두 거리 제한 기반이므로, 클라는 상호작용 가능 반경 인디케이터를 표시한다.
 
-## 6. Quest
+## 7. Quest
 - 체인 시작: `quest_chain_start`
 - 스테이지 완료: `quest_stage_complete`
 
 `quest_chain_state`, `quest_stage_state`를 사용해 퀘스트 트래커를 구성한다.
 
-## 7. Acceptance Criteria
+## 8. Acceptance Criteria
 - 채널 접근 규칙 위반 시 정확한 차단
 - 파티/길드 역할 변화가 즉시 UI에 반영
 - NPC 거리 제한과 상호작용 결과 일치
+- NPC 위치 변경 시 월드 렌더링 즉시 반영
+- NPC 이동 보간 애니메이션 자연스러움
 - 퀘스트 시작/완료 상태 추적 정확

@@ -368,6 +368,219 @@ export interface BuildClaimHousingRuntimeBridge {
   actions: BuildClaimHousingActions
 }
 
+export interface ChatChannelSnapshot {
+  channelId: string
+  channelType: number
+  scopeId: string
+  createdAt: string
+}
+
+export interface ChatMessageSnapshot {
+  messageId: string
+  channelId: string
+  senderIdentityHex: string
+  body: string
+  createdAt: string
+}
+
+export interface PartyStateSnapshot {
+  partyId: string
+  leaderIdentityHex: string
+  regionId: string
+  createdAt: string
+}
+
+export interface PartyMemberSnapshot {
+  memberKey: string
+  partyId: string
+  memberIdentityHex: string
+  role: number
+  joinedAt: string
+}
+
+export interface GuildStateSnapshot {
+  guildId: string
+  name: string
+  founderIdentityHex: string
+  createdAt: string
+}
+
+export interface GuildMemberSnapshot {
+  memberKey: string
+  guildId: string
+  memberIdentityHex: string
+  role: number
+  joinedAt: string
+}
+
+export interface GuildProjectSnapshot {
+  projectId: string
+  guildId: string
+  title: string
+  progressPermille: number
+  updatedAt: string
+}
+
+export interface SocialFeedSnapshot {
+  feedId: string
+  identityHex: string
+  feedType: string
+  payload: string
+  createdAt: string
+}
+
+export interface NpcSnapshot {
+  npcId: string
+  regionId: string
+  posX: number
+  posZ: number
+  scheduleKind: number
+  updatedAt: string
+}
+
+export interface NpcInteractionSnapshot {
+  interactionKey: string
+  npcId: string
+  callerIdentityHex: string
+  interactionKind: number
+  status: number
+  detail: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface QuestChainDefSnapshot {
+  chainId: string
+  startNpcId: string
+  stageCount: number
+  rewardItemDefId: string
+  rewardItemQty: number
+}
+
+export interface QuestStageDefSnapshot {
+  stageId: string
+  chainId: string
+  objectiveType: number
+  objectiveTarget: string
+  objectiveCount: number
+}
+
+export interface QuestChainStateSnapshot {
+  chainKey: string
+  identityHex: string
+  chainId: string
+  status: number
+  startedAt: string
+  updatedAt: string
+}
+
+export interface QuestStageStateSnapshot {
+  stageKey: string
+  chainKey: string
+  stageIndex: number
+  status: number
+  updatedAt: string
+}
+
+export interface AgentResultSnapshot {
+  resultId: string
+  requestId: string
+  status: number
+  summary: string
+  createdAt: string
+}
+
+export interface SocialNpcQuestSnapshot {
+  connected: boolean
+  identityHex: string | null
+  regionId: string | null
+  activePartyId: string | null
+  activeGuildId: string | null
+  generatedAtMs: number
+  chatChannels: ChatChannelSnapshot[]
+  chatMessages: ChatMessageSnapshot[]
+  partyStates: PartyStateSnapshot[]
+  partyMembers: PartyMemberSnapshot[]
+  guildStates: GuildStateSnapshot[]
+  guildMembers: GuildMemberSnapshot[]
+  guildProjects: GuildProjectSnapshot[]
+  socialFeeds: SocialFeedSnapshot[]
+  npcs: NpcSnapshot[]
+  npcInteractions: NpcInteractionSnapshot[]
+  questChainDefs: QuestChainDefSnapshot[]
+  questStageDefs: QuestStageDefSnapshot[]
+  questChains: QuestChainStateSnapshot[]
+  questStages: QuestStageStateSnapshot[]
+  agentResults: AgentResultSnapshot[]
+}
+
+export interface SocialNpcQuestActionResult {
+  ok: boolean
+  error?: string
+}
+
+export interface SocialNpcQuestActions {
+  sendChatMessage: (input: {
+    channelId: string
+    body: string
+  }) => SocialNpcQuestActionResult
+  partyCreate: (input: {
+    partyId: string
+  }) => SocialNpcQuestActionResult
+  partyJoin: (input: {
+    partyId: string
+  }) => SocialNpcQuestActionResult
+  partyLeave: (input: {
+    partyId: string
+  }) => SocialNpcQuestActionResult
+  partyTransferLeader: (input: {
+    partyId: string
+    newLeaderIdentityHex: string
+  }) => SocialNpcQuestActionResult
+  guildCreate: (input: {
+    guildId: string
+    name: string
+  }) => SocialNpcQuestActionResult
+  guildJoin: (input: {
+    guildId: string
+  }) => SocialNpcQuestActionResult
+  guildSetRole: (input: {
+    guildId: string
+    memberIdentityHex: string
+    role: number
+  }) => SocialNpcQuestActionResult
+  guildProjectUpdate: (input: {
+    guildId: string
+    projectId: string
+    title: string
+    progressPermille: number
+  }) => SocialNpcQuestActionResult
+  npcTalk: (input: {
+    npcId: string
+    requestId?: string
+  }) => SocialNpcQuestActionResult
+  npcTrade: (input: {
+    npcId: string
+    requestId?: string
+  }) => SocialNpcQuestActionResult
+  npcQuest: (input: {
+    npcId: string
+    requestId?: string
+  }) => SocialNpcQuestActionResult
+  questChainStart: (input: {
+    chainId: string
+  }) => SocialNpcQuestActionResult
+  questStageComplete: (input: {
+    chainId: string
+    stageIndex: number
+  }) => SocialNpcQuestActionResult
+}
+
+export interface SocialNpcQuestRuntimeBridge {
+  getSnapshot: () => SocialNpcQuestSnapshot
+  actions: SocialNpcQuestActions
+}
+
 export interface RuntimeContext {
   root: HTMLElement
   config: AppConfig
@@ -379,6 +592,7 @@ export interface RuntimeContext {
   net?: NetRuntimeBridge
   inventoryTrade?: InventoryTradeRuntimeBridge
   buildClaimHousing?: BuildClaimHousingRuntimeBridge
+  socialNpcQuest?: SocialNpcQuestRuntimeBridge
   sync?: {
     getDiagnostics: () => SyncDiagnosticsSnapshot
   }

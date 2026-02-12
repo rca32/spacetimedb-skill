@@ -6,8 +6,7 @@ WEBCLIENTDESIGN/11-implementation-order.md
 
 
 
-요청 사항:
-    Phase 7: Social + NPC + Quest
+요청 사항: prompts/20260212_todo.md
 
 
 최근 작업 내역:

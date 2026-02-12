@@ -7,6 +7,7 @@ import type {
   NetSubscriptionDiagnosticsSnapshot,
   RuntimeContext,
   RuntimeModule,
+  SocialNpcQuestSnapshot,
 } from './types'
 
 type PlayerMovementFeedbackRow = {
@@ -63,6 +64,9 @@ export function createUiRuntime(): RuntimeModule {
       if (ctx.buildClaimHousing) {
         panels.bindBuildClaimHousing(ctx.buildClaimHousing.actions)
       }
+      if (ctx.socialNpcQuest) {
+        panels.bindSocialNpcQuest(ctx.socialNpcQuest.actions)
+      }
       if (ctx.net) {
         panels.bindReducerFailureAccess(
           (name) => ctx.net?.getReducerFailure(name) ?? null,
@@ -81,7 +85,7 @@ export function createUiRuntime(): RuntimeModule {
       window.addEventListener('keydown', onKeyDown)
 
       hud.setStatus('ready')
-      panels.setText('inventory/trade/market/build/claim/housing')
+      panels.setText('inventory/trade/market/build/claim/housing/social/npc/quest')
       ctx.logger.info('ui runtime start')
     },
     tick(ctx: RuntimeContext) {
@@ -90,6 +94,7 @@ export function createUiRuntime(): RuntimeModule {
       const appState = ctx.appState.value
       const inventoryTradeSnapshot = ctx.inventoryTrade?.getSnapshot() ?? null
       const buildClaimHousingSnapshot = ctx.buildClaimHousing?.getSnapshot() ?? null
+      const socialNpcQuestSnapshot = ctx.socialNpcQuest?.getSnapshot() ?? null
 
       hud?.setStatus(`${appState} | frame ${ctx.frame}`)
       hud?.setOverlay(resolveOverlay(appState))
@@ -98,6 +103,9 @@ export function createUiRuntime(): RuntimeModule {
       }
       if (buildClaimHousingSnapshot) {
         panels?.renderBuildClaimHousing(buildClaimHousingSnapshot)
+      }
+      if (socialNpcQuestSnapshot) {
+        panels?.renderSocialNpcQuest(socialNpcQuestSnapshot)
       }
 
       const isConnected = Boolean(connection && connection.isActive && localIdentityHex)
@@ -146,8 +154,8 @@ export function createUiRuntime(): RuntimeModule {
       hud?.setClaim(formatClaimStatus(buildClaimHousingSnapshot))
       hud?.setHouse(formatHouseStatus(buildClaimHousingSnapshot))
       hud?.setActionBar(appState === 'InWorld' ? 'enabled' : 'disabled')
-      hud?.setChat(appState === 'InWorld' ? 'ready' : 'limited')
-      hud?.setQuest(appState === 'InWorld' ? 'active objective pending' : 'loading objective')
+      hud?.setChat(formatChatStatus(appState, socialNpcQuestSnapshot))
+      hud?.setQuest(formatQuestStatus(appState, socialNpcQuestSnapshot))
 
       if (movement.rejectStreak >= REJECT_STREAK_WARNING_THRESHOLD) {
         hud?.setWarningBanner(mapMovementRejectMessage(movement.latestReasonCode, movement.rejectStreak))
@@ -157,7 +165,7 @@ export function createUiRuntime(): RuntimeModule {
 
       const readOnly = appState === 'Reconnecting' || appState === 'CharacterReady' || appState === 'Authenticating'
       panels?.setReadOnly(readOnly)
-      panels?.setText(formatPanelSummary(readOnly, inventoryTradeSnapshot, buildClaimHousingSnapshot))
+      panels?.setText(formatPanelSummary(readOnly, inventoryTradeSnapshot, buildClaimHousingSnapshot, socialNpcQuestSnapshot))
     },
     stop(ctx: RuntimeContext) {
       if (onKeyDown) {
@@ -235,6 +243,36 @@ function shortSubscriptionKey(key: string): string {
       return 'bch:rent'
     case 'bch-id-lease-state':
       return 'bch:lease'
+    case 'snq-chat-channel':
+      return 'snq:ch'
+    case 'snq-chat-message':
+      return 'snq:msg'
+    case 'snq-party-state':
+      return 'snq:party'
+    case 'snq-party-member':
+      return 'snq:pmem'
+    case 'snq-guild-state':
+      return 'snq:guild'
+    case 'snq-guild-member':
+      return 'snq:gmem'
+    case 'snq-guild-project':
+      return 'snq:gproj'
+    case 'snq-social-feed':
+      return 'snq:feed'
+    case 'snq-npc-state':
+      return 'snq:npc'
+    case 'snq-npc-interaction':
+      return 'snq:nlog'
+    case 'snq-quest-chain-def':
+      return 'snq:qdef'
+    case 'snq-quest-stage-def':
+      return 'snq:sdef'
+    case 'snq-quest-chain-state':
+      return 'snq:qchain'
+    case 'snq-quest-stage-state':
+      return 'snq:qstage'
+    case 'snq-agent-result':
+      return 'snq:agent'
     default:
       return key
   }
@@ -410,6 +448,7 @@ function formatPanelSummary(
   readOnly: boolean,
   inventorySnapshot: InventoryTradeSnapshot | null,
   buildClaimHousingSnapshot: BuildClaimHousingSnapshot | null,
+  socialNpcQuestSnapshot: SocialNpcQuestSnapshot | null,
 ): string {
   const mode = readOnly ? 'sync lock' : 'interactive'
   const inv = inventorySnapshot
@@ -418,7 +457,10 @@ function formatPanelSummary(
   const bch = buildClaimHousingSnapshot
     ? `build=${buildClaimHousingSnapshot.buildings.length} claim=${buildClaimHousingSnapshot.claims.length} housing=${buildClaimHousingSnapshot.housings.length}`
     : 'build=na claim=na housing=na'
-  return `${mode} ${inv} ${bch}`
+  const snq = socialNpcQuestSnapshot
+    ? `chat=${socialNpcQuestSnapshot.chatMessages.length} npc=${socialNpcQuestSnapshot.npcs.length} quest=${socialNpcQuestSnapshot.questChains.length}`
+    : 'chat=na npc=na quest=na'
+  return `${mode} ${inv} ${bch} ${snq}`
 }
 
 function formatBuildStatus(snapshot: BuildClaimHousingSnapshot | null): string {
@@ -444,6 +486,37 @@ function formatHouseStatus(snapshot: BuildClaimHousingSnapshot | null): string {
   }
   const emptyCount = snapshot.housings.filter((row) => row.isEmpty).length
   return `count=${snapshot.housings.length} empty=${emptyCount} ${snapshot.lastStatus}`
+}
+
+function formatChatStatus(
+  appState: RuntimeContext['appState']['value'],
+  snapshot: SocialNpcQuestSnapshot | null,
+): string {
+  if (appState !== 'InWorld') {
+    return 'limited'
+  }
+  if (!snapshot) {
+    return 'n/a'
+  }
+  const latest = snapshot.chatMessages[0]
+  if (!latest) {
+    return `chan=${snapshot.chatChannels.length} no-message`
+  }
+  return `chan=${snapshot.chatChannels.length} last=${latest.channelId}`
+}
+
+function formatQuestStatus(
+  appState: RuntimeContext['appState']['value'],
+  snapshot: SocialNpcQuestSnapshot | null,
+): string {
+  if (appState !== 'InWorld') {
+    return 'loading objective'
+  }
+  if (!snapshot) {
+    return 'n/a'
+  }
+  const completedStages = snapshot.questStages.filter((row) => row.status === 1).length
+  return `chain=${snapshot.questChains.length} stage=${snapshot.questStages.length} done=${completedStages}`
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
