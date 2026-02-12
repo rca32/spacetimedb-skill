@@ -2,6 +2,7 @@ import { createCoreWorld } from '../core/world'
 import { loadConfig } from '../infra/config'
 import { createLogger } from '../infra/logging'
 import { TokenStore } from '../infra/token-store'
+import { AssetLoader } from '../render/asset-loader'
 import { createRendererRuntime } from '../render/renderer'
 import { createBuildClaimHousingRuntime } from '../runtime/build-claim-housing'
 import { createCombatRuntime } from '../runtime/combat'
@@ -41,6 +42,10 @@ export async function bootstrap(root: HTMLElement | null): Promise<void> {
     frame: 0,
   }
 
+  context.appState.transition('LoadingAssets')
+  await preloadCriticalAssets(context)
+  context.appState.transition('Connecting')
+
   const modules: RuntimeModule[] = [
     createCoreRuntime(),
     createNetRuntime(),
@@ -58,9 +63,6 @@ export async function bootstrap(root: HTMLElement | null): Promise<void> {
     await module.start(context)
   }
 
-  context.appState.transition('LoadingAssets')
-  context.appState.transition('Connecting')
-
   context.renderer.start((dtSeconds) => {
     context.frame += 1
     for (const module of modules) {
@@ -73,9 +75,33 @@ export async function bootstrap(root: HTMLElement | null): Promise<void> {
     for (const module of [...modules].reverse()) {
       await module.stop(context)
     }
+    AssetLoader.dispose()
   }
 
   window.addEventListener('beforeunload', () => {
     void shutdown()
   })
+}
+
+async function preloadCriticalAssets(context: RuntimeContext): Promise<void> {
+  try {
+    const result = await AssetLoader.loadCriticalAssets()
+    context.logger.info('critical assets loaded', {
+      manifestVersion: result.manifest.version,
+      models: result.models.size,
+      textures: result.textures.size,
+      audioBuffers: result.audioBuffers.size,
+    })
+  } catch (error) {
+    context.logger.warn('critical asset preload failed; continue with primitive fallback', {
+      error: toErrorMessage(error),
+    })
+  }
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+  return String(error)
 }

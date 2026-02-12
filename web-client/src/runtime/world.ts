@@ -56,6 +56,7 @@ type BuildingStateRow = {
   hexX: number
   hexZ: number
   state: number
+  requiredItemDefId: bigint
   buildProgress: number
   buildRequired: number
 }
@@ -296,6 +297,7 @@ function syncBuildingState(
         state: row.state,
         buildProgress: row.buildProgress,
         buildRequired: row.buildRequired,
+        requiredItemDefId: row.requiredItemDefId.toString(),
       })
       entity.add(IsBuilding)
     })

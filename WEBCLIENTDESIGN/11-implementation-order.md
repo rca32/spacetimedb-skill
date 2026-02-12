@@ -97,9 +97,9 @@
 - [x] `src/render/asset-loader.ts` 구현 (GLTFLoader, 캐싱)
 - [x] `src/render/asset-mapping.ts` 구현 (타입, 매핑 함수)
 - [x] `manifest.json` 및 플레이스홀더 에셋 배치
-- [ ] `three-stdlib` 의존성 추가
-- [ ] `LoadingAssets` 상태에서 `AssetLoader.loadCriticalAssets()` 통합
-- [ ] 캐릭터(플레이어/NPC) glTF 모델 교체 (선택)
+- [x] `three-stdlib` 의존성 추가
+- [x] `LoadingAssets` 상태에서 `AssetLoader.loadCriticalAssets()` 통합
+- [x] 캐릭터(플레이어/NPC) glTF 모델 교체 (선택)
 
 완료 기준:
 - 필수 에셋 manifest 로딩 완료

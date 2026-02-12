@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { CoreWorld } from '../core/world'
 import {
+  BuildingData,
   ClaimData,
   ChunkData,
   IsBuilding,
@@ -13,7 +14,10 @@ import {
   NetEntity,
   Position,
   PresentationTransform,
+  ResourceData,
 } from '../core/traits'
+import { getBuildingModelPath, getCharacterModelPath, getResourceModelPath } from './asset-mapping'
+import { AssetLoader } from './asset-loader'
 import { MaterialPalette } from './materials'
 
 const DUMMY = new THREE.Object3D()
@@ -22,6 +26,10 @@ const REMOTE_PLAYER_COLOR = new THREE.Color(0x6ec0ff)
 const NPC_COLOR = new THREE.Color(0xffc788)
 const CLAIM_OWNER_COLOR = new THREE.Color(0x8effb2)
 const CLAIM_OTHER_COLOR = new THREE.Color(0xff9b85)
+const GLTF_BUILDING_SCALE = 0.8
+const GLTF_RESOURCE_SCALE = 0.8
+const GLTF_PLAYER_SCALE = 0.9
+const GLTF_NPC_SCALE = 0.85
 const BIOME_COLORS = [0x284032, 0x395629, 0x5b4d2d, 0x30495e, 0x4d3b55, 0x6c5e39].map(
   (hex) => new THREE.Color(hex),
 )
@@ -33,6 +41,13 @@ type InstanceTransform = {
   sx: number
   sy: number
   sz: number
+}
+
+type ModelTransform = InstanceTransform & {
+  qx?: number
+  qy?: number
+  qz?: number
+  qw?: number
 }
 
 class InstancedPool {
@@ -115,12 +130,17 @@ class InstancedPool {
 
 export class WorldStreamingRenderer {
   private readonly root = new THREE.Group()
+  private readonly gltfRoot = new THREE.Group()
   private readonly terrainPool: InstancedPool
   private readonly buildingPool: InstancedPool
   private readonly claimPool: InstancedPool
   private readonly resourcePool: InstancedPool
   private readonly actorPool: InstancedPool
   private readonly npcPool: InstancedPool
+  private readonly gltfObjects = new Map<string, THREE.Object3D>()
+  private readonly gltfPathByKey = new Map<string, string>()
+  private readonly pendingModelLoads = new Map<string, Promise<void>>()
+  private readonly failedModelPaths = new Set<string>()
 
   constructor(scene: THREE.Scene, materials: MaterialPalette) {
     const terrainGeometry = new THREE.PlaneGeometry(16, 16)
@@ -145,12 +165,14 @@ export class WorldStreamingRenderer {
     this.actorPool.mesh.frustumCulled = false
     this.npcPool.mesh.frustumCulled = false
 
+    this.gltfRoot.name = 'world-gltf-layer'
     this.root.add(this.terrainPool.mesh)
     this.root.add(this.buildingPool.mesh)
     this.root.add(this.claimPool.mesh)
     this.root.add(this.resourcePool.mesh)
     this.root.add(this.actorPool.mesh)
     this.root.add(this.npcPool.mesh)
+    scene.add(this.gltfRoot)
     scene.add(this.root)
   }
 
@@ -161,7 +183,9 @@ export class WorldStreamingRenderer {
     const seenResources = new Set<string>()
     const seenActors = new Set<string>()
     const seenNpcs = new Set<string>()
+    const seenGltf = new Set<string>()
     const localIdentityHex = resolveLocalIdentityHex(world)
+    const manifest = AssetLoader.getManifest()
 
     world.ecs.query(IsTerrainChunk, NetEntity, Position, ChunkData).readEach(([net, position, chunk]) => {
       const key = `${net.table}:${net.serverId}`
@@ -173,17 +197,24 @@ export class WorldStreamingRenderer {
       )
     })
 
-    world.ecs.query(IsBuilding, NetEntity, Position).readEach(([net, position]) => {
+    world.ecs.query(IsBuilding, NetEntity, Position, BuildingData).readEach(([net, position, building]) => {
       const key = `${net.table}:${net.serverId}`
-      seenBuildings.add(key)
-      this.buildingPool.upsert(key, {
+      const transform = {
         x: position.x,
         y: position.y + 0.8,
         z: position.z,
-        sx: 1,
-        sy: 1,
-        sz: 1,
-      })
+        sx: GLTF_BUILDING_SCALE,
+        sy: GLTF_BUILDING_SCALE,
+        sz: GLTF_BUILDING_SCALE,
+      }
+      const modelPath = manifest ? getBuildingModelPath(building.requiredItemDefId, manifest) : null
+
+      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf)) {
+        return
+      }
+
+      seenBuildings.add(key)
+      this.buildingPool.upsert(key, transform)
     })
 
     world.ecs.query(IsClaim, NetEntity, Position, ClaimData).readEach(([net, position, claim]) => {
@@ -208,68 +239,96 @@ export class WorldStreamingRenderer {
       )
     })
 
-    world.ecs.query(IsResourceNode, NetEntity, Position).readEach(([net, position]) => {
+    world.ecs.query(IsResourceNode, NetEntity, Position, ResourceData).readEach(([net, position, resource]) => {
       const key = `${net.table}:${net.serverId}`
-      seenResources.add(key)
-      this.resourcePool.upsert(key, {
+      const transform = {
         x: position.x,
         y: position.y + 0.5,
         z: position.z,
-        sx: 1,
-        sy: 1,
-        sz: 1,
-      })
+        sx: GLTF_RESOURCE_SCALE,
+        sy: GLTF_RESOURCE_SCALE,
+        sz: GLTF_RESOURCE_SCALE,
+      }
+      const modelPath = manifest ? getResourceModelPath(resource.resourceType, manifest) : null
+
+      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf)) {
+        return
+      }
+
+      seenResources.add(key)
+      this.resourcePool.upsert(key, transform)
     })
 
     world.ecs.query(IsLocalPlayer, NetEntity, PresentationTransform).readEach(([net, presentation]) => {
       const key = `${net.table}:${net.serverId}`
+      const transform = {
+        x: presentation.x,
+        y: presentation.y + 0.9,
+        z: presentation.z,
+        sx: GLTF_PLAYER_SCALE,
+        sy: GLTF_PLAYER_SCALE,
+        sz: GLTF_PLAYER_SCALE,
+        qx: presentation.qx,
+        qy: presentation.qy,
+        qz: presentation.qz,
+        qw: presentation.qw,
+      }
+      const modelPath = manifest ? getCharacterModelPath('localPlayer', manifest) : null
+
+      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf)) {
+        return
+      }
+
       seenActors.add(key)
-      this.actorPool.upsert(
-        key,
-        {
-          x: presentation.x,
-          y: presentation.y + 0.9,
-          z: presentation.z,
-          sx: 1.1,
-          sy: 1.1,
-          sz: 1.1,
-        },
-        LOCAL_PLAYER_COLOR,
-      )
+      this.actorPool.upsert(key, transform, LOCAL_PLAYER_COLOR)
     })
 
     world.ecs.query(IsRemotePlayer, NetEntity, PresentationTransform).readEach(([net, presentation]) => {
       const key = `${net.table}:${net.serverId}`
+      const transform = {
+        x: presentation.x,
+        y: presentation.y + 0.85,
+        z: presentation.z,
+        sx: GLTF_PLAYER_SCALE,
+        sy: GLTF_PLAYER_SCALE,
+        sz: GLTF_PLAYER_SCALE,
+        qx: presentation.qx,
+        qy: presentation.qy,
+        qz: presentation.qz,
+        qw: presentation.qw,
+      }
+      const modelPath = manifest ? getCharacterModelPath('remotePlayer', manifest) : null
+
+      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf)) {
+        return
+      }
+
       seenActors.add(key)
-      this.actorPool.upsert(
-        key,
-        {
-          x: presentation.x,
-          y: presentation.y + 0.85,
-          z: presentation.z,
-          sx: 1,
-          sy: 1,
-          sz: 1,
-        },
-        REMOTE_PLAYER_COLOR,
-      )
+      this.actorPool.upsert(key, transform, REMOTE_PLAYER_COLOR)
     })
 
     world.ecs.query(IsNpc, NetEntity, PresentationTransform).readEach(([net, presentation]) => {
       const key = `${net.table}:${net.serverId}`
+      const transform = {
+        x: presentation.x,
+        y: presentation.y + 0.85,
+        z: presentation.z,
+        sx: GLTF_NPC_SCALE,
+        sy: GLTF_NPC_SCALE,
+        sz: GLTF_NPC_SCALE,
+        qx: presentation.qx,
+        qy: presentation.qy,
+        qz: presentation.qz,
+        qw: presentation.qw,
+      }
+      const modelPath = manifest ? getCharacterModelPath('npc', manifest) : null
+
+      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf)) {
+        return
+      }
+
       seenNpcs.add(key)
-      this.npcPool.upsert(
-        key,
-        {
-          x: presentation.x,
-          y: presentation.y + 0.85,
-          z: presentation.z,
-          sx: 0.95,
-          sy: 0.95,
-          sz: 0.95,
-        },
-        NPC_COLOR,
-      )
+      this.npcPool.upsert(key, transform, NPC_COLOR)
     })
 
     this.terrainPool.removeMissing(seenTerrain)
@@ -278,6 +337,7 @@ export class WorldStreamingRenderer {
     this.resourcePool.removeMissing(seenResources)
     this.actorPool.removeMissing(seenActors)
     this.npcPool.removeMissing(seenNpcs)
+    this.pruneGltfRenderables(seenGltf)
 
     this.terrainPool.mesh.instanceMatrix.needsUpdate = true
     this.buildingPool.mesh.instanceMatrix.needsUpdate = true
@@ -294,10 +354,12 @@ export class WorldStreamingRenderer {
     this.resourcePool.removeMissing(new Set())
     this.actorPool.removeMissing(new Set())
     this.npcPool.removeMissing(new Set())
+    this.pruneGltfRenderables(new Set())
   }
 
   dispose(scene: THREE.Scene): void {
     this.clear()
+    scene.remove(this.gltfRoot)
     scene.remove(this.root)
     this.terrainPool.mesh.geometry.dispose()
     this.buildingPool.mesh.geometry.dispose()
@@ -305,6 +367,93 @@ export class WorldStreamingRenderer {
     this.resourcePool.mesh.geometry.dispose()
     this.actorPool.mesh.geometry.dispose()
     this.npcPool.mesh.geometry.dispose()
+  }
+
+  private upsertGltfRenderable(
+    key: string,
+    path: string,
+    transform: ModelTransform,
+    seenGltf: Set<string>,
+  ): boolean {
+    const existing = this.gltfObjects.get(key)
+    const existingPath = this.gltfPathByKey.get(key)
+
+    if (existing && existingPath === path) {
+      this.applyModelTransform(existing, transform)
+      seenGltf.add(key)
+      return true
+    }
+
+    if (existing && existingPath !== path) {
+      this.removeGltfRenderable(key)
+    }
+
+    if (this.failedModelPaths.has(path)) {
+      return false
+    }
+
+    const model = AssetLoader.getModel(path)
+    if (!model) {
+      this.queueModelLoad(path)
+      return false
+    }
+
+    const clone = model.scene.clone(true)
+    clone.visible = true
+    this.applyModelTransform(clone, transform)
+    this.gltfRoot.add(clone)
+    this.gltfObjects.set(key, clone)
+    this.gltfPathByKey.set(key, path)
+    seenGltf.add(key)
+    return true
+  }
+
+  private queueModelLoad(path: string): void {
+    if (this.pendingModelLoads.has(path) || this.failedModelPaths.has(path)) {
+      return
+    }
+
+    const pending = AssetLoader.loadModel(path)
+      .then(() => {
+        this.failedModelPaths.delete(path)
+      })
+      .catch(() => {
+        this.failedModelPaths.add(path)
+      })
+      .finally(() => {
+        this.pendingModelLoads.delete(path)
+      })
+
+    this.pendingModelLoads.set(path, pending)
+  }
+
+  private pruneGltfRenderables(seenGltf: Set<string>): void {
+    for (const key of [...this.gltfObjects.keys()]) {
+      if (!seenGltf.has(key)) {
+        this.removeGltfRenderable(key)
+      }
+    }
+  }
+
+  private removeGltfRenderable(key: string): void {
+    const object = this.gltfObjects.get(key)
+    if (object) {
+      this.gltfRoot.remove(object)
+    }
+    this.gltfObjects.delete(key)
+    this.gltfPathByKey.delete(key)
+  }
+
+  private applyModelTransform(object: THREE.Object3D, transform: ModelTransform): void {
+    object.position.set(transform.x, transform.y, transform.z)
+    object.scale.set(transform.sx, transform.sy, transform.sz)
+    object.quaternion.set(
+      transform.qx ?? 0,
+      transform.qy ?? 0,
+      transform.qz ?? 0,
+      transform.qw ?? 1,
+    )
+    object.updateMatrixWorld()
   }
 }
 

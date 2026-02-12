@@ -23,7 +23,12 @@ export const PresentationTransform = trait({
 export const NetEntity = trait({ table: '', serverId: '' })
 export const WorldObjectKind = trait({ kind: 'Player' as WorldObjectKindType })
 export const ChunkData = trait({ chunkX: 0, chunkY: 0, biomeId: 0 })
-export const BuildingData = trait({ state: 0, buildProgress: 0, buildRequired: 0 })
+export const BuildingData = trait({
+  state: 0,
+  buildProgress: 0,
+  buildRequired: 0,
+  requiredItemDefId: '0',
+})
 export const ClaimData = trait({
   radius: 0,
   tier: 0,
