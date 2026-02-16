@@ -108,7 +108,7 @@ export function createWorldRuntime(): RuntimeModule {
       streaming = new WorldStreamingRenderer(ctx.renderer.scene, ctx.renderer.materials)
       ctx.logger.info('world runtime start')
     },
-    tick(ctx: RuntimeContext) {
+    tick(ctx: RuntimeContext, dtSeconds: number) {
       const connection = ctx.net?.getConnection() ?? null
       const localIdentityHex = ctx.net?.getIdentityHex() ?? null
 
@@ -173,7 +173,7 @@ export function createWorldRuntime(): RuntimeModule {
       syncClaims(ctx, knownKeys, connection.db.claimState.iter())
       updateThirdPersonCamera(ctx, localPosition, ctx.sync?.getViewYaw() ?? 0)
 
-      streaming?.sync(ctx.world)
+      streaming?.sync(ctx.world, dtSeconds)
     },
     stop(ctx: RuntimeContext) {
       ctx.net?.removeSubscription(AOI_SUBSCRIPTION_KEY)

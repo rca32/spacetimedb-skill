@@ -3,9 +3,9 @@
   "generatedAt": "2026-02-13",
   "models": {
     "characters": {
-      "localPlayer": "/assets/models/characters/player_placeholder.glb",
-      "remotePlayer": "/assets/models/characters/player_placeholder.glb",
-      "npc": "/assets/models/characters/player_placeholder.glb"
+      "localPlayer": "/assets/models/characters/xbot.glb",
+      "remotePlayer": "/assets/models/characters/xbot.glb",
+      "npc": "/assets/models/characters/xbot.glb"
     },
     "buildings": {
       "fallback": "/assets/models/buildings/box.glb",
@@ -50,7 +50,7 @@
   },
   "preloadPriority": {
     "critical": [
-      "/assets/models/characters/player_placeholder.glb"
+      "/assets/models/characters/xbot.glb"
     ],
     "high": [
       "/assets/models/buildings/box.glb",
@@ -71,8 +71,8 @@
     ]
   },
   "notes": {
-    "source": "Models: Khronos glTF-Sample-Models (CC0-like). Audio SFX: Mixkit (Free). Music: Kevin MacLeod / Incompetech (CC-BY 3.0)",
-    "placeholder": true,
+    "source": "Models: Xbot (three.js example models) + Khronos glTF sample placeholders. Audio SFX: Mixkit (Free). Music: Kevin MacLeod / Incompetech (CC-BY 3.0)",
+    "placeholder": false,
     "licenseNote": "Kevin MacLeod music requires attribution. See https://incompetech.com",
     "replacementGuidance": "Replace with production assets from Kenney, Kaykit, or custom models. Update manifest.json paths accordingly."
   }

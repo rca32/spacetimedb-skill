@@ -51,6 +51,22 @@ type ModelTransform = InstanceTransform & {
   qw?: number
 }
 
+type CharacterMotion = 'idle' | 'walk' | 'run'
+
+type CharacterAnimator = {
+  mixer: THREE.AnimationMixer
+  actions: Map<string, THREE.AnimationAction>
+  activeAction: THREE.AnimationAction | null
+  lastPosition: THREE.Vector3
+  motion: CharacterMotion
+}
+
+const IDLE_ANIMATION_HINTS = ['idle', 'survey', 'stand', 'idle1', 'swing', 'standstill']
+const WALK_ANIMATION_HINTS = ['walk', 'walking']
+const RUN_ANIMATION_HINTS = ['run', 'running']
+const IDLE_SPEED_THRESHOLD = 0.02
+const RUN_SPEED_THRESHOLD = 3
+
 class InstancedPool {
   readonly mesh: THREE.InstancedMesh
   private readonly keyToIndex = new Map<string, number>()
@@ -140,6 +156,7 @@ export class WorldStreamingRenderer {
   private readonly npcPool: InstancedPool
   private readonly gltfObjects = new Map<string, THREE.Object3D>()
   private readonly gltfPathByKey = new Map<string, string>()
+  private readonly characterAnimators = new Map<string, CharacterAnimator>()
   private readonly pendingModelLoads = new Map<string, Promise<void>>()
   private readonly failedModelPaths = new Set<string>()
 
@@ -177,7 +194,7 @@ export class WorldStreamingRenderer {
     scene.add(this.root)
   }
 
-  sync(world: CoreWorld): void {
+  sync(world: CoreWorld, dtSeconds: number): void {
     const seenTerrain = new Set<string>()
     const seenBuildings = new Set<string>()
     const seenClaims = new Set<string>()
@@ -276,7 +293,8 @@ export class WorldStreamingRenderer {
       }
       const modelPath = manifest ? getCharacterModelPath('localPlayer', manifest) : null
 
-      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf)) {
+      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf, true)) {
+        this.updateCharacterAnimationState(key, transform, dtSeconds)
         return
       }
 
@@ -300,7 +318,8 @@ export class WorldStreamingRenderer {
       }
       const modelPath = manifest ? getCharacterModelPath('remotePlayer', manifest) : null
 
-      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf)) {
+      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf, true)) {
+        this.updateCharacterAnimationState(key, transform, dtSeconds)
         return
       }
 
@@ -322,16 +341,18 @@ export class WorldStreamingRenderer {
         qz: presentation.qz,
         qw: presentation.qw,
       }
-      // NPCs use instanced fallback geometry for stable multi-instance rendering.
-      const modelPath = null
+      const modelPath = manifest ? getCharacterModelPath('npc', manifest) : null
 
-      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf)) {
+      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf, true)) {
+        this.updateCharacterAnimationState(key, transform, dtSeconds)
         return
       }
 
       seenNpcs.add(key)
       this.npcPool.upsert(key, transform, NPC_COLOR)
     })
+
+    this.updateCharacterAnimators(dtSeconds)
 
     this.terrainPool.removeMissing(seenTerrain)
     this.buildingPool.removeMissing(seenBuildings)
@@ -356,6 +377,7 @@ export class WorldStreamingRenderer {
     this.resourcePool.removeMissing(new Set())
     this.actorPool.removeMissing(new Set())
     this.npcPool.removeMissing(new Set())
+    this.clearCharacterAnimators()
     this.pruneGltfRenderables(new Set())
   }
 
@@ -376,12 +398,16 @@ export class WorldStreamingRenderer {
     path: string,
     transform: ModelTransform,
     seenGltf: Set<string>,
+    trackAnimation = false,
   ): boolean {
     const existing = this.gltfObjects.get(key)
     const existingPath = this.gltfPathByKey.get(key)
 
     if (existing && existingPath === path) {
       this.applyModelTransform(existing, transform)
+      if (trackAnimation && !this.characterAnimators.has(key)) {
+        this.setupCharacterAnimator(key, existing, path)
+      }
       seenGltf.add(key)
       return true
     }
@@ -406,8 +432,118 @@ export class WorldStreamingRenderer {
     this.gltfRoot.add(clone)
     this.gltfObjects.set(key, clone)
     this.gltfPathByKey.set(key, path)
+    if (trackAnimation) {
+      this.setupCharacterAnimator(key, clone, path)
+    }
     seenGltf.add(key)
     return true
+  }
+
+  private updateCharacterAnimators(dtSeconds: number): void {
+    for (const animator of this.characterAnimators.values()) {
+      animator.mixer.update(dtSeconds)
+    }
+  }
+
+  private setupCharacterAnimator(key: string, object: THREE.Object3D, path: string): void {
+    const model = AssetLoader.getModel(path)
+    if (!model || model.animations.length === 0) {
+      return
+    }
+
+    const existing = this.characterAnimators.get(key)
+    if (existing) {
+      existing.mixer = new THREE.AnimationMixer(object)
+      existing.actions.clear()
+      existing.lastPosition.copy(object.position)
+      existing.motion = 'idle'
+      existing.activeAction = null
+      for (const animation of model.animations) {
+        const action = existing.mixer.clipAction(animation)
+        action.clampWhenFinished = false
+        action.setLoop(THREE.LoopRepeat, Number.POSITIVE_INFINITY)
+        existing.actions.set(animation.name, action)
+      }
+      return
+    }
+
+    const mixer = new THREE.AnimationMixer(object)
+    const actions = new Map<string, THREE.AnimationAction>()
+    for (const animation of model.animations) {
+      const action = mixer.clipAction(animation)
+      action.clampWhenFinished = false
+      action.setLoop(THREE.LoopRepeat, Number.POSITIVE_INFINITY)
+      actions.set(animation.name, action)
+    }
+
+    this.characterAnimators.set(key, {
+      mixer,
+      actions,
+      activeAction: null,
+      lastPosition: object.position.clone(),
+      motion: 'idle',
+    })
+  }
+
+  private updateCharacterAnimationState(key: string, transform: ModelTransform, dtSeconds: number): void {
+    if (dtSeconds <= 0) {
+      return
+    }
+
+    const animator = this.characterAnimators.get(key)
+    if (!animator) {
+      return
+    }
+
+    const dx = transform.x - animator.lastPosition.x
+    const dz = transform.z - animator.lastPosition.z
+    const speed = Math.sqrt(dx * dx + dz * dz) / dtSeconds
+    const nextMotion: CharacterMotion = speed > RUN_SPEED_THRESHOLD ? 'run' : speed > IDLE_SPEED_THRESHOLD ? 'walk' : 'idle'
+
+    if (animator.motion !== nextMotion) {
+      const nextAction = this.findAnimationAction(animator, nextMotion)
+      if (nextAction) {
+        nextAction.reset().play()
+        if (animator.activeAction && animator.activeAction !== nextAction) {
+          animator.activeAction.crossFadeTo(nextAction, 0.2, true)
+        }
+        nextAction.enabled = true
+        animator.activeAction = nextAction
+        animator.motion = nextMotion
+      }
+    } else if (!animator.activeAction) {
+      const fallbackAction = this.findAnimationAction(animator, nextMotion) ?? animator.actions.values().next().value
+      if (fallbackAction) {
+        fallbackAction.play()
+        animator.activeAction = fallbackAction
+      }
+    }
+
+    animator.lastPosition.set(transform.x, transform.y, transform.z)
+  }
+
+  private findAnimationAction(animator: CharacterAnimator, motion: CharacterMotion): THREE.AnimationAction | undefined {
+    const actionNames = Array.from(animator.actions.keys())
+    const names = actionNames.length > 0 ? actionNames.map((name) => name.toLowerCase()) : []
+    const candidates = motion === 'run' ? RUN_ANIMATION_HINTS : motion === 'walk' ? WALK_ANIMATION_HINTS : IDLE_ANIMATION_HINTS
+
+    for (const candidate of candidates) {
+      const index = names.findIndex((name) => name.includes(candidate))
+      if (index >= 0) {
+        const exactName = actionNames[index]
+        return animator.actions.get(exactName)
+      }
+    }
+
+    return animator.actions.values().next().value
+  }
+
+  private clearCharacterAnimators(): void {
+    for (const animator of this.characterAnimators.values()) {
+      animator.mixer.stopAllAction()
+      animator.actions.clear()
+    }
+    this.characterAnimators.clear()
   }
 
   private queueModelLoad(path: string): void {
@@ -441,6 +577,12 @@ export class WorldStreamingRenderer {
     const object = this.gltfObjects.get(key)
     if (object) {
       this.gltfRoot.remove(object)
+    }
+    const animator = this.characterAnimators.get(key)
+    if (animator) {
+      animator.mixer.stopAllAction()
+      animator.actions.clear()
+      this.characterAnimators.delete(key)
     }
     this.gltfObjects.delete(key)
     this.gltfPathByKey.delete(key)
