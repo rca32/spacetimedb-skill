@@ -25,7 +25,10 @@ function createLogger(): Logger {
   }
 }
 
-function createMockEntity(initial: { x: number; y: number; z: number }): Entity & { read: () => { x: number; y: number; z: number } } {
+function createMockEntity(initial: { x: number; y: number; z: number }): Entity & {
+  read: () => { x: number; y: number; z: number }
+  readRotation: () => { x: number; y: number; z: number; w: number }
+} {
   let pos = { ...initial }
   let rot = { x: 0, y: 0, z: 0, w: 1 }
   const entity = {
@@ -53,8 +56,12 @@ function createMockEntity(initial: { x: number; y: number; z: number }): Entity 
       }
     },
     read: () => ({ ...pos }),
+    readRotation: () => ({ ...rot }),
   }
-  return entity as unknown as Entity & { read: () => { x: number; y: number; z: number } }
+  return entity as unknown as Entity & {
+    read: () => { x: number; y: number; z: number }
+    readRotation: () => { x: number; y: number; z: number; w: number }
+  }
 }
 
 function createMockConnection(
@@ -304,18 +311,115 @@ describe('SyncEngine rollback/replay', () => {
     const localPlayer = createMockEntity({ x: 0, y: 0, z: 0 })
     const engine = new SyncEngine(createLogger())
 
-    engine.handleMouseMove(1000)
-    const yaw = engine.getViewYaw()
-    expect(Math.abs(yaw)).toBeGreaterThan(0.01)
+    engine.handleMouseMove(300)
+    const viewYaw = engine.getViewYaw()
+    expect(Math.abs(viewYaw)).toBeGreaterThan(0.01)
 
     engine.handleKeyDown('KeyW')
     engine.tick({ connection, identityHex, localPlayer, dtSeconds: 0.08 })
 
+    const rot = localPlayer.readRotation()
+    const bodyYaw = Math.atan2(2 * rot.w * rot.y, 1 - 2 * rot.y * rot.y)
+    expect(Math.abs(bodyYaw)).toBeGreaterThan(0.01)
+    expect(Math.abs(bodyYaw)).toBeLessThan(Math.abs(viewYaw))
+
     const moved = localPlayer.read()
     const distance = Math.hypot(moved.x, moved.z)
     expect(distance).toBeGreaterThan(0.01)
-    expect(Math.abs(moved.x / distance - Math.sin(yaw))).toBeLessThan(0.01)
-    expect(Math.abs(moved.z / distance + Math.cos(yaw))).toBeLessThan(0.01)
+    expect(Math.abs(moved.x / distance + Math.sin(bodyYaw))).toBeLessThan(0.01)
+    expect(Math.abs(moved.z / distance + Math.cos(bodyYaw))).toBeLessThan(0.01)
+  })
+
+  it('maps mouse deltas to third-person look directions', () => {
+    const engine = new SyncEngine(createLogger())
+    const yawBefore = engine.getViewYaw()
+    const pitchBefore = engine.getViewPitch()
+
+    engine.handleMouseMove(120, -120)
+
+    expect(engine.getViewYaw()).toBeLessThan(yawBefore)
+    expect(engine.getViewPitch()).toBeGreaterThan(pitchBefore)
+  })
+
+  it('keeps body yaw fixed while idle in coupled-when-moving mode', () => {
+    const identityHex = 'local-identity'
+    const feedbackRows: FeedbackRow[] = []
+    const sentPayloads: Array<{ requestId: string; x: number; y: number; z: number }> = []
+    const connection = createMockConnection(identityHex, feedbackRows, sentPayloads)
+    const localPlayer = createMockEntity({ x: 0, y: 0, z: 0 })
+    const engine = new SyncEngine(createLogger())
+
+    engine.handleMouseMove(450)
+    const viewYaw = engine.getViewYaw()
+    expect(Math.abs(viewYaw)).toBeGreaterThan(0.01)
+
+    engine.tick({ connection, identityHex, localPlayer, dtSeconds: 0.08 })
+    const rot = localPlayer.readRotation()
+    const bodyYaw = Math.atan2(2 * rot.w * rot.y, 1 - 2 * rot.y * rot.y)
+    expect(Math.abs(bodyYaw)).toBeLessThan(1e-6)
+  })
+
+  it('clamps view pitch to configured min/max', () => {
+    const engine = new SyncEngine(createLogger())
+    const minPitch = (-35 * Math.PI) / 180
+    const maxPitch = (65 * Math.PI) / 180
+
+    engine.handleMouseMove(0, 1_000_000)
+    expect(engine.getViewPitch()).toBeLessThanOrEqual(maxPitch)
+
+    engine.handleMouseMove(0, -1_000_000)
+    expect(engine.getViewPitch()).toBeGreaterThan(minPitch - 1e-6)
+  })
+
+  it('suppresses immediate movement when yaw turns sharply', () => {
+    const identityHex = 'local-identity'
+    const feedbackRows: FeedbackRow[] = []
+    const sentPayloads: Array<{ requestId: string; x: number; y: number; z: number }> = []
+    const connection = createMockConnection(identityHex, feedbackRows, sentPayloads)
+    const localPlayer = createMockEntity({ x: 0, y: 0, z: 0 })
+    const engine = new SyncEngine(createLogger())
+
+    engine.handleKeyDown('KeyW')
+    engine.tick({ connection, identityHex, localPlayer, dtSeconds: 0.08 })
+    const before = localPlayer.read()
+
+    engine.handleMouseMove(2200)
+    engine.tick({ connection, identityHex, localPlayer, dtSeconds: 0.08 })
+    const after = localPlayer.read()
+
+    const frameDistance = Math.hypot(after.x - before.x, after.z - before.z)
+    expect(frameDistance).toBeLessThan(0.01)
+  })
+
+  it('never moves opposite to camera forward while turning', () => {
+    const identityHex = 'local-identity'
+    const feedbackRows: FeedbackRow[] = []
+    const sentPayloads: Array<{ requestId: string; x: number; y: number; z: number }> = []
+    const connection = createMockConnection(identityHex, feedbackRows, sentPayloads)
+    const localPlayer = createMockEntity({ x: 0, y: 0, z: 0 })
+    const engine = new SyncEngine(createLogger())
+
+    engine.handleKeyDown('KeyW')
+    engine.tick({ connection, identityHex, localPlayer, dtSeconds: 0.08 })
+    engine.handleMouseMove(2200)
+
+    for (let i = 0; i < 20; i += 1) {
+      const before = localPlayer.read()
+      engine.tick({ connection, identityHex, localPlayer, dtSeconds: 0.08 })
+      const after = localPlayer.read()
+      const dx = after.x - before.x
+      const dz = after.z - before.z
+      const distance = Math.hypot(dx, dz)
+      if (distance <= 1e-6) {
+        continue
+      }
+
+      const viewYaw = engine.getViewYaw()
+      const forwardX = -Math.sin(viewYaw)
+      const forwardZ = -Math.cos(viewYaw)
+      const forwardDot = (dx * forwardX + dz * forwardZ) / distance
+      expect(forwardDot).toBeGreaterThan(-1e-3)
+    }
   })
 
   it('ignores stale feedback from previous session namespace', () => {

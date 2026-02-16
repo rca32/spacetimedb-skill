@@ -47,9 +47,9 @@ export async function bootstrap(root: HTMLElement | null): Promise<void> {
   context.appState.transition('Connecting')
 
   const modules: RuntimeModule[] = [
-    createCoreRuntime(),
     createNetRuntime(),
     createSyncRuntime(),
+    createCoreRuntime(),
     createWorldRuntime(),
     createCombatRuntime(),
     createInventoryTradeRuntime(),

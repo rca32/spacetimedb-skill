@@ -19,6 +19,7 @@ import {
   Rotation,
   WorldObjectKind,
 } from '../core/traits'
+import { ThirdPersonCameraController } from './third-person-camera'
 import { RuntimeContext, RuntimeModule } from './types'
 
 const AOI_SUBSCRIPTION_KEY = 'world-aoi'
@@ -29,10 +30,6 @@ const CHUNK_SIZE = 16
 const ENABLE_WORLD_AOI_SUBSCRIPTION = (import.meta.env.VITE_ENABLE_WORLD_AOI_SUB ?? '1') === '1'
 const AOI_UPDATE_MIN_INTERVAL_MS = 500
 const AOI_REANCHOR_DISTANCE = CHUNK_SIZE * 1.5
-const CAMERA_FOLLOW_DISTANCE = 5.5
-const CAMERA_FOLLOW_HEIGHT = 2.0
-const CAMERA_FOLLOW_LERP = 0.12
-const CAMERA_LOOK_AT_HEIGHT = 1.0
 
 type TransformStateRow = {
   entityId: unknown
@@ -95,9 +92,10 @@ type ClaimStateRow = {
 export function createWorldRuntime(): RuntimeModule {
   const knownKeys = new Map<string, Set<string>>()
   let streaming: WorldStreamingRenderer | null = null
+  let cameraController: ThirdPersonCameraController | null = null
   let currentAoiHash = ''
   let localRegionId: bigint | null = null
-  let localPosition = { x: 0, z: 0 }
+  let localPosition = { x: 0, y: 0, z: 0 }
   let aoiAnchorPosition = { x: 0, z: 0 }
   let lastAoiUpdateAtMs = 0
   let lastConnectionActive = false
@@ -106,11 +104,12 @@ export function createWorldRuntime(): RuntimeModule {
     name: 'WorldRuntime',
     start(ctx: RuntimeContext) {
       streaming = new WorldStreamingRenderer(ctx.renderer.scene, ctx.renderer.materials)
+      cameraController = new ThirdPersonCameraController()
       ctx.logger.info('world runtime start')
     },
     tick(ctx: RuntimeContext, dtSeconds: number) {
       const connection = ctx.net?.getConnection() ?? null
-      const localIdentityHex = ctx.net?.getIdentityHex() ?? null
+      const localIdentityHex = normalizeIdentityHex(ctx.net?.getIdentityHex() ?? null)
 
       if (!connection || !connection.isActive) {
         if (lastConnectionActive) {
@@ -118,8 +117,10 @@ export function createWorldRuntime(): RuntimeModule {
           streaming?.clear()
           currentAoiHash = ''
           localRegionId = null
+          localPosition = { x: 0, y: 0, z: 0 }
           aoiAnchorPosition = { x: 0, z: 0 }
           lastAoiUpdateAtMs = 0
+          cameraController?.reset()
           ctx.net?.removeSubscription(AOI_SUBSCRIPTION_KEY)
         }
         lastConnectionActive = false
@@ -171,7 +172,16 @@ export function createWorldRuntime(): RuntimeModule {
       syncResourceState(ctx, knownKeys, connection.db.resourceNode.iter())
       syncTerrainChunks(ctx, knownKeys, connection.db.terrainChunk.iter())
       syncClaims(ctx, knownKeys, connection.db.claimState.iter())
-      updateThirdPersonCamera(ctx, localPosition, ctx.sync?.getViewYaw() ?? 0)
+      cameraController?.update({
+        camera: ctx.renderer.camera,
+        scene: ctx.renderer.scene,
+        targetX: localPosition.x,
+        targetY: localPosition.y,
+        targetZ: localPosition.z,
+        viewYaw: ctx.sync?.getViewYaw() ?? 0,
+        viewPitch: ctx.sync?.getViewPitch() ?? 0,
+        dtSeconds,
+      })
 
       streaming?.sync(ctx.world, dtSeconds)
     },
@@ -180,6 +190,7 @@ export function createWorldRuntime(): RuntimeModule {
       clearWorld(ctx, knownKeys)
       streaming?.dispose(ctx.renderer.scene)
       streaming = null
+      cameraController = null
       ctx.logger.info('world runtime stop')
     },
   }
@@ -190,16 +201,17 @@ function syncTransformState(
   knownKeys: Map<string, Set<string>>,
   rows: Iterable<TransformStateRow>,
   localIdentityHex: string | null,
-): { x: number; z: number } | null {
+): { x: number; y: number; z: number } | null {
   const table = 'transform_state'
   const seen = new Set<string>()
-  let localPos: { x: number; z: number } | null = null
+  let localPos: { x: number; y: number; z: number } | null = null
 
   for (const row of rows) {
     const entityHex = toKeyString(row.entityId)
+    const normalizedEntityHex = normalizeIdentityHex(entityHex)
     const key = `${table}:${entityHex}`
     seen.add(key)
-    const isLocal = localIdentityHex !== null && entityHex === localIdentityHex
+    const isLocal = localIdentityHex !== null && normalizedEntityHex === localIdentityHex
 
     upsertWorldEntity(ctx, key, (entity, isNew) => {
       entity.add(NetEntity, WorldObjectKind, Position, Rotation, PresentationTransform)
@@ -234,6 +246,7 @@ function syncTransformState(
         const localPosition = entity.get(Position)
         localPos = {
           x: localPosition?.x ?? rowPos.x,
+          y: localPosition?.y ?? rowPos.y,
           z: localPosition?.z ?? rowPos.z,
         }
       } else {
@@ -474,11 +487,22 @@ function quatFromArray(values: number[]): { x: number; y: number; z: number; w: 
 
 function findLocalSession(rows: Iterable<PlayerSessionViewRow>, localIdentityHex: string): PlayerSessionViewRow | null {
   for (const row of rows) {
-    if (toKeyString(row.identity) === localIdentityHex) {
+    if (normalizeIdentityHex(toKeyString(row.identity)) === localIdentityHex) {
       return row
     }
   }
   return null
+}
+
+function normalizeIdentityHex(value: string | null): string | null {
+  if (value === null) {
+    return null
+  }
+  const trimmed = value.trim()
+  if (trimmed.length === 0) {
+    return null
+  }
+  return trimmed.toLowerCase().replace(/^0x/, '')
 }
 
 function seededPosition(seed: bigint): { x: number; z: number } {
@@ -486,25 +510,6 @@ function seededPosition(seed: bigint): { x: number; z: number } {
   const x = (numeric % 128) - 64
   const z = (Math.floor(numeric / 128) % 128) - 64
   return { x, z }
-}
-
-function updateThirdPersonCamera(
-  ctx: RuntimeContext,
-  localPosition: { x: number; z: number },
-  viewYaw: number,
-): void {
-  const camera = ctx.renderer.camera
-  const yaw = Number.isFinite(viewYaw) ? viewYaw : 0
-  const sinYaw = Math.sin(yaw)
-  const cosYaw = Math.cos(yaw)
-  const desiredX = localPosition.x - sinYaw * CAMERA_FOLLOW_DISTANCE
-  const desiredY = CAMERA_FOLLOW_HEIGHT
-  const desiredZ = localPosition.z + cosYaw * CAMERA_FOLLOW_DISTANCE
-
-  camera.position.x += (desiredX - camera.position.x) * CAMERA_FOLLOW_LERP
-  camera.position.y += (desiredY - camera.position.y) * CAMERA_FOLLOW_LERP
-  camera.position.z += (desiredZ - camera.position.z) * CAMERA_FOLLOW_LERP
-  camera.lookAt(localPosition.x, CAMERA_LOOK_AT_HEIGHT, localPosition.z)
 }
 
 function shouldReanchorAoi(

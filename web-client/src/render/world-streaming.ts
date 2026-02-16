@@ -50,7 +50,7 @@ type InstanceTransform = {
   sz: number
 }
 
-type ModelTransform = InstanceTransform & {
+export type ModelTransform = InstanceTransform & {
   qx?: number
   qy?: number
   qz?: number
@@ -218,6 +218,12 @@ export class WorldStreamingRenderer {
     this.resourcePool = new InstancedPool(resourceGeometry, materials.resource, 4096)
     this.actorPool = new InstancedPool(actorGeometry, materials.actor, 1024)
     this.npcPool = new InstancedPool(actorGeometry, materials.npc, 1024)
+    this.terrainPool.mesh.userData.cameraObstacle = true
+    this.buildingPool.mesh.userData.cameraObstacle = true
+    this.claimPool.mesh.userData.cameraObstacle = false
+    this.resourcePool.mesh.userData.cameraObstacle = true
+    this.actorPool.mesh.userData.cameraObstacle = false
+    this.npcPool.mesh.userData.cameraObstacle = false
     this.terrainPool.mesh.frustumCulled = false
     this.buildingPool.mesh.frustumCulled = false
     this.claimPool.mesh.frustumCulled = false
@@ -475,6 +481,12 @@ export class WorldStreamingRenderer {
     }
 
     const clone = SkeletonUtils.clone(model.scene)
+    const table = tableFromWorldKey(key)
+    const cameraObstacle = table === 'building_state' || table === 'resource_node'
+    clone.userData.cameraObstacle = cameraObstacle
+    clone.traverse((node) => {
+      node.userData.cameraObstacle = cameraObstacle
+    })
     clone.visible = true
     this.applyModelTransform(clone, transform)
     this.gltfRoot.add(clone)
@@ -624,14 +636,14 @@ export class WorldStreamingRenderer {
       this.resolveActionByAlias(animator, aliases.walk_forward) ?? this.findAnimationAction(animator, 'walk')
     const runForward =
       this.resolveActionByAlias(animator, aliases.run_forward) ?? this.findAnimationAction(animator, 'run')
-    const walkBackward = this.resolveActionByAlias(animator, aliases.walk_backward) ?? walkForward
-    const walkLeft = this.resolveActionByAlias(animator, aliases.walk_left) ?? walkForward
-    const walkRight = this.resolveActionByAlias(animator, aliases.walk_right) ?? walkForward
 
     if (!idle || !walkForward || !runForward) {
       return
     }
 
+    const walkBackward = this.resolveActionByAlias(animator, aliases.walk_backward) ?? walkForward
+    const walkLeft = this.resolveActionByAlias(animator, aliases.walk_left) ?? walkForward
+    const walkRight = this.resolveActionByAlias(animator, aliases.walk_right) ?? walkForward
     const runBackward = this.resolveActionByAlias(animator, aliases.run_backward) ?? runForward
     const runLeft = this.resolveActionByAlias(animator, aliases.run_left) ?? runForward
     const runRight = this.resolveActionByAlias(animator, aliases.run_right) ?? runForward
@@ -929,7 +941,15 @@ function normalizeAnimationName(value: string): string {
   return value.toLowerCase().replace(/[\s_-]+/g, '')
 }
 
-function computeDirectionalBlend(
+function tableFromWorldKey(key: string): string {
+  const separator = key.indexOf(':')
+  if (separator < 0) {
+    return key
+  }
+  return key.slice(0, separator)
+}
+
+export function computeDirectionalBlend(
   dx: number,
   dz: number,
   transform: ModelTransform,
@@ -945,11 +965,16 @@ function computeDirectionalBlend(
     transform.qz ?? 0,
     transform.qw ?? 1,
   ).normalize()
+  if ((transform.yawOffset ?? 0) !== 0) {
+    TMP_YAW_OFFSET_QUAT.setFromAxisAngle(WORLD_UP_AXIS, transform.yawOffset ?? 0)
+    TMP_MODEL_QUAT.multiply(TMP_YAW_OFFSET_QUAT)
+  }
   TMP_INVERSE_MODEL_QUAT.copy(TMP_MODEL_QUAT).invert()
   TMP_LOCAL_MOVE.copy(TMP_WORLD_MOVE).applyQuaternion(TMP_INVERSE_MODEL_QUAT)
 
-  const forward = Math.max(0, -TMP_LOCAL_MOVE.z)
-  const backward = Math.max(0, TMP_LOCAL_MOVE.z)
+  // character_gamer clips are authored with +Z as forward in local clip space.
+  const forward = Math.max(0, TMP_LOCAL_MOVE.z)
+  const backward = Math.max(0, -TMP_LOCAL_MOVE.z)
   const left = Math.max(0, -TMP_LOCAL_MOVE.x)
   const right = Math.max(0, TMP_LOCAL_MOVE.x)
   const sum = forward + backward + left + right

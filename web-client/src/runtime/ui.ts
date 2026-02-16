@@ -1,6 +1,6 @@
 import { HudLayer } from '../ui/hud'
 import { PanelLayer } from '../ui/panels'
-import { IsLocalPlayer, Position } from '../core/traits'
+import { IsLocalPlayer, Position, Rotation } from '../core/traits'
 import type {
   BuildClaimHousingSnapshot,
   InventoryTradeSnapshot,
@@ -186,7 +186,18 @@ function formatSyncDiagnostics(ctx: RuntimeContext): string {
   if (!d) {
     return 'n/a'
   }
-  return `ack=${d.ackTotal}/${d.sentTotal} pend=${d.pendingCount} timeout=${d.timeoutExpiredTotal} skip(s=${d.skippedSession},i=${d.skippedIdentity},o=${d.skippedDuplicateOrOld})`
+  const viewYaw = ctx.sync?.getViewYaw() ?? 0
+  const viewPitch = ctx.sync?.getViewPitch() ?? 0
+  const localPlayer = ctx.world.ecs.queryFirst(IsLocalPlayer, Rotation)
+  const localRot = localPlayer?.get(Rotation)
+  const localYaw = localRot ? quatYawFromY(localRot.y, localRot.w) : null
+  const localState = localYaw === null ? 'none' : localYaw.toFixed(2)
+
+  return `ack=${d.ackTotal}/${d.sentTotal} pend=${d.pendingCount} timeout=${d.timeoutExpiredTotal} skip(s=${d.skippedSession},i=${d.skippedIdentity},o=${d.skippedDuplicateOrOld}) yaw(v=${viewYaw.toFixed(2)},l=${localState}) pitch(v=${viewPitch.toFixed(2)})`
+}
+
+function quatYawFromY(y: number, w: number): number {
+  return Math.atan2(2 * w * y, 1 - 2 * y * y)
 }
 
 function formatSubscriptionDiagnostics(snapshot: NetSubscriptionDiagnosticsSnapshot | null): string {

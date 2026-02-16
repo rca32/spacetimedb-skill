@@ -37,6 +37,7 @@ export function createSyncRuntime(): RuntimeModule {
             skippedStabilityCorrection: 0,
           },
         getViewYaw: () => engine?.getViewYaw() ?? 0,
+        getViewPitch: () => engine?.getViewPitch() ?? 0,
       }
 
       onKeyDown = (event) => {
@@ -59,7 +60,7 @@ export function createSyncRuntime(): RuntimeModule {
         if (!pointerLocked && !dragTurning) {
           return
         }
-        engine?.handleMouseMove(event.movementX)
+        engine?.handleMouseMove(event.movementX, event.movementY)
       }
       onMouseUp = (event) => {
         if (event.button === 0) {

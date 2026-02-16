@@ -56,9 +56,19 @@ interface SyncTickInput {
   dtSeconds: number
 }
 
+type BodyCouplingMode = 'coupled' | 'coupled_when_moving' | 'decoupled'
+
 interface SyncOptions {
   moveSpeed: number
   mouseTurnSensitivityRad: number
+  mousePitchSensitivityRad: number
+  viewPitchMinRad: number
+  viewPitchMaxRad: number
+  viewPitchDefaultRad: number
+  bodyCouplingMode: BodyCouplingMode
+  bodyTurnSpeedRadPerSec: number
+  turnSlowdownStartRad: number
+  turnStopRad: number
   sendIntervalSeconds: number
   pendingTimeoutMs: number
   historyCapacity: number
@@ -200,9 +210,13 @@ export class SyncEngine {
   private readonly bootNonce = Math.floor(Math.random() * 0xffff_ffff)
   private readonly bootNonceStr = this.bootNonce.toString(36)
   private viewYaw = 0
+  private viewPitch = 0
+  private bodyYaw = 0
+  private bodyYawInitialized = false
 
   constructor(private readonly logger: Logger) {
     this.options = loadSyncOptions()
+    this.viewPitch = this.options.viewPitchDefaultRad
     this.inputBuffer = new SeqRingBuffer<InputCommand>(this.options.historyCapacity)
     this.predictedBuffer = new SeqRingBuffer<PredictedState>(this.options.historyCapacity)
   }
@@ -226,15 +240,25 @@ export class SyncEngine {
     this.pressed.clear()
   }
 
-  handleMouseMove(deltaX: number): void {
-    if (!Number.isFinite(deltaX) || Math.abs(deltaX) <= Number.EPSILON) {
-      return
+  handleMouseMove(deltaX: number, deltaY = 0): void {
+    if (Number.isFinite(deltaX) && Math.abs(deltaX) > Number.EPSILON) {
+      this.viewYaw = normalizeAngle(this.viewYaw - deltaX * this.options.mouseTurnSensitivityRad)
     }
-    this.viewYaw = normalizeAngle(this.viewYaw + deltaX * this.options.mouseTurnSensitivityRad)
+    if (Number.isFinite(deltaY) && Math.abs(deltaY) > Number.EPSILON) {
+      this.viewPitch = clampNumber(
+        this.viewPitch - deltaY * this.options.mousePitchSensitivityRad,
+        this.options.viewPitchMinRad,
+        this.options.viewPitchMaxRad,
+      )
+    }
   }
 
   getViewYaw(): number {
     return this.viewYaw
+  }
+
+  getViewPitch(): number {
+    return this.viewPitch
   }
 
   resetAll(): void {
@@ -321,26 +345,59 @@ export class SyncEngine {
       return
     }
 
-    writeYawRotation(localPlayer, this.viewYaw)
-
     const axis = movementAxis(this.pressed)
-    if (axis.x === 0 && axis.z === 0) {
+    const hasMovementInput = axis.x !== 0 || axis.z !== 0
+
+    if (!this.bodyYawInitialized) {
+      const existingYaw = readYawRotation(localPlayer)
+      this.bodyYaw = normalizeAngle(existingYaw ?? this.viewYaw)
+      this.bodyYawInitialized = true
+    }
+
+    if (shouldRotateBodyForMode(this.options.bodyCouplingMode, hasMovementInput)) {
+      this.stepBodyYaw(dtSeconds)
+    }
+    writeYawRotation(localPlayer, this.bodyYaw)
+
+    if (!hasMovementInput) {
       return
     }
 
-    const worldAxis = rotateMovementAxis(axis, this.viewYaw)
+    const yawError = yawErrorForMovementScale(this.options.bodyCouplingMode, this.viewYaw, this.bodyYaw)
+    const moveSpeedScale = moveSpeedScaleFromYawError(yawError, this.options)
+    if (moveSpeedScale <= Number.EPSILON) {
+      return
+    }
+
+    const movementYaw = movementYawForMode(this.options.bodyCouplingMode, this.viewYaw, this.bodyYaw)
+    const worldAxis = rotateMovementAxis(axis, movementYaw)
 
     const len = Math.hypot(worldAxis.x, worldAxis.z)
     if (len <= Number.EPSILON) {
       return
     }
 
-    const scale = (this.options.moveSpeed * dtSeconds) / len
+    const scale = (this.options.moveSpeed * moveSpeedScale * dtSeconds) / len
     writePosition(localPlayer, {
       x: current.x + worldAxis.x * scale,
       y: current.y,
       z: current.z + worldAxis.z * scale,
     })
+  }
+
+  private stepBodyYaw(dtSeconds: number): void {
+    if (dtSeconds <= Number.EPSILON) {
+      return
+    }
+
+    const maxStep = this.options.bodyTurnSpeedRadPerSec * dtSeconds
+    if (!Number.isFinite(maxStep) || maxStep <= Number.EPSILON) {
+      return
+    }
+
+    const delta = normalizeAngle(this.viewYaw - this.bodyYaw)
+    const step = Math.max(-maxStep, Math.min(maxStep, delta))
+    this.bodyYaw = normalizeAngle(this.bodyYaw + step)
   }
 
   private flushMoveCommand(
@@ -621,13 +678,36 @@ export class SyncEngine {
     this.sessionCounter += 1
     this.nextSeq = 0
     this.viewYaw = 0
+    this.viewPitch = this.options.viewPitchDefaultRad
+    this.bodyYaw = 0
+    this.bodyYawInitialized = false
   }
 }
 
 function loadSyncOptions(): SyncOptions {
+  const viewPitchMinRad = (envNumber('VITE_SYNC_VIEW_PITCH_MIN_DEG', -35) * Math.PI) / 180
+  const rawViewPitchMaxRad = (envNumber('VITE_SYNC_VIEW_PITCH_MAX_DEG', 65) * Math.PI) / 180
+  const viewPitchMaxRad = Math.max(viewPitchMinRad + 0.01, rawViewPitchMaxRad)
+  const viewPitchDefaultRad = clampNumber(
+    (envNumber('VITE_SYNC_VIEW_PITCH_DEFAULT_DEG', 18) * Math.PI) / 180,
+    viewPitchMinRad,
+    viewPitchMaxRad,
+  )
+  const turnSlowdownStartRad = (envNumber('VITE_SYNC_TURN_SLOWDOWN_START_DEG', 15) * Math.PI) / 180
+  const rawTurnStopRad = (envNumber('VITE_SYNC_TURN_STOP_DEG', 55) * Math.PI) / 180
+  const turnStopRad = Math.max(turnSlowdownStartRad + 0.01, rawTurnStopRad)
+
   return {
     moveSpeed: envNumber('VITE_SYNC_MOVE_SPEED', 5.5),
     mouseTurnSensitivityRad: (envNumber('VITE_SYNC_MOUSE_TURN_SENS_DEG', 0.12) * Math.PI) / 180,
+    mousePitchSensitivityRad: (envNumber('VITE_SYNC_MOUSE_PITCH_SENS_DEG', 0.1) * Math.PI) / 180,
+    viewPitchMinRad,
+    viewPitchMaxRad,
+    viewPitchDefaultRad,
+    bodyCouplingMode: parseBodyCouplingMode(import.meta.env.VITE_SYNC_BODY_COUPLING_MODE),
+    bodyTurnSpeedRadPerSec: (envNumber('VITE_SYNC_BODY_TURN_SPEED_DEG', 210) * Math.PI) / 180,
+    turnSlowdownStartRad,
+    turnStopRad,
     sendIntervalSeconds: envNumber('VITE_SYNC_SEND_INTERVAL_SECONDS', 0.08),
     pendingTimeoutMs: envNumber('VITE_SYNC_PENDING_TIMEOUT_MS', 4_000),
     historyCapacity: envInt('VITE_SYNC_HISTORY_CAPACITY', 512, 64, 4096),
@@ -652,6 +732,14 @@ function readPosition(entity: Entity): Vec3 | null {
     return null
   }
   return { x: pos.x, y: pos.y, z: pos.z }
+}
+
+function readYawRotation(entity: Entity): number | null {
+  const rot = entity.get(Rotation)
+  if (!rot) {
+    return null
+  }
+  return normalizeAngle(Math.atan2(2 * rot.w * rot.y, 1 - 2 * rot.y * rot.y))
 }
 
 function writePosition(entity: Entity, position: Vec3): void {
@@ -686,8 +774,8 @@ function rotateMovementAxis(axis: { x: number; z: number }, yaw: number): { x: n
   const sinYaw = Math.sin(yaw)
   const cosYaw = Math.cos(yaw)
   return {
-    x: axis.x * cosYaw - axis.z * sinYaw,
-    z: axis.x * sinYaw + axis.z * cosYaw,
+    x: axis.x * cosYaw + axis.z * sinYaw,
+    z: -axis.x * sinYaw + axis.z * cosYaw,
   }
 }
 
@@ -883,6 +971,60 @@ function speedAdaptFactor(speedMps: number, options: SyncOptions): number {
   return (speedMps - options.speedAdaptStartMps) / (options.speedAdaptMaxMps - options.speedAdaptStartMps)
 }
 
+function moveSpeedScaleFromYawError(yawErrorRad: number, options: SyncOptions): number {
+  if (yawErrorRad <= options.turnSlowdownStartRad) {
+    return 1
+  }
+  if (yawErrorRad >= options.turnStopRad) {
+    return 0
+  }
+
+  const span = options.turnStopRad - options.turnSlowdownStartRad
+  if (span <= Number.EPSILON) {
+    return 0
+  }
+  const t = (yawErrorRad - options.turnSlowdownStartRad) / span
+  return 1 - t
+}
+
+function parseBodyCouplingMode(raw: unknown): BodyCouplingMode {
+  if (typeof raw !== 'string') {
+    return 'coupled_when_moving'
+  }
+  const value = raw.trim().toLowerCase()
+  if (value === 'coupled' || value === 'coupled_when_moving' || value === 'decoupled') {
+    return value
+  }
+  if (value === 'coupled-when-moving' || value === 'coupledwhenmoving') {
+    return 'coupled_when_moving'
+  }
+  return 'coupled_when_moving'
+}
+
+function shouldRotateBodyForMode(mode: BodyCouplingMode, hasMovementInput: boolean): boolean {
+  if (mode === 'coupled') {
+    return true
+  }
+  if (mode === 'coupled_when_moving') {
+    return hasMovementInput
+  }
+  return false
+}
+
+function movementYawForMode(mode: BodyCouplingMode, viewYaw: number, bodyYaw: number): number {
+  if (mode === 'decoupled') {
+    return viewYaw
+  }
+  return bodyYaw
+}
+
+function yawErrorForMovementScale(mode: BodyCouplingMode, viewYaw: number, bodyYaw: number): number {
+  if (mode === 'decoupled') {
+    return 0
+  }
+  return Math.abs(normalizeAngle(viewYaw - bodyYaw))
+}
+
 function envNumber(name: string, fallback: number): number {
   const raw = import.meta.env[name]
   if (raw === undefined || raw === null || raw === '') {
@@ -895,6 +1037,10 @@ function envNumber(name: string, fallback: number): number {
 function envInt(name: string, fallback: number, min: number, max: number): number {
   const rounded = Math.round(envNumber(name, fallback))
   return Math.max(min, Math.min(max, rounded))
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
 }
 
 function normalizeAngle(angle: number): number {

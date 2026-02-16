@@ -53,35 +53,35 @@
       "localPlayer": {
         "idle": "idle",
         "walk_forward": "walk",
-        "walk_backward": "wheelchair-move-back",
-        "walk_left": "wheelchair-move-left",
-        "walk_right": "wheelchair-move-right",
+        "walk_backward": "walk",
+        "walk_left": "walk",
+        "walk_right": "walk",
         "run_forward": "sprint",
-        "run_backward": "wheelchair-move-back",
-        "run_left": "wheelchair-move-left",
-        "run_right": "wheelchair-move-right"
+        "run_backward": "sprint",
+        "run_left": "sprint",
+        "run_right": "sprint"
       },
       "remotePlayer": {
         "idle": "idle",
         "walk_forward": "walk",
-        "walk_backward": "wheelchair-move-back",
-        "walk_left": "wheelchair-move-left",
-        "walk_right": "wheelchair-move-right",
+        "walk_backward": "walk",
+        "walk_left": "walk",
+        "walk_right": "walk",
         "run_forward": "sprint",
-        "run_backward": "wheelchair-move-back",
-        "run_left": "wheelchair-move-left",
-        "run_right": "wheelchair-move-right"
+        "run_backward": "sprint",
+        "run_left": "sprint",
+        "run_right": "sprint"
       },
       "npc": {
         "idle": "idle",
         "walk_forward": "walk",
-        "walk_backward": "wheelchair-move-back",
-        "walk_left": "wheelchair-move-left",
-        "walk_right": "wheelchair-move-right",
+        "walk_backward": "walk",
+        "walk_left": "walk",
+        "walk_right": "walk",
         "run_forward": "sprint",
-        "run_backward": "wheelchair-move-back",
-        "run_left": "wheelchair-move-left",
-        "run_right": "wheelchair-move-right"
+        "run_backward": "sprint",
+        "run_left": "sprint",
+        "run_right": "sprint"
       }
     }
   },

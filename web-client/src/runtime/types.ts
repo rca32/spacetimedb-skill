@@ -600,6 +600,7 @@ export interface RuntimeContext {
   sync?: {
     getDiagnostics: () => SyncDiagnosticsSnapshot
     getViewYaw: () => number
+    getViewPitch: () => number
   }
   frame: number
 }
