@@ -599,6 +599,7 @@ export interface RuntimeContext {
   socialNpcQuest?: SocialNpcQuestRuntimeBridge
   sync?: {
     getDiagnostics: () => SyncDiagnosticsSnapshot
+    getViewYaw: () => number
   }
   frame: number
 }

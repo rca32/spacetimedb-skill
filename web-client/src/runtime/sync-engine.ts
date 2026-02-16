@@ -1,7 +1,7 @@
 import { Entity } from 'koota'
 import type { Logger } from '../infra/logging'
 import { DbConnection } from '../module_bindings'
-import { Position } from '../core/traits'
+import { Position, Rotation } from '../core/traits'
 
 interface Vec3 {
   x: number
@@ -58,6 +58,7 @@ interface SyncTickInput {
 
 interface SyncOptions {
   moveSpeed: number
+  mouseTurnSensitivityRad: number
   sendIntervalSeconds: number
   pendingTimeoutMs: number
   historyCapacity: number
@@ -198,6 +199,7 @@ export class SyncEngine {
 
   private readonly bootNonce = Math.floor(Math.random() * 0xffff_ffff)
   private readonly bootNonceStr = this.bootNonce.toString(36)
+  private viewYaw = 0
 
   constructor(private readonly logger: Logger) {
     this.options = loadSyncOptions()
@@ -222,6 +224,17 @@ export class SyncEngine {
 
   handleWindowBlur(): void {
     this.pressed.clear()
+  }
+
+  handleMouseMove(deltaX: number): void {
+    if (!Number.isFinite(deltaX) || Math.abs(deltaX) <= Number.EPSILON) {
+      return
+    }
+    this.viewYaw = normalizeAngle(this.viewYaw + deltaX * this.options.mouseTurnSensitivityRad)
+  }
+
+  getViewYaw(): number {
+    return this.viewYaw
   }
 
   resetAll(): void {
@@ -308,21 +321,25 @@ export class SyncEngine {
       return
     }
 
+    writeYawRotation(localPlayer, this.viewYaw)
+
     const axis = movementAxis(this.pressed)
     if (axis.x === 0 && axis.z === 0) {
       return
     }
 
-    const len = Math.hypot(axis.x, axis.z)
+    const worldAxis = rotateMovementAxis(axis, this.viewYaw)
+
+    const len = Math.hypot(worldAxis.x, worldAxis.z)
     if (len <= Number.EPSILON) {
       return
     }
 
     const scale = (this.options.moveSpeed * dtSeconds) / len
     writePosition(localPlayer, {
-      x: current.x + axis.x * scale,
+      x: current.x + worldAxis.x * scale,
       y: current.y,
-      z: current.z + axis.z * scale,
+      z: current.z + worldAxis.z * scale,
     })
   }
 
@@ -603,12 +620,14 @@ export class SyncEngine {
     this.pendingWarnSuppressedCount = 0
     this.sessionCounter += 1
     this.nextSeq = 0
+    this.viewYaw = 0
   }
 }
 
 function loadSyncOptions(): SyncOptions {
   return {
     moveSpeed: envNumber('VITE_SYNC_MOVE_SPEED', 5.5),
+    mouseTurnSensitivityRad: (envNumber('VITE_SYNC_MOUSE_TURN_SENS_DEG', 0.12) * Math.PI) / 180,
     sendIntervalSeconds: envNumber('VITE_SYNC_SEND_INTERVAL_SECONDS', 0.08),
     pendingTimeoutMs: envNumber('VITE_SYNC_PENDING_TIMEOUT_MS', 4_000),
     historyCapacity: envInt('VITE_SYNC_HISTORY_CAPACITY', 512, 64, 4096),
@@ -643,6 +662,16 @@ function writePosition(entity: Entity, position: Vec3): void {
   })
 }
 
+function writeYawRotation(entity: Entity, yaw: number): void {
+  const halfYaw = yaw * 0.5
+  entity.set(Rotation, {
+    x: 0,
+    y: Math.sin(halfYaw),
+    z: 0,
+    w: Math.cos(halfYaw),
+  })
+}
+
 function movementAxis(pressed: Set<string>): { x: number; z: number } {
   const x =
     (pressed.has('KeyD') || pressed.has('ArrowRight') ? 1 : 0) -
@@ -651,6 +680,15 @@ function movementAxis(pressed: Set<string>): { x: number; z: number } {
     (pressed.has('KeyS') || pressed.has('ArrowDown') ? 1 : 0) -
     (pressed.has('KeyW') || pressed.has('ArrowUp') ? 1 : 0)
   return { x, z }
+}
+
+function rotateMovementAxis(axis: { x: number; z: number }, yaw: number): { x: number; z: number } {
+  const sinYaw = Math.sin(yaw)
+  const cosYaw = Math.cos(yaw)
+  return {
+    x: axis.x * cosYaw - axis.z * sinYaw,
+    z: axis.x * sinYaw + axis.z * cosYaw,
+  }
 }
 
 function isMovementCode(code: string): boolean {
@@ -857,4 +895,18 @@ function envNumber(name: string, fallback: number): number {
 function envInt(name: string, fallback: number, min: number, max: number): number {
   const rounded = Math.round(envNumber(name, fallback))
   return Math.max(min, Math.min(max, rounded))
+}
+
+function normalizeAngle(angle: number): number {
+  if (!Number.isFinite(angle)) {
+    return 0
+  }
+  const twoPi = Math.PI * 2
+  let normalized = angle % twoPi
+  if (normalized > Math.PI) {
+    normalized -= twoPi
+  } else if (normalized < -Math.PI) {
+    normalized += twoPi
+  }
+  return normalized
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import type { Entity } from 'koota'
 import type { Logger } from '../infra/logging'
 import type { DbConnection } from '../module_bindings'
+import { Position, Rotation } from '../core/traits'
 import { SeqRingBuffer, SyncEngine } from './sync-engine'
 
 type FeedbackRow = {
@@ -26,10 +27,30 @@ function createLogger(): Logger {
 
 function createMockEntity(initial: { x: number; y: number; z: number }): Entity & { read: () => { x: number; y: number; z: number } } {
   let pos = { ...initial }
+  let rot = { x: 0, y: 0, z: 0, w: 1 }
   const entity = {
-    get: () => ({ ...pos }),
-    set: (_trait: unknown, next: { x: number; y: number; z: number }) => {
-      pos = { ...next }
+    get: (trait: unknown) => {
+      if (trait === Position) {
+        return { ...pos }
+      }
+      if (trait === Rotation) {
+        return { ...rot }
+      }
+      return undefined
+    },
+    set: (trait: unknown, next: { x: number; y: number; z: number; w?: number }) => {
+      if (trait === Position) {
+        pos = { x: next.x, y: next.y, z: next.z }
+        return
+      }
+      if (trait === Rotation) {
+        rot = {
+          x: next.x,
+          y: next.y,
+          z: next.z,
+          w: next.w ?? 1,
+        }
+      }
     },
     read: () => ({ ...pos }),
   }
@@ -273,6 +294,28 @@ describe('SyncEngine rollback/replay', () => {
     engine.tick({ connection, identityHex, localPlayer, dtSeconds: 0.08 })
     expect(sentPayloads.length).toBe(1)
     expect(sentPayloads[0].requestId.length).toBeLessThanOrEqual(64)
+  })
+
+  it('applies mouse yaw to forward movement direction', () => {
+    const identityHex = 'local-identity'
+    const feedbackRows: FeedbackRow[] = []
+    const sentPayloads: Array<{ requestId: string; x: number; y: number; z: number }> = []
+    const connection = createMockConnection(identityHex, feedbackRows, sentPayloads)
+    const localPlayer = createMockEntity({ x: 0, y: 0, z: 0 })
+    const engine = new SyncEngine(createLogger())
+
+    engine.handleMouseMove(1000)
+    const yaw = engine.getViewYaw()
+    expect(Math.abs(yaw)).toBeGreaterThan(0.01)
+
+    engine.handleKeyDown('KeyW')
+    engine.tick({ connection, identityHex, localPlayer, dtSeconds: 0.08 })
+
+    const moved = localPlayer.read()
+    const distance = Math.hypot(moved.x, moved.z)
+    expect(distance).toBeGreaterThan(0.01)
+    expect(Math.abs(moved.x / distance - Math.sin(yaw))).toBeLessThan(0.01)
+    expect(Math.abs(moved.z / distance + Math.cos(yaw))).toBeLessThan(0.01)
   })
 
   it('ignores stale feedback from previous session namespace', () => {

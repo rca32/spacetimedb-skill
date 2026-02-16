@@ -32,6 +32,7 @@ const AOI_REANCHOR_DISTANCE = CHUNK_SIZE * 1.5
 const CAMERA_FOLLOW_DISTANCE = 5.5
 const CAMERA_FOLLOW_HEIGHT = 2.0
 const CAMERA_FOLLOW_LERP = 0.12
+const CAMERA_LOOK_AT_HEIGHT = 1.0
 
 type TransformStateRow = {
   entityId: unknown
@@ -170,7 +171,7 @@ export function createWorldRuntime(): RuntimeModule {
       syncResourceState(ctx, knownKeys, connection.db.resourceNode.iter())
       syncTerrainChunks(ctx, knownKeys, connection.db.terrainChunk.iter())
       syncClaims(ctx, knownKeys, connection.db.claimState.iter())
-      updateThirdPersonCamera(ctx, localPosition)
+      updateThirdPersonCamera(ctx, localPosition, ctx.sync?.getViewYaw() ?? 0)
 
       streaming?.sync(ctx.world)
     },
@@ -487,16 +488,23 @@ function seededPosition(seed: bigint): { x: number; z: number } {
   return { x, z }
 }
 
-function updateThirdPersonCamera(ctx: RuntimeContext, localPosition: { x: number; z: number }): void {
+function updateThirdPersonCamera(
+  ctx: RuntimeContext,
+  localPosition: { x: number; z: number },
+  viewYaw: number,
+): void {
   const camera = ctx.renderer.camera
-  const desiredX = localPosition.x
+  const yaw = Number.isFinite(viewYaw) ? viewYaw : 0
+  const sinYaw = Math.sin(yaw)
+  const cosYaw = Math.cos(yaw)
+  const desiredX = localPosition.x - sinYaw * CAMERA_FOLLOW_DISTANCE
   const desiredY = CAMERA_FOLLOW_HEIGHT
-  const desiredZ = localPosition.z + CAMERA_FOLLOW_DISTANCE
+  const desiredZ = localPosition.z + cosYaw * CAMERA_FOLLOW_DISTANCE
 
   camera.position.x += (desiredX - camera.position.x) * CAMERA_FOLLOW_LERP
   camera.position.y += (desiredY - camera.position.y) * CAMERA_FOLLOW_LERP
   camera.position.z += (desiredZ - camera.position.z) * CAMERA_FOLLOW_LERP
-  camera.lookAt(localPosition.x, 1.0, localPosition.z)
+  camera.lookAt(localPosition.x, CAMERA_LOOK_AT_HEIGHT, localPosition.z)
 }
 
 function shouldReanchorAoi(
