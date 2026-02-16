@@ -5,6 +5,7 @@
 - [stitch-server Workflow Cheat Sheet](#stitch-server-workflow-cheat-sheet)
 - [stitch-web-client 기본 안내](#stitch-web-client-기본-안내)
 - [데이터 초기화 및 기본값 로딩 규칙](#데이터-초기화-및-기본값-로딩-규칙)
+- [assetdirectory 안내](#assetdirectory-안내)
 
 ## BitCraftPublicDoc ↔ BitCraftPublic/BitCraftServer 관계 (참고 수준)
 - 현재 프로젝트는 **그린필드 설계**이며, BitCraft 관련 자료는 **참고/영감 용도**로만 사용한다.
@@ -64,6 +65,10 @@ Replace `<name>` with the published database name (e.g., `stitch-server`).
 - `WEBCLIENTDESIGN/00-master.md`
 - `WEBCLIENTDESIGN/11-implementation-order.md`
 - `WEBCLIENTDESIGN/09-domain-social-npc-quest.md`
+
+## assetdirectory 안내
+- 외부 에셋 수집(모델/텍스처/오디오) 상세는 [`assetdirectory/README.md`](assetdirectory/README.md)를 참조.
+- `assetdirectory`는 실험/테스트용으로만 보관하며 `web-client` 빌드 경로에는 강제 연결하지 않음.
 
 ## 데이터 초기화 및 기본값 로딩 규칙
 - 개발 중 데이터 삭제(`--delete-data`)는 필요 시 언제든 수행할 수 있다.
