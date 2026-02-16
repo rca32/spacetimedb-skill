@@ -6,7 +6,7 @@ use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
 use crate::tables::{NpcInteractionLog, NpcState};
 
-const NPC_INTERACTION_RANGE_SQ: f32 = 100.0;
+const NPC_INTERACTION_RANGE_SQ: i32 = 36;
 
 #[spacetimedb::reducer]
 pub fn npc_talk(ctx: &ReducerContext, npc_id: u64, request_id: String) -> Result<(), String> {
@@ -29,9 +29,12 @@ pub fn npc_talk(ctx: &ReducerContext, npc_id: u64, request_id: String) -> Result
         .ok_or("caller transform missing".to_string())?;
 
     let npc = ensure_npc(ctx, npc_id, session.region_id, &caller_tf.position);
-    let dx = caller_tf.position[0] - npc.pos_x;
-    let dz = caller_tf.position[2] - npc.pos_z;
-    if dx * dx + dz * dz > NPC_INTERACTION_RANGE_SQ {
+    let caller_hex_x = caller_tf.position.first().copied().unwrap_or(0.0).round() as i32;
+    let caller_hex_z = caller_tf.position.get(2).copied().unwrap_or(0.0).round() as i32;
+    let dx = caller_hex_x - npc.hex_x;
+    let dz = caller_hex_z - npc.hex_z;
+    let range_sq = dx * dx + dz * dz;
+    if range_sq > NPC_INTERACTION_RANGE_SQ {
         return Err("npc is too far to talk".to_string());
     }
 
@@ -70,21 +73,32 @@ pub(crate) fn ensure_npc(
         return npc;
     }
 
-    let npc = NpcState {
+    let hex_x = fallback_pos.first().copied().unwrap_or(0.0).round() as i32;
+    let hex_z = fallback_pos.get(2).copied().unwrap_or(0.0).round() as i32;
+    let now = u64::try_from(ctx.timestamp.to_micros_since_unix_epoch()).unwrap_or_default();
+
+    ctx.db.npc_state().insert(NpcState {
         npc_id,
         region_id,
-        pos_x: fallback_pos.first().copied().unwrap_or(0.0),
-        pos_z: fallback_pos.get(2).copied().unwrap_or(0.0),
+        hex_x,
+        hex_z,
+        dest_hex_x: hex_x,
+        dest_hex_z: hex_z,
+        role: 0,
+        mood: 0,
         schedule_kind: 1,
-        updated_at: ctx.timestamp,
-    };
-    ctx.db.npc_state().insert(NpcState {
-        npc_id: npc.npc_id,
-        region_id: npc.region_id,
-        pos_x: npc.pos_x,
-        pos_z: npc.pos_z,
-        schedule_kind: npc.schedule_kind,
-        updated_at: npc.updated_at,
+        next_action_ts: now,
     });
-    npc
+    NpcState {
+        npc_id,
+        region_id,
+        hex_x,
+        hex_z,
+        dest_hex_x: hex_x,
+        dest_hex_z: hex_z,
+        role: 0,
+        mood: 0,
+        schedule_kind: 1,
+        next_action_ts: now,
+    }
 }

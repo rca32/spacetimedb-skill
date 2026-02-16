@@ -13,10 +13,13 @@ import {
 export default __t.object("NpcState", {
   npcId: __t.u64(),
   regionId: __t.u64(),
-  posX: __t.f32(),
-  posZ: __t.f32(),
+  hexX: __t.i32(),
+  hexZ: __t.i32(),
+  destHexX: __t.i32(),
+  destHexZ: __t.i32(),
+  role: __t.u8(),
+  mood: __t.u8(),
   scheduleKind: __t.u8(),
-  updatedAt: __t.timestamp(),
+  nextActionTs: __t.u64(),
 });
-
 

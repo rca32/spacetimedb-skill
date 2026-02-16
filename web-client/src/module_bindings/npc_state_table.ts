@@ -13,8 +13,12 @@ import {
 export default __t.row({
   npcId: __t.u64().primaryKey().name("npc_id"),
   regionId: __t.u64().name("region_id"),
-  posX: __t.f32().name("pos_x"),
-  posZ: __t.f32().name("pos_z"),
+  hexX: __t.i32().name("hex_x"),
+  hexZ: __t.i32().name("hex_z"),
+  destHexX: __t.i32().name("dest_hex_x"),
+  destHexZ: __t.i32().name("dest_hex_z"),
+  role: __t.u8().name("role"),
+  mood: __t.u8().name("mood"),
   scheduleKind: __t.u8().name("schedule_kind"),
-  updatedAt: __t.timestamp().name("updated_at"),
+  nextActionTs: __t.u64().name("next_action_ts"),
 });

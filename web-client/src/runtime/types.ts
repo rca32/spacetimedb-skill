@@ -432,10 +432,14 @@ export interface SocialFeedSnapshot {
 export interface NpcSnapshot {
   npcId: string
   regionId: string
-  posX: number
-  posZ: number
+  hexX: number
+  hexZ: number
+  destHexX: number
+  destHexZ: number
+  role: number
+  mood: number
   scheduleKind: number
-  updatedAt: string
+  nextActionTs: string
 }
 
 export interface NpcInteractionSnapshot {

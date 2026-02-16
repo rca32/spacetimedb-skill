@@ -7,7 +7,7 @@ use crate::tables::NpcInteractionLog;
 
 use super::npc_talk::ensure_npc;
 
-const NPC_INTERACTION_RANGE_SQ: f32 = 100.0;
+const NPC_INTERACTION_RANGE_SQ: i32 = 36;
 
 #[spacetimedb::reducer]
 pub fn npc_trade(ctx: &ReducerContext, npc_id: u64, request_id: String) -> Result<(), String> {
@@ -30,8 +30,10 @@ pub fn npc_trade(ctx: &ReducerContext, npc_id: u64, request_id: String) -> Resul
         .ok_or("caller transform missing".to_string())?;
 
     let npc = ensure_npc(ctx, npc_id, session.region_id, &caller_tf.position);
-    let dx = caller_tf.position[0] - npc.pos_x;
-    let dz = caller_tf.position[2] - npc.pos_z;
+    let caller_hex_x = caller_tf.position.first().copied().unwrap_or(0.0).round() as i32;
+    let caller_hex_z = caller_tf.position.get(2).copied().unwrap_or(0.0).round() as i32;
+    let dx = caller_hex_x - npc.hex_x;
+    let dz = caller_hex_z - npc.hex_z;
     if dx * dx + dz * dz > NPC_INTERACTION_RANGE_SQ {
         return Err("npc is too far to trade".to_string());
     }

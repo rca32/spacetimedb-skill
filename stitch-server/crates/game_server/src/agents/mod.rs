@@ -5,8 +5,8 @@ use std::time::Duration;
 use spacetimedb::{ReducerContext, ScheduleAt, Table};
 
 use crate::tables::agent_timers::{
-    environment_effect_loop_timer, player_regen_loop_timer, resource_regen_loop_timer,
-    session_cleanup_loop_timer,
+    environment_effect_loop_timer, npc_ai_loop_timer, player_regen_loop_timer,
+    resource_regen_loop_timer, session_cleanup_loop_timer,
 };
 use crate::tables::combat::combat_state;
 use crate::tables::environment_effect::{
@@ -14,13 +14,16 @@ use crate::tables::environment_effect::{
 };
 use crate::tables::live_ops::balance_params;
 use crate::tables::npc_quest::npc_state;
-use crate::tables::player_progression::{character_stats, resource_state, status_effect};
+use crate::tables::player_progression::{
+    character_stats, npc_action_schedule, resource_state, status_effect,
+};
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
 use crate::tables::world_state::{region_state, resource_node, terrain_chunk};
 use crate::tables::{
     CharacterStats, EnvironmentEffectDesc, EnvironmentEffectExposure, EnvironmentEffectLoopTimer,
-    EnvironmentEffectState, NpcState, PlayerRegenLoopTimer, RegionState, ResourceNode,
+    EnvironmentEffectState, NpcActionSchedule, NpcAiLoopTimer, NpcState, PlayerRegenLoopTimer,
+    RegionState, ResourceNode,
     ResourceRegenLoopTimer, ResourceState, SessionCleanupLoopTimer, StatusEffect, TerrainChunk,
 };
 use crate::utils::identity_to_entity_id;
@@ -30,6 +33,12 @@ const RESOURCE_REGEN_INTERVAL_SECS: u64 = 10;
 const SESSION_CLEANUP_INTERVAL_SECS: u64 = 60;
 const ENVIRONMENT_EFFECT_INTERVAL_SECS: u64 = 5;
 const SESSION_IDLE_TIMEOUT_SECS: u64 = 30 * 60;
+const NPC_AI_INTERVAL_SECS: u64 = 300;
+const NPC_AI_STEP_HEX: i32 = 2;
+
+fn to_micros_u64(ctx: &ReducerContext) -> u64 {
+    u64::try_from(ctx.timestamp.to_micros_since_unix_epoch()).unwrap_or_default()
+}
 
 pub(crate) fn ensure_default_agent_timers(ctx: &ReducerContext) {
     if ctx
@@ -106,6 +115,22 @@ pub(crate) fn ensure_default_agent_timers(ctx: &ReducerContext) {
 
     if ctx
         .db
+        .npc_ai_loop_timer()
+        .scheduled_id()
+        .find(1)
+        .is_none()
+    {
+        ctx.db.npc_ai_loop_timer().insert(NpcAiLoopTimer {
+            scheduled_id: 1,
+            scheduled_at: ScheduleAt::Interval(
+                Duration::from_secs(NPC_AI_INTERVAL_SECS).into(),
+            ),
+            last_run_at: ctx.timestamp,
+        });
+    }
+
+    if ctx
+        .db
         .environment_effect_desc()
         .effect_id()
         .find(1)
@@ -174,24 +199,190 @@ fn seed_world_if_empty(ctx: &ReducerContext) {
     }
 
     if ctx.db.npc_state().iter().next().is_none() {
+        let now_us = to_micros_u64(ctx);
         let npcs = [
-            (10_001_u64, 8.0_f32, 6.0_f32),
-            (10_002_u64, -10.0_f32, 12.0_f32),
-            (10_003_u64, 14.0_f32, -8.0_f32),
-            (10_004_u64, -16.0_f32, -6.0_f32),
+            (10_001_u64, 8_i32, 6_i32),
+            (10_002_u64, -10_i32, 12_i32),
+            (10_003_u64, 14_i32, -8_i32),
+            (10_004_u64, -16_i32, -6_i32),
         ];
-        for (npc_id, pos_x, pos_z) in npcs {
+        for (npc_id, hex_x, hex_z) in npcs {
             ctx.db.npc_state().insert(NpcState {
                 npc_id,
                 region_id: 1,
-                pos_x,
-                pos_z,
+                hex_x,
+                hex_z,
+                dest_hex_x: hex_x,
+                dest_hex_z: hex_z,
+                role: 0,
+                mood: 0,
                 schedule_kind: 1,
-                updated_at: ctx.timestamp,
+                next_action_ts: now_us + (NPC_AI_INTERVAL_SECS * 1_000_000),
             });
+            if ctx
+                .db
+                .npc_action_schedule()
+                .npc_id()
+                .find(npc_id)
+                .is_none()
+            {
+                ctx.db.npc_action_schedule().insert(NpcActionSchedule {
+                    npc_id,
+                    next_action_at: now_us,
+                    action_type: 1,
+                    target_region_id: Some(1),
+                });
+            }
+        }
+    } else {
+        for npc in ctx.db.npc_state().iter() {
+            let now_us = to_micros_u64(ctx);
+            if ctx.db.npc_action_schedule().npc_id().find(npc.npc_id).is_none() {
+                ctx.db.npc_action_schedule().insert(NpcActionSchedule {
+                    npc_id: npc.npc_id,
+                    next_action_at: now_us + npc_next_delay(npc.schedule_kind),
+                    action_type: npc.schedule_kind,
+                    target_region_id: Some(npc.region_id),
+                });
+            }
+        }
+    }
+
+}
+
+#[spacetimedb::reducer]
+pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
+    let now_us = to_micros_u64(ctx);
+
+    let mut npc_updates = Vec::new();
+    let mut schedule_updates: Vec<NpcActionSchedule> = Vec::new();
+
+    for mut npc in ctx.db.npc_state().iter() {
+        let mut schedule = if let Some(schedule) = ctx.db.npc_action_schedule().npc_id().find(npc.npc_id) {
+            schedule
+        } else {
+            let default_schedule = NpcActionSchedule {
+                npc_id: npc.npc_id,
+                next_action_at: now_us + npc_next_delay(npc.schedule_kind),
+                action_type: npc.schedule_kind,
+                target_region_id: Some(npc.region_id),
+            };
+            ctx.db.npc_action_schedule().insert(NpcActionSchedule {
+                npc_id: default_schedule.npc_id,
+                next_action_at: default_schedule.next_action_at,
+                action_type: default_schedule.action_type,
+                target_region_id: default_schedule.target_region_id,
+            });
+            default_schedule
+        };
+
+        if now_us < schedule.next_action_at {
+            continue;
+        }
+
+        let action_type = sanitize_action_type(schedule.action_type, npc.schedule_kind);
+        if action_type == 2 || action_type == 3 {
+            schedule.next_action_at = now_us + npc_next_delay(action_type);
+            schedule.action_type = action_type;
+            npc.next_action_ts = now_us + npc_next_delay(action_type);
+            npc_updates.push(npc);
+        } else {
+            let (next_hex_x, next_hex_z) = compute_npc_destination(
+                npc.npc_id,
+                npc.hex_x,
+                npc.hex_z,
+                action_type,
+            );
+
+            process_npc_movement(
+                &mut npc,
+                &mut schedule,
+                now_us,
+                action_type,
+                next_hex_x,
+                next_hex_z,
+            );
+            npc.mood = npc.mood.wrapping_add(1);
+            npc_updates.push(npc);
+        }
+
+        schedule_updates.push(schedule);
+    }
+
+    for npc in npc_updates {
+        ctx.db.npc_state().npc_id().update(npc);
+    }
+    for schedule in schedule_updates {
+        if ctx.db.npc_action_schedule().npc_id().find(schedule.npc_id).is_some() {
+            ctx.db.npc_action_schedule().npc_id().update(schedule);
+        }
+    }
+
+    if let Some(mut timer) = ctx.db.npc_ai_loop_timer().scheduled_id().find(arg.scheduled_id) {
+        timer.last_run_at = ctx.timestamp;
+        ctx.db.npc_ai_loop_timer().scheduled_id().update(timer);
+    }
+}
+
+fn npc_next_delay(schedule_kind: u8) -> u64 {
+    let base = match schedule_kind {
+        0 => 8,
+        1 => NPC_AI_INTERVAL_SECS,
+        2 => 6,
+        3 => 20,
+        _ => NPC_AI_INTERVAL_SECS,
+    };
+    base * 1_000_000
+}
+
+fn sanitize_action_type(raw_action_type: u8, fallback: u8) -> u8 {
+    match raw_action_type {
+        1..=3 => raw_action_type,
+        0 => fallback,
+        _ => fallback.max(1),
+    }
+}
+
+fn process_npc_movement(
+    npc: &mut NpcState,
+    schedule: &mut NpcActionSchedule,
+    now_us: u64,
+    action_type: u8,
+    next_hex_x: i32,
+    next_hex_z: i32,
+) {
+    npc.dest_hex_x = next_hex_x;
+    npc.dest_hex_z = next_hex_z;
+    npc.hex_x = next_hex_x;
+    npc.hex_z = next_hex_z;
+    npc.next_action_ts = now_us + npc_next_delay(action_type);
+    schedule.next_action_at = npc.next_action_ts;
+    schedule.action_type = action_type;
+}
+
+fn compute_npc_destination(
+    npc_id: u64,
+    cur_hex_x: i32,
+    cur_hex_z: i32,
+    action_type: u8,
+) -> (i32, i32) {
+    match action_type {
+        2 => (cur_hex_x, cur_hex_z),
+        3 => (cur_hex_x, cur_hex_z),
+        _ => {
+            let mut seed = npc_id ^ 0x9E3779B97F4A7C15u64;
+            seed = seed.rotate_left(13) ^ (seed << 7);
+            let dx = ((seed % 3) as i32) - 1;
+            seed = seed.rotate_right(11) ^ (seed << 9);
+            let dz = (((seed >> 2) % 3) as i32) - 1;
+            (
+                cur_hex_x + dx * NPC_AI_STEP_HEX,
+                cur_hex_z + dz * NPC_AI_STEP_HEX,
+            )
         }
     }
 }
+
 
 #[spacetimedb::reducer]
 pub fn player_regen_agent_loop(ctx: &ReducerContext, arg: PlayerRegenLoopTimer) {

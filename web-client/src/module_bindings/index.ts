@@ -1316,12 +1316,12 @@ const tablesSchema = __schema(
   __table({
     name: 'npc_action_schedule',
     indexes: [
-      { name: 'schedule_id', algorithm: 'btree', columns: [
-        'scheduleId',
+      { name: 'npc_id', algorithm: 'btree', columns: [
+        'npcId',
       ] },
     ],
     constraints: [
-      { name: 'npc_action_schedule_schedule_id_key', constraint: 'unique', columns: ['scheduleId'] },
+      { name: 'npc_action_schedule_npc_id_key', constraint: 'unique', columns: ['npcId'] },
     ],
   }, NpcActionScheduleRow),
   __table({
@@ -2010,4 +2010,3 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
-

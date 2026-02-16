@@ -517,6 +517,9 @@ export class PanelLayer {
 
   setReadOnly(readOnly: boolean): void {
     this.readOnly = readOnly
+    if (readOnly) {
+      this.blurFocusedInteractiveField()
+    }
     this.modeLine.textContent = readOnly ? 'MODE: READ-ONLY' : 'MODE: INTERACTIVE'
     this.modeLine.style.color = readOnly ? '#f4bf68' : '#89d6a4'
     this.applyDisabledState()
@@ -1188,7 +1191,7 @@ export class PanelLayer {
   private refreshNpcUi(snapshot: SocialNpcQuestSnapshot): void {
     const npcOptions = snapshot.npcs.map((row) => ({
       value: row.npcId,
-      label: `npc=${row.npcId} region=${row.regionId} pos=(${fixed1(row.posX)},${fixed1(row.posZ)})`,
+      label: `npc=${row.npcId} hex=(${row.hexX},${row.hexZ}) role=${row.role} mood=${row.mood} next=${row.nextActionTs}`,
     }))
     syncSelect(this.npcNpcSelect, npcOptions)
   }
@@ -1235,8 +1238,27 @@ export class PanelLayer {
   }
 
   private toggleTab(tab: PanelTab): void {
+    this.blurFocusedInteractiveField()
     this.currentTab = this.currentTab === tab ? null : tab
     this.updateVisibility()
+  }
+
+  private blurFocusedInteractiveField(): void {
+    const active = document.activeElement
+    if (!(active instanceof HTMLElement)) {
+      return
+    }
+    if (!this.body.contains(active)) {
+      return
+    }
+    if (
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement ||
+      active instanceof HTMLSelectElement ||
+      active.isContentEditable
+    ) {
+      active.blur()
+    }
   }
 
   private applyDisabledState(): void {

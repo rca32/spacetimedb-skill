@@ -33,7 +33,7 @@ pub mod world_state;
 pub use account::Account;
 pub use account_profile::AccountProfile;
 pub use agent_timers::{
-    EnvironmentEffectLoopTimer, PlayerRegenLoopTimer, ResourceRegenLoopTimer,
+    EnvironmentEffectLoopTimer, NpcAiLoopTimer, PlayerRegenLoopTimer, ResourceRegenLoopTimer,
     SessionCleanupLoopTimer,
 };
 pub use building_state::BuildingState;

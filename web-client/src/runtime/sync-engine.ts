@@ -671,13 +671,30 @@ function isTextInputFocused(): boolean {
     return false
   }
   const active = document.activeElement
-  if (!active) {
+  if (!(active instanceof HTMLElement)) {
     return false
   }
+
   if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
-    return true
+    if (active.disabled || active.readOnly) {
+      return false
+    }
+    return isElementVisible(active)
   }
-  return active instanceof HTMLElement && active.isContentEditable
+
+  if (!active.isContentEditable) {
+    return false
+  }
+
+  return isElementVisible(active)
+}
+
+function isElementVisible(element: HTMLElement): boolean {
+  if (element.getClientRects().length === 0) {
+    return false
+  }
+  const style = window.getComputedStyle(element)
+  return style.display !== 'none' && style.visibility !== 'hidden'
 }
 
 function resolveLocalRegionId(connection: DbConnection, localIdentityHex: string): bigint | null {

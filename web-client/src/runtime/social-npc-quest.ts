@@ -98,10 +98,14 @@ type SocialFeedRow = {
 type NpcStateRow = {
   npcId: unknown
   regionId: unknown
-  posX: number
-  posZ: number
+  hexX: number
+  hexZ: number
+  destHexX: number
+  destHexZ: number
+  role: number
+  mood: number
   scheduleKind: number
-  updatedAt: unknown
+  nextActionTs: bigint
 }
 
 type NpcInteractionLogRow = {
@@ -620,13 +624,17 @@ function collectSocialFeeds(
 function collectNpcs(rows: Iterable<NpcStateRow>): SocialNpcQuestSnapshot['npcs'] {
   const list: SocialNpcQuestSnapshot['npcs'] = []
   for (const row of rows) {
-    list.push({
+  list.push({
       npcId: toBigIntString(row.npcId),
       regionId: toBigIntString(row.regionId),
-      posX: row.posX,
-      posZ: row.posZ,
+      hexX: row.hexX,
+      hexZ: row.hexZ,
+      destHexX: row.destHexX,
+      destHexZ: row.destHexZ,
+      role: row.role,
+      mood: row.mood,
       scheduleKind: row.scheduleKind,
-      updatedAt: timestampText(row.updatedAt),
+      nextActionTs: row.nextActionTs.toString(),
     })
   }
   list.sort((left, right) => compareBigIntString(left.npcId, right.npcId))

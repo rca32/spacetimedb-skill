@@ -11,8 +11,8 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  scheduleId: __t.string().primaryKey().name("schedule_id"),
   npcId: __t.u64().name("npc_id"),
-  actionKind: __t.u8().name("action_kind"),
-  scheduledAt: __t.timestamp().name("scheduled_at"),
+  nextActionAt: __t.u64().name("next_action_at"),
+  actionType: __t.u8().name("action_type"),
+  targetRegionId: __t.option(__t.u64()).name("target_region_id"),
 });

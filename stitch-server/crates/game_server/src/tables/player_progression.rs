@@ -172,10 +172,10 @@ pub struct NpcConversationTurn {
 #[spacetimedb::table(name = npc_action_schedule, private)]
 pub struct NpcActionSchedule {
     #[primary_key]
-    pub schedule_id: String,
     pub npc_id: u64,
-    pub action_kind: u8,
-    pub scheduled_at: Timestamp,
+    pub next_action_at: u64,
+    pub action_type: u8,
+    pub target_region_id: Option<u64>,
 }
 
 #[spacetimedb::table(name = npc_action_request, private)]

@@ -22,6 +22,16 @@ pub fn move_to(
 
     let next_position = vec![x, y, z];
     if !x.is_finite() || !y.is_finite() || !z.is_finite() {
+        log::warn!(
+            "move_to dropped invalid_position: identity={} request_id={} region_id={} client_ts_ms={} pos=({},{},{})",
+            ctx.sender,
+            request_id,
+            region_id,
+            client_ts_ms,
+            x,
+            y,
+            z
+        );
         anti_cheat::log_movement_violation(
             ctx,
             "invalid_position",
@@ -34,6 +44,13 @@ pub fn move_to(
     }
 
     if anti_cheat::is_duplicate_request(ctx, &request_id) {
+        log::info!(
+            "move_to duplicate ignored: identity={} request_id={} region_id={} client_ts_ms={}",
+            ctx.sender,
+            request_id,
+            region_id,
+            client_ts_ms
+        );
         // Idempotent duplicate: no re-apply, no additional side effects.
         return Ok(());
     }
@@ -41,6 +58,13 @@ pub fn move_to(
     let session = match ctx.db.session_state().identity().find(ctx.sender) {
         Some(session) => session,
         None => {
+            log::warn!(
+                "move_to dropped missing_session: identity={} request_id={} region_id={} client_ts_ms={}",
+                ctx.sender,
+                request_id,
+                region_id,
+                client_ts_ms
+            );
             anti_cheat::log_movement_violation(
                 ctx,
                 "missing_session",
@@ -54,6 +78,14 @@ pub fn move_to(
     };
 
     if session.region_id != region_id {
+        log::warn!(
+            "move_to dropped region_mismatch: identity={} request_id={} session_region_id={} request_region_id={} client_ts_ms={}",
+            ctx.sender,
+            request_id,
+            session.region_id,
+            region_id,
+            client_ts_ms
+        );
         anti_cheat::log_movement_violation(
             ctx,
             "region_mismatch",
@@ -69,6 +101,14 @@ pub fn move_to(
     if let Err(reason) =
         anti_cheat::validate_actor_progression(actor_state, client_ts_ms, &next_position)
     {
+        log::warn!(
+            "move_to dropped anti_cheat: identity={} request_id={} reason={} region_id={} client_ts_ms={}",
+            ctx.sender,
+            request_id,
+            reason,
+            region_id,
+            client_ts_ms
+        );
         anti_cheat::log_movement_violation(
             ctx,
             reason,
@@ -139,6 +179,16 @@ pub fn move_to(
         true,
         "ok",
         next_position,
+    );
+    log::info!(
+        "move_to accepted: identity={} request_id={} region_id={} client_ts_ms={} pos=({},{},{})",
+        ctx.sender,
+        request_id,
+        region_id,
+        client_ts_ms,
+        x,
+        y,
+        z
     );
 
     Ok(())

@@ -11,10 +11,9 @@ import {
 } from "spacetimedb";
 
 export default __t.object("NpcActionSchedule", {
-  scheduleId: __t.string(),
   npcId: __t.u64(),
-  actionKind: __t.u8(),
-  scheduledAt: __t.timestamp(),
+  nextActionAt: __t.u64(),
+  actionType: __t.u8(),
+  targetRegionId: __t.option(__t.u64()),
 });
-
 

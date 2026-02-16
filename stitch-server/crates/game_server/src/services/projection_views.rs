@@ -175,33 +175,40 @@ pub fn sync_player_wallet_view(ctx: &ReducerContext, identity: Identity) {
 
 pub fn sync_player_session_view(ctx: &ReducerContext, identity: Identity) {
     if let Some(session) = ctx.db.session_state().identity().find(identity) {
+        let exists = ctx
+            .db
+            .player_session_view()
+            .identity()
+            .find(identity)
+            .is_some();
         let next = PlayerSessionView {
             identity,
             region_id: session.region_id,
             last_active_at: session.last_active_at,
         };
-        if ctx
-            .db
-            .player_session_view()
-            .identity()
-            .find(identity)
-            .is_some()
-        {
+        if exists {
             ctx.db.player_session_view().identity().update(next);
         } else {
             ctx.db.player_session_view().insert(next);
         }
+        log::info!(
+            "player_session_view synced: identity={} region_id={} mode={}",
+            identity,
+            session.region_id,
+            if exists { "update" } else { "insert" }
+        );
         return;
     }
 
-    if ctx
+    let exists = ctx
         .db
         .player_session_view()
         .identity()
         .find(identity)
-        .is_some()
-    {
+        .is_some();
+    if exists {
         ctx.db.player_session_view().identity().delete(identity);
+        log::info!("player_session_view synced: identity={} mode=delete", identity);
     }
 }
 
