@@ -33,7 +33,7 @@ const RESOURCE_REGEN_INTERVAL_SECS: u64 = 10;
 const SESSION_CLEANUP_INTERVAL_SECS: u64 = 60;
 const ENVIRONMENT_EFFECT_INTERVAL_SECS: u64 = 5;
 const SESSION_IDLE_TIMEOUT_SECS: u64 = 30 * 60;
-const NPC_AI_INTERVAL_SECS: u64 = 300;
+const NPC_AI_INTERVAL_SECS: u64 = 2;
 const NPC_AI_STEP_HEX: i32 = 2;
 const STARTER_REGION_ID: u64 = 1;
 
@@ -303,10 +303,15 @@ pub(crate) fn ensure_default_agent_timers(ctx: &ReducerContext) {
             });
     }
 
-    if ctx.db.npc_ai_loop_timer().scheduled_id().find(1).is_none() {
+    let npc_ai_schedule = ScheduleAt::Interval(Duration::from_secs(NPC_AI_INTERVAL_SECS).into());
+    if let Some(mut timer) = ctx.db.npc_ai_loop_timer().scheduled_id().find(1) {
+        timer.scheduled_at = npc_ai_schedule;
+        timer.last_run_at = ctx.timestamp;
+        ctx.db.npc_ai_loop_timer().scheduled_id().update(timer);
+    } else {
         ctx.db.npc_ai_loop_timer().insert(NpcAiLoopTimer {
             scheduled_id: 1,
-            scheduled_at: ScheduleAt::Interval(Duration::from_secs(NPC_AI_INTERVAL_SECS).into()),
+            scheduled_at: npc_ai_schedule,
             last_run_at: ctx.timestamp,
         });
     }
@@ -425,17 +430,21 @@ fn ensure_seeded_npcs(ctx: &ReducerContext, now_us: u64) {
 
 fn ensure_npc_schedules(ctx: &ReducerContext, now_us: u64) {
     for npc in ctx.db.npc_state().iter() {
-        if ctx
-            .db
-            .npc_action_schedule()
-            .npc_id()
-            .find(npc.npc_id)
-            .is_none()
-        {
-            let action_type = normalize_schedule_kind(npc.schedule_kind);
+        let action_type = normalize_schedule_kind(npc.schedule_kind);
+        let next_action_at = if action_type == 1 || action_type == 2 {
+            now_us
+        } else {
+            now_us + npc_next_delay(action_type)
+        };
+        if let Some(mut schedule) = ctx.db.npc_action_schedule().npc_id().find(npc.npc_id) {
+            schedule.action_type = action_type;
+            schedule.target_region_id = Some(npc.region_id);
+            schedule.next_action_at = next_action_at;
+            ctx.db.npc_action_schedule().npc_id().update(schedule);
+        } else {
             ctx.db.npc_action_schedule().insert(NpcActionSchedule {
                 npc_id: npc.npc_id,
-                next_action_at: now_us + npc_next_delay(action_type),
+                next_action_at,
                 action_type,
                 target_region_id: Some(npc.region_id),
             });
