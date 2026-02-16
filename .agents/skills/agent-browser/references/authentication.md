@@ -96,6 +96,10 @@ agent-browser wait --url "**/app.example.com**"
 agent-browser state save ./oauth-state.json
 ```
 
+For WSL environments where Google rejects automated browsers with `This browser or app may not be secure`, use:
+- [`../../wsl-google-human-login/SKILL.md`](../../wsl-google-human-login/SKILL.md)
+- This provides the human-in-the-loop Windows Chrome CDP bridge workflow.
+
 ## Two-Factor Authentication
 
 Handle 2FA with manual intervention:

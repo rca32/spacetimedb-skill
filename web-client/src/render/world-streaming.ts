@@ -17,7 +17,13 @@ import {
   PresentationTransform,
   ResourceData,
 } from '../core/traits'
-import { getBuildingModelPath, getCharacterModelPath, getResourceModelPath } from './asset-mapping'
+import {
+  CharacterAnimationAliases,
+  getBuildingModelPath,
+  getCharacterAnimationAliases,
+  getCharacterModelPath,
+  getResourceModelPath,
+} from './asset-mapping'
 import { AssetLoader } from './asset-loader'
 import { MaterialPalette } from './materials'
 
@@ -49,23 +55,59 @@ type ModelTransform = InstanceTransform & {
   qy?: number
   qz?: number
   qw?: number
+  yawOffset?: number
 }
 
 type CharacterMotion = 'idle' | 'walk' | 'run'
+
+type DirectionalActionSet = {
+  idle: THREE.AnimationAction
+  walkForward: THREE.AnimationAction
+  walkBackward: THREE.AnimationAction
+  walkLeft: THREE.AnimationAction
+  walkRight: THREE.AnimationAction
+  runForward: THREE.AnimationAction
+  runBackward: THREE.AnimationAction
+  runLeft: THREE.AnimationAction
+  runRight: THREE.AnimationAction
+}
 
 type CharacterAnimator = {
   mixer: THREE.AnimationMixer
   actions: Map<string, THREE.AnimationAction>
   activeAction: THREE.AnimationAction | null
+  directionalActions: DirectionalActionSet | null
   lastPosition: THREE.Vector3
   motion: CharacterMotion
+  idleElapsedSeconds: number
+  nextIdleVariantAtSeconds: number
+  footstepDistanceAccum: number
+  footstepVariant: number
 }
 
 const IDLE_ANIMATION_HINTS = ['idle', 'survey', 'stand', 'idle1', 'swing', 'standstill']
+const IDLE_VARIATION_HINTS = ['agree', 'headshake', 'head_shake', 'yes', 'no', 'wave', 'sad_pose']
 const WALK_ANIMATION_HINTS = ['walk', 'walking']
 const RUN_ANIMATION_HINTS = ['run', 'running']
-const IDLE_SPEED_THRESHOLD = 0.02
-const RUN_SPEED_THRESHOLD = 3
+const IDLE_ENTER_SPEED = 0.08
+const IDLE_EXIT_SPEED = 0.14
+const RUN_ENTER_SPEED = 3.2
+const RUN_EXIT_SPEED = 2.6
+const CHARACTER_FORWARD_YAW_OFFSET = Math.PI
+const IDLE_VARIATION_MIN_SECONDS = 4
+const IDLE_VARIATION_MAX_SECONDS = 8
+const DIRECTIONAL_WEIGHT_LERP_RATE = 14
+const FOOTSTEP_DISTANCE_WALK = 1.1
+const FOOTSTEP_DISTANCE_RUN = 0.7
+const FOOTSTEP_VOLUME_WALK = 0.22
+const FOOTSTEP_VOLUME_RUN = 0.3
+const FOOTSTEP_SFX_NAMES = ['footstep_01', 'footstep_02'] as const
+const WORLD_UP_AXIS = new THREE.Vector3(0, 1, 0)
+const TMP_MODEL_QUAT = new THREE.Quaternion()
+const TMP_YAW_OFFSET_QUAT = new THREE.Quaternion()
+const TMP_INVERSE_MODEL_QUAT = new THREE.Quaternion()
+const TMP_WORLD_MOVE = new THREE.Vector3()
+const TMP_LOCAL_MOVE = new THREE.Vector3()
 
 class InstancedPool {
   readonly mesh: THREE.InstancedMesh
@@ -290,11 +332,13 @@ export class WorldStreamingRenderer {
         qy: presentation.qy,
         qz: presentation.qz,
         qw: presentation.qw,
+        yawOffset: CHARACTER_FORWARD_YAW_OFFSET,
       }
       const modelPath = manifest ? getCharacterModelPath('localPlayer', manifest) : null
+      const animationAliases = manifest ? getCharacterAnimationAliases('localPlayer', manifest) : null
 
       if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf, true)) {
-        this.updateCharacterAnimationState(key, transform, dtSeconds)
+        this.updateCharacterAnimationState(key, transform, dtSeconds, true, animationAliases)
         return
       }
 
@@ -315,11 +359,13 @@ export class WorldStreamingRenderer {
         qy: presentation.qy,
         qz: presentation.qz,
         qw: presentation.qw,
+        yawOffset: CHARACTER_FORWARD_YAW_OFFSET,
       }
       const modelPath = manifest ? getCharacterModelPath('remotePlayer', manifest) : null
+      const animationAliases = manifest ? getCharacterAnimationAliases('remotePlayer', manifest) : null
 
       if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf, true)) {
-        this.updateCharacterAnimationState(key, transform, dtSeconds)
+        this.updateCharacterAnimationState(key, transform, dtSeconds, false, animationAliases)
         return
       }
 
@@ -340,11 +386,13 @@ export class WorldStreamingRenderer {
         qy: presentation.qy,
         qz: presentation.qz,
         qw: presentation.qw,
+        yawOffset: CHARACTER_FORWARD_YAW_OFFSET,
       }
       const modelPath = manifest ? getCharacterModelPath('npc', manifest) : null
+      const animationAliases = manifest ? getCharacterAnimationAliases('npc', manifest) : null
 
       if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf, true)) {
-        this.updateCharacterAnimationState(key, transform, dtSeconds)
+        this.updateCharacterAnimationState(key, transform, dtSeconds, false, animationAliases)
         return
       }
 
@@ -458,6 +506,11 @@ export class WorldStreamingRenderer {
       existing.lastPosition.copy(object.position)
       existing.motion = 'idle'
       existing.activeAction = null
+      existing.directionalActions = null
+      existing.idleElapsedSeconds = 0
+      existing.nextIdleVariantAtSeconds = randomIdleVariantSeconds()
+      existing.footstepDistanceAccum = 0
+      existing.footstepVariant = 0
       for (const animation of model.animations) {
         const action = existing.mixer.clipAction(animation)
         action.clampWhenFinished = false
@@ -480,12 +533,23 @@ export class WorldStreamingRenderer {
       mixer,
       actions,
       activeAction: null,
+      directionalActions: null,
       lastPosition: object.position.clone(),
       motion: 'idle',
+      idleElapsedSeconds: 0,
+      nextIdleVariantAtSeconds: randomIdleVariantSeconds(),
+      footstepDistanceAccum: 0,
+      footstepVariant: 0,
     })
   }
 
-  private updateCharacterAnimationState(key: string, transform: ModelTransform, dtSeconds: number): void {
+  private updateCharacterAnimationState(
+    key: string,
+    transform: ModelTransform,
+    dtSeconds: number,
+    emitFootsteps = false,
+    animationAliases: CharacterAnimationAliases | null = null,
+  ): void {
     if (dtSeconds <= 0) {
       return
     }
@@ -495,20 +559,22 @@ export class WorldStreamingRenderer {
       return
     }
 
+    this.trySetupDirectionalActions(animator, animationAliases)
+    if (animator.directionalActions) {
+      this.updateDirectionalAnimationState(animator, transform, dtSeconds, emitFootsteps)
+      return
+    }
+
     const dx = transform.x - animator.lastPosition.x
     const dz = transform.z - animator.lastPosition.z
-    const speed = Math.sqrt(dx * dx + dz * dz) / dtSeconds
-    const nextMotion: CharacterMotion = speed > RUN_SPEED_THRESHOLD ? 'run' : speed > IDLE_SPEED_THRESHOLD ? 'walk' : 'idle'
+    const distance = Math.sqrt(dx * dx + dz * dz)
+    const speed = distance / dtSeconds
+    const nextMotion = this.resolveCharacterMotion(animator.motion, speed)
 
     if (animator.motion !== nextMotion) {
       const nextAction = this.findAnimationAction(animator, nextMotion)
       if (nextAction) {
-        nextAction.reset().play()
-        if (animator.activeAction && animator.activeAction !== nextAction) {
-          animator.activeAction.crossFadeTo(nextAction, 0.2, true)
-        }
-        nextAction.enabled = true
-        animator.activeAction = nextAction
+        this.transitionToAction(animator, nextAction, 0.2)
         animator.motion = nextMotion
       }
     } else if (!animator.activeAction) {
@@ -519,7 +585,180 @@ export class WorldStreamingRenderer {
       }
     }
 
+    if (nextMotion === 'idle') {
+      animator.idleElapsedSeconds += dtSeconds
+      if (animator.idleElapsedSeconds >= animator.nextIdleVariantAtSeconds) {
+        const variantAction = this.findIdleVariantAction(animator)
+        if (variantAction) {
+          this.transitionToAction(animator, variantAction, 0.2)
+        }
+        animator.idleElapsedSeconds = 0
+        animator.nextIdleVariantAtSeconds = randomIdleVariantSeconds()
+      }
+      animator.footstepDistanceAccum = 0
+    } else {
+      animator.idleElapsedSeconds = 0
+      if (emitFootsteps) {
+        animator.footstepDistanceAccum += distance
+        const stepDistance = nextMotion === 'run' ? FOOTSTEP_DISTANCE_RUN : FOOTSTEP_DISTANCE_WALK
+        while (animator.footstepDistanceAccum >= stepDistance) {
+          const sfx = FOOTSTEP_SFX_NAMES[animator.footstepVariant % FOOTSTEP_SFX_NAMES.length]
+          const volume = nextMotion === 'run' ? FOOTSTEP_VOLUME_RUN : FOOTSTEP_VOLUME_WALK
+          AssetLoader.playSfx(sfx, volume)
+          animator.footstepVariant += 1
+          animator.footstepDistanceAccum -= stepDistance
+        }
+      }
+    }
+
     animator.lastPosition.set(transform.x, transform.y, transform.z)
+  }
+
+  private trySetupDirectionalActions(animator: CharacterAnimator, aliases: CharacterAnimationAliases | null): void {
+    if (animator.directionalActions || !aliases) {
+      return
+    }
+
+    const idle = this.resolveActionByAlias(animator, aliases.idle) ?? this.findAnimationAction(animator, 'idle')
+    const walkForward =
+      this.resolveActionByAlias(animator, aliases.walk_forward) ?? this.findAnimationAction(animator, 'walk')
+    const runForward =
+      this.resolveActionByAlias(animator, aliases.run_forward) ?? this.findAnimationAction(animator, 'run')
+    const walkBackward = this.resolveActionByAlias(animator, aliases.walk_backward) ?? walkForward
+    const walkLeft = this.resolveActionByAlias(animator, aliases.walk_left) ?? walkForward
+    const walkRight = this.resolveActionByAlias(animator, aliases.walk_right) ?? walkForward
+
+    if (!idle || !walkForward || !runForward) {
+      return
+    }
+
+    const runBackward = this.resolveActionByAlias(animator, aliases.run_backward) ?? runForward
+    const runLeft = this.resolveActionByAlias(animator, aliases.run_left) ?? runForward
+    const runRight = this.resolveActionByAlias(animator, aliases.run_right) ?? runForward
+
+    const directionalActions: DirectionalActionSet = {
+      idle,
+      walkForward,
+      walkBackward,
+      walkLeft,
+      walkRight,
+      runForward,
+      runBackward,
+      runLeft,
+      runRight,
+    }
+
+    const uniqueActions = new Set<THREE.AnimationAction>(Object.values(directionalActions))
+    for (const action of uniqueActions) {
+      action.enabled = true
+      action.clampWhenFinished = false
+      action.setLoop(THREE.LoopRepeat, Number.POSITIVE_INFINITY)
+      action.play()
+      action.setEffectiveWeight(0)
+    }
+
+    animator.directionalActions = directionalActions
+    animator.activeAction = null
+    animator.idleElapsedSeconds = 0
+    animator.nextIdleVariantAtSeconds = randomIdleVariantSeconds()
+    animator.footstepDistanceAccum = 0
+  }
+
+  private resolveActionByAlias(animator: CharacterAnimator, alias: string | undefined): THREE.AnimationAction | undefined {
+    if (!alias || alias.trim().length === 0) {
+      return undefined
+    }
+
+    const wanted = normalizeAnimationName(alias)
+    for (const [name, action] of animator.actions.entries()) {
+      if (normalizeAnimationName(name) === wanted) {
+        return action
+      }
+    }
+
+    for (const [name, action] of animator.actions.entries()) {
+      const normalized = normalizeAnimationName(name)
+      if (normalized.includes(wanted) || wanted.includes(normalized)) {
+        return action
+      }
+    }
+
+    return undefined
+  }
+
+  private updateDirectionalAnimationState(
+    animator: CharacterAnimator,
+    transform: ModelTransform,
+    dtSeconds: number,
+    emitFootsteps: boolean,
+  ): void {
+    const directional = animator.directionalActions
+    if (!directional) {
+      return
+    }
+
+    const dx = transform.x - animator.lastPosition.x
+    const dz = transform.z - animator.lastPosition.z
+    const distance = Math.sqrt(dx * dx + dz * dz)
+    const speed = distance / dtSeconds
+    const nextMotion = this.resolveCharacterMotion(animator.motion, speed)
+    const blend = computeDirectionalBlend(dx, dz, transform)
+
+    const targets = new Map<THREE.AnimationAction, number>()
+    if (nextMotion === 'idle') {
+      this.accumulateActionWeight(targets, directional.idle, 1)
+      animator.footstepDistanceAccum = 0
+    } else {
+      const useRun = nextMotion === 'run'
+      this.accumulateActionWeight(targets, useRun ? directional.runForward : directional.walkForward, blend.forward)
+      this.accumulateActionWeight(targets, useRun ? directional.runBackward : directional.walkBackward, blend.backward)
+      this.accumulateActionWeight(targets, useRun ? directional.runLeft : directional.walkLeft, blend.left)
+      this.accumulateActionWeight(targets, useRun ? directional.runRight : directional.walkRight, blend.right)
+
+      if (emitFootsteps) {
+        animator.footstepDistanceAccum += distance
+        const stepDistance = useRun ? FOOTSTEP_DISTANCE_RUN : FOOTSTEP_DISTANCE_WALK
+        while (animator.footstepDistanceAccum >= stepDistance) {
+          const sfx = FOOTSTEP_SFX_NAMES[animator.footstepVariant % FOOTSTEP_SFX_NAMES.length]
+          const volume = useRun ? FOOTSTEP_VOLUME_RUN : FOOTSTEP_VOLUME_WALK
+          AssetLoader.playSfx(sfx, volume)
+          animator.footstepVariant += 1
+          animator.footstepDistanceAccum -= stepDistance
+        }
+      }
+    }
+
+    const uniqueActions = new Set<THREE.AnimationAction>(Object.values(directional))
+    for (const action of uniqueActions) {
+      const target = targets.get(action) ?? 0
+      this.blendActionWeight(action, target, dtSeconds)
+    }
+
+    animator.motion = nextMotion
+    animator.idleElapsedSeconds = 0
+    animator.lastPosition.set(transform.x, transform.y, transform.z)
+  }
+
+  private accumulateActionWeight(
+    targets: Map<THREE.AnimationAction, number>,
+    action: THREE.AnimationAction,
+    weight: number,
+  ): void {
+    if (weight <= 0) {
+      return
+    }
+    targets.set(action, (targets.get(action) ?? 0) + weight)
+  }
+
+  private blendActionWeight(action: THREE.AnimationAction, target: number, dtSeconds: number): void {
+    const blend = Math.min(1, dtSeconds * DIRECTIONAL_WEIGHT_LERP_RATE)
+    const current = action.getEffectiveWeight()
+    const next = current + (target - current) * blend
+    action.enabled = true
+    action.setEffectiveWeight(next)
+    if (next > 0.001 && !action.isRunning()) {
+      action.play()
+    }
   }
 
   private findAnimationAction(animator: CharacterAnimator, motion: CharacterMotion): THREE.AnimationAction | undefined {
@@ -536,6 +775,68 @@ export class WorldStreamingRenderer {
     }
 
     return animator.actions.values().next().value
+  }
+
+  private findIdleVariantAction(animator: CharacterAnimator): THREE.AnimationAction | undefined {
+    const actionNames = Array.from(animator.actions.keys())
+    if (actionNames.length === 0) {
+      return undefined
+    }
+
+    const lowerNames = actionNames.map((name) => name.toLowerCase())
+    const variants: THREE.AnimationAction[] = []
+    for (const hint of IDLE_VARIATION_HINTS) {
+      const index = lowerNames.findIndex((name) => name.includes(hint))
+      if (index < 0) {
+        continue
+      }
+
+      const action = animator.actions.get(actionNames[index])
+      if (action && action !== animator.activeAction) {
+        variants.push(action)
+      }
+    }
+
+    if (variants.length === 0) {
+      return undefined
+    }
+
+    const index = Math.floor(Math.random() * variants.length)
+    return variants[index]
+  }
+
+  private transitionToAction(
+    animator: CharacterAnimator,
+    nextAction: THREE.AnimationAction,
+    fadeSeconds: number,
+  ): void {
+    nextAction.enabled = true
+    nextAction.reset().play()
+    if (animator.activeAction && animator.activeAction !== nextAction) {
+      animator.activeAction.crossFadeTo(nextAction, fadeSeconds, true)
+    }
+    animator.activeAction = nextAction
+  }
+
+  private resolveCharacterMotion(previousMotion: CharacterMotion, speed: number): CharacterMotion {
+    if (previousMotion === 'idle') {
+      if (speed <= IDLE_EXIT_SPEED) {
+        return 'idle'
+      }
+      return speed >= RUN_ENTER_SPEED ? 'run' : 'walk'
+    }
+
+    if (previousMotion === 'run') {
+      if (speed <= IDLE_ENTER_SPEED) {
+        return 'idle'
+      }
+      return speed >= RUN_EXIT_SPEED ? 'run' : 'walk'
+    }
+
+    if (speed <= IDLE_ENTER_SPEED) {
+      return 'idle'
+    }
+    return speed >= RUN_ENTER_SPEED ? 'run' : 'walk'
   }
 
   private clearCharacterAnimators(): void {
@@ -591,12 +892,19 @@ export class WorldStreamingRenderer {
   private applyModelTransform(object: THREE.Object3D, transform: ModelTransform): void {
     object.position.set(transform.x, transform.y, transform.z)
     object.scale.set(transform.sx, transform.sy, transform.sz)
-    object.quaternion.set(
+    TMP_MODEL_QUAT.set(
       transform.qx ?? 0,
       transform.qy ?? 0,
       transform.qz ?? 0,
       transform.qw ?? 1,
-    )
+    ).normalize()
+
+    if ((transform.yawOffset ?? 0) !== 0) {
+      TMP_YAW_OFFSET_QUAT.setFromAxisAngle(WORLD_UP_AXIS, transform.yawOffset ?? 0)
+      TMP_MODEL_QUAT.multiply(TMP_YAW_OFFSET_QUAT)
+    }
+
+    object.quaternion.copy(TMP_MODEL_QUAT)
     object.updateMatrixWorld()
   }
 }
@@ -610,4 +918,50 @@ function resolveLocalIdentityHex(world: CoreWorld): string {
 function biomeColor(biomeId: number): THREE.Color {
   const index = Math.abs(biomeId) % BIOME_COLORS.length
   return BIOME_COLORS[index]
+}
+
+function randomIdleVariantSeconds(): number {
+  const span = IDLE_VARIATION_MAX_SECONDS - IDLE_VARIATION_MIN_SECONDS
+  return IDLE_VARIATION_MIN_SECONDS + Math.random() * span
+}
+
+function normalizeAnimationName(value: string): string {
+  return value.toLowerCase().replace(/[\s_-]+/g, '')
+}
+
+function computeDirectionalBlend(
+  dx: number,
+  dz: number,
+  transform: ModelTransform,
+): { forward: number; backward: number; left: number; right: number } {
+  TMP_WORLD_MOVE.set(dx, 0, dz)
+  if (TMP_WORLD_MOVE.lengthSq() <= 1e-8) {
+    return { forward: 0, backward: 0, left: 0, right: 0 }
+  }
+
+  TMP_MODEL_QUAT.set(
+    transform.qx ?? 0,
+    transform.qy ?? 0,
+    transform.qz ?? 0,
+    transform.qw ?? 1,
+  ).normalize()
+  TMP_INVERSE_MODEL_QUAT.copy(TMP_MODEL_QUAT).invert()
+  TMP_LOCAL_MOVE.copy(TMP_WORLD_MOVE).applyQuaternion(TMP_INVERSE_MODEL_QUAT)
+
+  const forward = Math.max(0, -TMP_LOCAL_MOVE.z)
+  const backward = Math.max(0, TMP_LOCAL_MOVE.z)
+  const left = Math.max(0, -TMP_LOCAL_MOVE.x)
+  const right = Math.max(0, TMP_LOCAL_MOVE.x)
+  const sum = forward + backward + left + right
+  if (sum <= 1e-8) {
+    return { forward: 0, backward: 0, left: 0, right: 0 }
+  }
+
+  const inv = 1 / sum
+  return {
+    forward: forward * inv,
+    backward: backward * inv,
+    left: left * inv,
+    right: right * inv,
+  }
 }

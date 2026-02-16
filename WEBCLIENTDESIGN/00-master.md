@@ -45,6 +45,7 @@
 - `10-observability-testing.md`: 관측/검증 전략
 - `11-implementation-order.md`: 구현 순서 체크리스트
 - `12-asset-strategy.md`: 에셋 로딩/관리 전략
+- `13-character-locomotion-upgrade.md`: 플레이어 로코모션(전/후/좌/우) 교체 설계
 
 ## 6. High-Level Runtime States
 `WebClientAppState`:

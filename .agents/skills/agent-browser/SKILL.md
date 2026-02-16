@@ -97,6 +97,10 @@ agent-browser state load auth.json
 agent-browser open https://app.example.com/dashboard
 ```
 
+If you are on WSL and Google OAuth blocks automation (`This browser or app may not be secure`), use:
+- [`../wsl-google-human-login/SKILL.md`](../wsl-google-human-login/SKILL.md)
+- Human-in-the-loop login on Windows Chrome + CDP bridge back to WSL.
+
 ### Data Extraction
 
 ```bash
@@ -199,6 +203,7 @@ agent-browser find testid "submit-btn" click
 | [references/snapshot-refs.md](references/snapshot-refs.md) | Ref lifecycle, invalidation rules, troubleshooting |
 | [references/session-management.md](references/session-management.md) | Parallel sessions, state persistence, concurrent scraping |
 | [references/authentication.md](references/authentication.md) | Login flows, OAuth, 2FA handling, state reuse |
+| [../wsl-google-human-login/SKILL.md](../wsl-google-human-login/SKILL.md) | WSL + Google OAuth manual-login bridge workflow |
 | [references/video-recording.md](references/video-recording.md) | Recording workflows for debugging and documentation |
 | [references/proxy-support.md](references/proxy-support.md) | Proxy configuration, geo-testing, rotating proxies |
 

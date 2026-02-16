@@ -29,12 +29,31 @@ export interface AssetManifest {
     sfx: Record<string, string>
     music: Record<string, string>
   }
+  animations?: {
+    characters?: {
+      localPlayer?: CharacterAnimationAliases
+      remotePlayer?: CharacterAnimationAliases
+      npc?: CharacterAnimationAliases
+    }
+  }
   preloadPriority: {
     critical: string[]
     high: string[]
     normal: string[]
     lazy?: string[]
   }
+}
+
+export interface CharacterAnimationAliases {
+  idle?: string
+  walk_forward?: string
+  walk_backward?: string
+  walk_left?: string
+  walk_right?: string
+  run_forward?: string
+  run_backward?: string
+  run_left?: string
+  run_right?: string
 }
 
 export const ASSET_MANIFEST_PATH = '/assets/manifest.json'
@@ -50,6 +69,13 @@ export function getResourceModelPath(resourceType: number, manifest: AssetManife
 
 export function getCharacterModelPath(kind: 'localPlayer' | 'remotePlayer' | 'npc', manifest: AssetManifest): string {
   return manifest.models.characters[kind]
+}
+
+export function getCharacterAnimationAliases(
+  kind: 'localPlayer' | 'remotePlayer' | 'npc',
+  manifest: AssetManifest,
+): CharacterAnimationAliases | null {
+  return manifest.animations?.characters?.[kind] ?? null
 }
 
 export function getSfxPath(name: string, manifest: AssetManifest): string | undefined {

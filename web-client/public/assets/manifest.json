@@ -3,9 +3,9 @@
   "generatedAt": "2026-02-13",
   "models": {
     "characters": {
-      "localPlayer": "/assets/models/characters/xbot.glb",
-      "remotePlayer": "/assets/models/characters/xbot.glb",
-      "npc": "/assets/models/characters/xbot.glb"
+      "localPlayer": "/assets/models/characters/character_gamer.glb",
+      "remotePlayer": "/assets/models/characters/character_gamer.glb",
+      "npc": "/assets/models/characters/character_gamer.glb"
     },
     "buildings": {
       "fallback": "/assets/models/buildings/box.glb",
@@ -37,8 +37,8 @@
       "ui_click": "/assets/audio/sfx/ui_click.mp3",
       "ui_success": "/assets/audio/sfx/ui_success.mp3",
       "ui_error": "/assets/audio/sfx/ui_error.mp3",
-      "footstep_01": "/assets/audio/sfx/footstep_01.mp3",
-      "footstep_02": "/assets/audio/sfx/footstep_02.mp3",
+      "footstep_01": "/assets/audio/sfx/footstep_01.ogg",
+      "footstep_02": "/assets/audio/sfx/footstep_02.ogg",
       "attack_swing": "/assets/audio/sfx/attack_swing.mp3",
       "attack_hit": "/assets/audio/sfx/attack_hit.mp3",
       "gather_harvest": "/assets/audio/sfx/gather_harvest.mp3"
@@ -48,9 +48,46 @@
       "gameplay_upbeat": "/assets/audio/music/gameplay_upbeat.mp3"
     }
   },
+  "animations": {
+    "characters": {
+      "localPlayer": {
+        "idle": "idle",
+        "walk_forward": "walk",
+        "walk_backward": "wheelchair-move-back",
+        "walk_left": "wheelchair-move-left",
+        "walk_right": "wheelchair-move-right",
+        "run_forward": "sprint",
+        "run_backward": "wheelchair-move-back",
+        "run_left": "wheelchair-move-left",
+        "run_right": "wheelchair-move-right"
+      },
+      "remotePlayer": {
+        "idle": "idle",
+        "walk_forward": "walk",
+        "walk_backward": "wheelchair-move-back",
+        "walk_left": "wheelchair-move-left",
+        "walk_right": "wheelchair-move-right",
+        "run_forward": "sprint",
+        "run_backward": "wheelchair-move-back",
+        "run_left": "wheelchair-move-left",
+        "run_right": "wheelchair-move-right"
+      },
+      "npc": {
+        "idle": "idle",
+        "walk_forward": "walk",
+        "walk_backward": "wheelchair-move-back",
+        "walk_left": "wheelchair-move-left",
+        "walk_right": "wheelchair-move-right",
+        "run_forward": "sprint",
+        "run_backward": "wheelchair-move-back",
+        "run_left": "wheelchair-move-left",
+        "run_right": "wheelchair-move-right"
+      }
+    }
+  },
   "preloadPriority": {
     "critical": [
-      "/assets/models/characters/xbot.glb"
+      "/assets/models/characters/character_gamer.glb"
     ],
     "high": [
       "/assets/models/buildings/box.glb",
@@ -63,7 +100,8 @@
       "/assets/models/props/resource_small.glb",
       "/assets/audio/sfx/attack_swing.mp3",
       "/assets/audio/sfx/attack_hit.mp3",
-      "/assets/audio/sfx/footstep_01.mp3"
+      "/assets/audio/sfx/footstep_01.ogg",
+      "/assets/audio/sfx/footstep_02.ogg"
     ],
     "lazy": [
       "/assets/audio/music/ambient_sneaky.mp3",
@@ -71,7 +109,7 @@
     ]
   },
   "notes": {
-    "source": "Models: Xbot (three.js example models) + Khronos glTF sample placeholders. Audio SFX: Mixkit (Free). Music: Kevin MacLeod / Incompetech (CC-BY 3.0)",
+    "source": "Models: Kenney Mini Arcade character_gamer (current player) + Khronos placeholders. Audio SFX: Mixkit (UI/attack) + Kenney RPG sounds (footstep). Music: Kevin MacLeod / Incompetech (CC-BY 3.0)",
     "placeholder": false,
     "licenseNote": "Kevin MacLeod music requires attribution. See https://incompetech.com",
     "replacementGuidance": "Replace with production assets from Kenney, Kaykit, or custom models. Update manifest.json paths accordingly."

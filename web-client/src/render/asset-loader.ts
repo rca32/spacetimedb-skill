@@ -22,6 +22,7 @@ class AssetLoaderImpl {
   private modelCache = new Map<string, LoadedModel>()
   private textureCache = new Map<string, THREE.Texture>()
   private audioCache = new Map<string, AudioBuffer>()
+  private pendingAudioLoads = new Map<string, Promise<AudioBuffer>>()
   private manifest: AssetManifest | null = null
 
   private getAudioContext(): AudioContext {
@@ -78,16 +79,29 @@ class AssetLoaderImpl {
       return cached
     }
 
-    const response = await fetch(path)
-    if (!response.ok) {
-      throw new Error(`Failed to load audio: ${path}`)
+    const pending = this.pendingAudioLoads.get(path)
+    if (pending) {
+      return pending
     }
 
-    const arrayBuffer = await response.arrayBuffer()
-    const audioBuffer = await this.getAudioContext().decodeAudioData(arrayBuffer)
+    const loadPromise = (async () => {
+      const response = await fetch(path)
+      if (!response.ok) {
+        throw new Error(`Failed to load audio: ${path}`)
+      }
 
-    this.audioCache.set(path, audioBuffer)
-    return audioBuffer
+      const arrayBuffer = await response.arrayBuffer()
+      const audioBuffer = await this.getAudioContext().decodeAudioData(arrayBuffer)
+      this.audioCache.set(path, audioBuffer)
+      return audioBuffer
+    })()
+
+    this.pendingAudioLoads.set(path, loadPromise)
+    try {
+      return await loadPromise
+    } finally {
+      this.pendingAudioLoads.delete(path)
+    }
   }
 
   async loadCriticalAssets(): Promise<AssetLoaderResult> {
@@ -165,18 +179,22 @@ class AssetLoaderImpl {
     if (!path) return
 
     const buffer = this.audioCache.get(path)
-    if (!buffer) return
+    if (buffer) {
+      this.playAudioBuffer(buffer, volume, false)
+      return
+    }
 
-    const ctx = this.getAudioContext()
-    const source = ctx.createBufferSource()
-    const gainNode = ctx.createGain()
+    if (this.pendingAudioLoads.has(path)) {
+      return
+    }
 
-    source.buffer = buffer
-    gainNode.gain.value = volume
-
-    source.connect(gainNode)
-    gainNode.connect(ctx.destination)
-    source.start(0)
+    void this.loadAudio(path)
+      .then((loadedBuffer) => {
+        this.playAudioBuffer(loadedBuffer, volume, false)
+      })
+      .catch(() => {
+        // Ignore single SFX load failure.
+      })
   }
 
   playMusic(name: string, volume = 0.5, loop = true): { stop: () => void } | null {
@@ -187,29 +205,14 @@ class AssetLoaderImpl {
     if (!path) return null
 
     const buffer = this.audioCache.get(path)
-    if (!buffer) return null
-
-    const ctx = this.getAudioContext()
-    const source = ctx.createBufferSource()
-    const gainNode = ctx.createGain()
-
-    source.buffer = buffer
-    source.loop = loop
-    gainNode.gain.value = volume
-
-    source.connect(gainNode)
-    gainNode.connect(ctx.destination)
-    source.start(0)
-
-    return {
-      stop: () => {
-        try {
-          source.stop()
-        } catch {
-          // Already stopped
-        }
-      },
+    if (!buffer) {
+      void this.loadAudio(path).catch(() => {
+        // Lazy music load can fail silently.
+      })
+      return null
     }
+
+    return this.playAudioBuffer(buffer, volume, loop)
   }
 
   dispose(): void {
@@ -232,11 +235,42 @@ class AssetLoaderImpl {
     this.modelCache.clear()
     this.textureCache.clear()
     this.audioCache.clear()
+    this.pendingAudioLoads.clear()
     this.manifest = null
 
     if (this.audioContext) {
       void this.audioContext.close()
       this.audioContext = null
+    }
+  }
+
+  private playAudioBuffer(buffer: AudioBuffer, volume: number, loop: boolean): { stop: () => void } {
+    const ctx = this.getAudioContext()
+    if (ctx.state === 'suspended') {
+      void ctx.resume().catch(() => {
+        // Browser may deny resume outside a user gesture.
+      })
+    }
+
+    const source = ctx.createBufferSource()
+    const gainNode = ctx.createGain()
+
+    source.buffer = buffer
+    source.loop = loop
+    gainNode.gain.value = volume
+
+    source.connect(gainNode)
+    gainNode.connect(ctx.destination)
+    source.start(0)
+
+    return {
+      stop: () => {
+        try {
+          source.stop()
+        } catch {
+          // Already stopped
+        }
+      },
     }
   }
 }

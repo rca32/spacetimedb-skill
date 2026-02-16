@@ -12,5 +12,19 @@ export function runCoreSystems(world: CoreWorld): void {
     presentation.qy += (rotation.y - presentation.qy) * blend
     presentation.qz += (rotation.z - presentation.qz) * blend
     presentation.qw += (rotation.w - presentation.qw) * blend
+
+    const qLength = Math.hypot(presentation.qx, presentation.qy, presentation.qz, presentation.qw)
+    if (qLength > 1e-6) {
+      const invLength = 1 / qLength
+      presentation.qx *= invLength
+      presentation.qy *= invLength
+      presentation.qz *= invLength
+      presentation.qw *= invLength
+    } else {
+      presentation.qx = 0
+      presentation.qy = 0
+      presentation.qz = 0
+      presentation.qw = 1
+    }
   })
 }
