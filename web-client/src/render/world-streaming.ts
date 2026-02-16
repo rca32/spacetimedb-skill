@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { SkeletonUtils } from 'three-stdlib'
 import { CoreWorld } from '../core/world'
 import {
   BuildingData,
@@ -321,7 +322,8 @@ export class WorldStreamingRenderer {
         qz: presentation.qz,
         qw: presentation.qw,
       }
-      const modelPath = manifest ? getCharacterModelPath('npc', manifest) : null
+      // NPCs use instanced fallback geometry for stable multi-instance rendering.
+      const modelPath = null
 
       if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf)) {
         return
@@ -398,7 +400,7 @@ export class WorldStreamingRenderer {
       return false
     }
 
-    const clone = model.scene.clone(true)
+    const clone = SkeletonUtils.clone(model.scene)
     clone.visible = true
     this.applyModelTransform(clone, transform)
     this.gltfRoot.add(clone)
