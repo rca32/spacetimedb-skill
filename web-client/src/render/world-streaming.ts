@@ -3,6 +3,7 @@ import { SkeletonUtils } from 'three-stdlib'
 import { CoreWorld } from '../core/world'
 import {
   BuildingData,
+  ChunkPayloadData,
   ClaimData,
   ChunkData,
   IsBuilding,
@@ -12,6 +13,7 @@ import {
   IsRemotePlayer,
   IsResourceNode,
   IsTerrainChunk,
+  IsTerrainChunkPayload,
   NetEntity,
   Position,
   PresentationTransform,
@@ -40,9 +42,13 @@ const GLTF_RESOURCE_SCALE = 0.8
 const GLTF_PLAYER_SCALE = 0.9
 const GLTF_NPC_SCALE = 0.85
 const TERRAIN_CHUNK_SIZE = 16
+const TERRAIN_HEIGHT_SCALE = 0.2
+const TERRAIN_SEA_LEVEL_BASE = 12
+const WATER_SURFACE_OFFSET = 0.03
 const CHUNK_DECORATION_MARGIN = 2.3
 const DEFAULT_DECORATION_PER_CHUNK = 4
 const DEFAULT_LANDMARK_CHANCE = 0.34
+const WATER_COLOR = new THREE.Color(0x3b6796)
 const BIOME_COLORS = [0x284032, 0x395629, 0x5b4d2d, 0x30495e, 0x4d3b55, 0x6c5e39].map(
   (hex) => new THREE.Color(hex),
 )
@@ -132,6 +138,13 @@ type CharacterAnimator = {
   nextIdleVariantAtSeconds: number
   footstepDistanceAccum: number
   footstepVariant: number
+}
+
+type TerrainChunkRenderable = {
+  group: THREE.Group
+  terrain: THREE.Mesh
+  water: THREE.Mesh | null
+  payloadHash: string
 }
 
 const IDLE_ANIMATION_HINTS = ['idle', 'survey', 'stand', 'idle1', 'swing', 'standstill']
@@ -258,11 +271,15 @@ export class WorldStreamingRenderer {
   private readonly root = new THREE.Group()
   private readonly gltfRoot = new THREE.Group()
   private readonly terrainPool: InstancedPool
+  private readonly terrainRoot = new THREE.Group()
+  private readonly terrainChunkRenderables = new Map<string, TerrainChunkRenderable>()
   private readonly buildingPool: InstancedPool
   private readonly claimPool: InstancedPool
   private readonly resourcePool: InstancedPool
   private readonly actorPool: InstancedPool
   private readonly npcPool: InstancedPool
+  private readonly terrainMaterial: THREE.MeshStandardMaterial
+  private readonly waterMaterial: THREE.MeshStandardMaterial
   private readonly gltfObjects = new Map<string, THREE.Object3D>()
   private readonly gltfPathByKey = new Map<string, string>()
   private readonly characterAnimators = new Map<string, CharacterAnimator>()
@@ -274,14 +291,25 @@ export class WorldStreamingRenderer {
   constructor(scene: THREE.Scene, materials: MaterialPalette) {
     const terrainGeometry = new THREE.PlaneGeometry(16, 16)
     terrainGeometry.rotateX(-Math.PI * 0.5)
-
     const buildingGeometry = new THREE.BoxGeometry(1.6, 1.6, 1.6)
     const claimGeometry = new THREE.RingGeometry(0.9, 1.0, 32)
     claimGeometry.rotateX(-Math.PI * 0.5)
     const resourceGeometry = new THREE.CylinderGeometry(0.25, 0.42, 1.2, 6)
     const actorGeometry = new THREE.BoxGeometry(0.8, 1.6, 0.8)
 
-    this.terrainPool = new InstancedPool(terrainGeometry, materials.ground, 2048)
+    this.terrainMaterial = materials.ground.clone()
+    this.terrainMaterial.vertexColors = true
+    this.terrainMaterial.needsUpdate = true
+    this.waterMaterial = new THREE.MeshStandardMaterial({
+      color: WATER_COLOR,
+      transparent: true,
+      opacity: 0.68,
+      roughness: 0.25,
+      metalness: 0.02,
+      vertexColors: true,
+      depthWrite: false,
+    })
+    this.terrainPool = new InstancedPool(terrainGeometry, materials.ground, 4096)
     this.buildingPool = new InstancedPool(buildingGeometry, materials.building, 2048)
     this.claimPool = new InstancedPool(claimGeometry, materials.claim, 1024)
     this.resourcePool = new InstancedPool(resourceGeometry, materials.resource, 4096)
@@ -300,8 +328,11 @@ export class WorldStreamingRenderer {
     this.actorPool.mesh.frustumCulled = false
     this.npcPool.mesh.frustumCulled = false
 
+    this.terrainRoot.name = 'world-terrain-layer'
+    this.terrainRoot.userData.cameraObstacle = true
     this.gltfRoot.name = 'world-gltf-layer'
     this.root.add(this.terrainPool.mesh)
+    this.root.add(this.terrainRoot)
     this.root.add(this.buildingPool.mesh)
     this.root.add(this.claimPool.mesh)
     this.root.add(this.resourcePool.mesh)
@@ -322,11 +353,41 @@ export class WorldStreamingRenderer {
     const localIdentityHex = resolveLocalIdentityHex(world)
     const manifest = AssetLoader.getManifest()
     const environmentConfig = manifest ? getEnvironmentModelConfig(manifest) : null
+    const payloadByChunkKey = new Map<string, { payloadVersion: number; cellCount: number; payloadBytes: number[] }>()
+
+    world.ecs.query(IsTerrainChunkPayload, ChunkPayloadData).readEach(([payload]) => {
+      payloadByChunkKey.set(payload.chunkKey, {
+        payloadVersion: payload.payloadVersion,
+        cellCount: payload.cellCount,
+        payloadBytes: payload.payloadBytes,
+      })
+    })
 
     world.ecs.query(IsTerrainChunk, NetEntity, Position, ChunkData).readEach(([net, position, chunk]) => {
       const key = `${net.table}:${net.serverId}`
+      const payload =
+        payloadByChunkKey.get(chunk.chunkKey) ?? payloadByChunkKey.get(String(net.serverId))
+      if (
+        payload &&
+        payload.payloadBytes.length > 0 &&
+        this.upsertTerrainChunkMesh(
+          key,
+          position,
+          chunk,
+          payload.payloadVersion,
+          payload.cellCount,
+          payload.payloadBytes,
+        )
+      ) {
+        this.terrainPool.remove(key)
+        seenTerrain.add(key)
+        this.syncChunkEnvironment(key, position, chunk, environmentConfig, seenGltf)
+        return
+      }
+
+      this.removeTerrainChunkMesh(key)
       seenTerrain.add(key)
-      const chunkScale = Math.max(0.25, chunk.chunkSize / 16)
+      const chunkScale = Math.max(0.25, chunk.chunkSize / TERRAIN_CHUNK_SIZE)
       this.terrainPool.upsert(
         key,
         { x: position.x, y: position.y, z: position.z, sx: chunkScale, sy: 1, sz: chunkScale },
@@ -481,6 +542,7 @@ export class WorldStreamingRenderer {
     this.updateCharacterAnimators(dtSeconds)
 
     this.terrainPool.removeMissing(seenTerrain)
+    this.pruneTerrainChunkMeshes(seenTerrain)
     this.buildingPool.removeMissing(seenBuildings)
     this.claimPool.removeMissing(seenClaims)
     this.resourcePool.removeMissing(seenResources)
@@ -496,14 +558,95 @@ export class WorldStreamingRenderer {
     this.npcPool.mesh.instanceMatrix.needsUpdate = true
   }
 
+  private upsertTerrainChunkMesh(
+    key: string,
+    position: { x: number; y: number; z: number },
+    chunk: { chunkSize: number; biomeId: number },
+    payloadVersion: number,
+    cellCount: number,
+    payloadBytes: number[],
+  ): boolean {
+    const payloadHash = hashPayload(payloadVersion, cellCount, payloadBytes)
+    const existing = this.terrainChunkRenderables.get(key)
+    if (existing && existing.payloadHash === payloadHash) {
+      existing.group.position.set(position.x, position.y, position.z)
+      existing.group.updateMatrixWorld()
+      return true
+    }
+    if (existing) {
+      this.removeTerrainChunkMesh(key)
+    }
+
+    const built = buildTerrainChunkGeometry(
+      chunk.chunkSize,
+      chunk.biomeId,
+      payloadVersion,
+      cellCount,
+      payloadBytes,
+    )
+    if (!built) {
+      return false
+    }
+
+    const group = new THREE.Group()
+    group.position.set(position.x, position.y, position.z)
+    group.userData.cameraObstacle = true
+
+    const terrain = new THREE.Mesh(built.terrainGeometry, this.terrainMaterial)
+    terrain.userData.cameraObstacle = true
+    terrain.castShadow = false
+    terrain.receiveShadow = true
+    group.add(terrain)
+
+    let water: THREE.Mesh | null = null
+    if (built.waterGeometry) {
+      water = new THREE.Mesh(built.waterGeometry, this.waterMaterial)
+      water.userData.cameraObstacle = false
+      water.castShadow = false
+      water.receiveShadow = false
+      group.add(water)
+    }
+
+    this.terrainRoot.add(group)
+    this.terrainChunkRenderables.set(key, {
+      group,
+      terrain,
+      water,
+      payloadHash,
+    })
+    return true
+  }
+
+  private pruneTerrainChunkMeshes(seenTerrain: Set<string>): void {
+    for (const key of [...this.terrainChunkRenderables.keys()]) {
+      if (!seenTerrain.has(key)) {
+        this.removeTerrainChunkMesh(key)
+      }
+    }
+  }
+
+  private removeTerrainChunkMesh(key: string): void {
+    const existing = this.terrainChunkRenderables.get(key)
+    if (!existing) {
+      return
+    }
+    this.terrainRoot.remove(existing.group)
+    existing.terrain.geometry.dispose()
+    if (existing.water) {
+      existing.water.geometry.dispose()
+    }
+    this.terrainChunkRenderables.delete(key)
+  }
+
   private syncChunkEnvironment(
     chunkKey: string,
     position: { x: number; y: number; z: number },
-    chunk: { chunkX: number; chunkY: number; biomeId: number },
+    chunk: { chunkX: number; chunkY: number; biomeId: number; chunkSize: number },
     environmentConfig: EnvironmentModelConfig | null,
     seenGltf: Set<string>,
   ): void {
     const baseSeed = hashInt3(chunk.chunkX, chunk.chunkY, chunk.biomeId ^ 0x9e3779b9)
+    const chunkScale = Math.max(0.25, chunk.chunkSize / TERRAIN_CHUNK_SIZE)
 
     const terrainOverlayPath = pickPathForSeed(resolveTerrainOverlayPaths(chunk.biomeId, environmentConfig), baseSeed)
     if (terrainOverlayPath) {
@@ -514,9 +657,9 @@ export class WorldStreamingRenderer {
           x: position.x,
           y: position.y - 0.02,
           z: position.z,
-          sx: 1,
+          sx: chunkScale,
           sy: 1,
-          sz: 1,
+          sz: chunkScale,
           yawOffset: seededRange(mixSeed(baseSeed, 17), 0, Math.PI * 2),
         },
         seenGltf,
@@ -527,7 +670,7 @@ export class WorldStreamingRenderer {
 
     const decorationPaths = resolveEnvironmentDecorationPaths(environmentConfig)
     const decorationCount = resolveDecorationCount(environmentConfig)
-    const radius = TERRAIN_CHUNK_SIZE * 0.5 - CHUNK_DECORATION_MARGIN
+    const radius = Math.max(1.5, chunk.chunkSize * 0.5 - CHUNK_DECORATION_MARGIN)
     for (let slot = 0; slot < decorationCount; slot += 1) {
       const slotSeed = mixSeed(baseSeed, slot + 1)
       const modelPath = pickPathForSeed(decorationPaths, slotSeed)
@@ -588,6 +731,7 @@ export class WorldStreamingRenderer {
 
   clear(): void {
     this.terrainPool.removeMissing(new Set())
+    this.pruneTerrainChunkMeshes(new Set())
     this.buildingPool.removeMissing(new Set())
     this.claimPool.removeMissing(new Set())
     this.resourcePool.removeMissing(new Set())
@@ -601,6 +745,8 @@ export class WorldStreamingRenderer {
     this.clear()
     scene.remove(this.gltfRoot)
     scene.remove(this.root)
+    this.terrainMaterial.dispose()
+    this.waterMaterial.dispose()
     this.terrainPool.mesh.geometry.dispose()
     this.buildingPool.mesh.geometry.dispose()
     this.claimPool.mesh.geometry.dispose()
@@ -1252,6 +1398,170 @@ export class WorldStreamingRenderer {
     object.quaternion.copy(TMP_MODEL_QUAT)
     object.updateMatrixWorld()
   }
+}
+
+function buildTerrainChunkGeometry(
+  chunkSize: number,
+  defaultBiomeId: number,
+  payloadVersion: number,
+  cellCount: number,
+  payloadBytes: number[],
+): { terrainGeometry: THREE.BufferGeometry; waterGeometry: THREE.BufferGeometry | null } | null {
+  if (payloadVersion !== 1 || chunkSize <= 0) {
+    return null
+  }
+
+  const expectedCells = chunkSize * chunkSize
+  if (cellCount > 0 && cellCount !== expectedCells) {
+    return null
+  }
+
+  const expectedBytes = expectedCells * 8
+  if (payloadBytes.length < expectedBytes) {
+    return null
+  }
+
+  const bytes = Uint8Array.from(payloadBytes.slice(0, expectedBytes))
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const vertexSide = chunkSize + 1
+  const vertexCount = vertexSide * vertexSide
+  const positions = new Float32Array(vertexCount * 3)
+  const colors = new Float32Array(vertexCount * 3)
+  const half = chunkSize * 0.5
+
+  for (let z = 0; z <= chunkSize; z += 1) {
+    for (let x = 0; x <= chunkSize; x += 1) {
+      const sx = Math.min(chunkSize - 1, Math.max(0, x))
+      const sz = Math.min(chunkSize - 1, Math.max(0, z))
+      const cell = readTerrainCell(view, chunkSize, sx, sz)
+      const isWater = (cell.flags & 1) !== 0 || cell.waterLevel > cell.elevation
+      const color = biomeColor(cell.biomeId || defaultBiomeId)
+      const weight = isWater ? 0.35 : 0
+      const r = color.r + (WATER_COLOR.r - color.r) * weight
+      const g = color.g + (WATER_COLOR.g - color.g) * weight
+      const b = color.b + (WATER_COLOR.b - color.b) * weight
+
+      const i = z * vertexSide + x
+      const base = i * 3
+      positions[base + 0] = x - half
+      positions[base + 1] = elevationToWorldY(cell.elevation)
+      positions[base + 2] = z - half
+      colors[base + 0] = r
+      colors[base + 1] = g
+      colors[base + 2] = b
+    }
+  }
+
+  const indexCount = chunkSize * chunkSize * 6
+  const indices = vertexCount > 65535 ? new Uint32Array(indexCount) : new Uint16Array(indexCount)
+  let cursor = 0
+  for (let z = 0; z < chunkSize; z += 1) {
+    for (let x = 0; x < chunkSize; x += 1) {
+      const a = z * vertexSide + x
+      const b = a + 1
+      const c = a + vertexSide
+      const d = c + 1
+      indices[cursor++] = a
+      indices[cursor++] = c
+      indices[cursor++] = b
+      indices[cursor++] = b
+      indices[cursor++] = c
+      indices[cursor++] = d
+    }
+  }
+
+  const terrainGeometry = new THREE.BufferGeometry()
+  terrainGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  terrainGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  terrainGeometry.setIndex(new THREE.BufferAttribute(indices, 1))
+  terrainGeometry.computeVertexNormals()
+  terrainGeometry.computeBoundingSphere()
+
+  const waterGeometry = buildWaterSurfaceGeometry(view, chunkSize)
+  return { terrainGeometry, waterGeometry }
+}
+
+function buildWaterSurfaceGeometry(view: DataView, chunkSize: number): THREE.BufferGeometry | null {
+  const positions: number[] = []
+  const colors: number[] = []
+  const half = chunkSize * 0.5
+
+  for (let z = 0; z < chunkSize; z += 1) {
+    for (let x = 0; x < chunkSize; x += 1) {
+      const cell = readTerrainCell(view, chunkSize, x, z)
+      const isWater = (cell.flags & 1) !== 0 || cell.waterLevel > cell.elevation
+      if (!isWater) {
+        continue
+      }
+
+      const y = elevationToWorldY(cell.waterLevel) + WATER_SURFACE_OFFSET
+      const x0 = x - half
+      const x1 = x + 1 - half
+      const z0 = z - half
+      const z1 = z + 1 - half
+
+      positions.push(
+        x0, y, z0,
+        x0, y, z1,
+        x1, y, z0,
+        x1, y, z0,
+        x0, y, z1,
+        x1, y, z1,
+      )
+
+      for (let i = 0; i < 6; i += 1) {
+        colors.push(WATER_COLOR.r, WATER_COLOR.g, WATER_COLOR.b)
+      }
+    }
+  }
+
+  if (positions.length === 0) {
+    return null
+  }
+
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+  geometry.computeVertexNormals()
+  geometry.computeBoundingSphere()
+  return geometry
+}
+
+function readTerrainCell(
+  view: DataView,
+  chunkSize: number,
+  x: number,
+  z: number,
+): { elevation: number; waterLevel: number; biomeId: number; flags: number } {
+  const idx = (z * chunkSize + x) * 8
+  return {
+    elevation: view.getInt16(idx, true),
+    waterLevel: view.getInt16(idx + 2, true),
+    biomeId: view.getUint16(idx + 4, true),
+    flags: view.getUint16(idx + 6, true),
+  }
+}
+
+function elevationToWorldY(rawElevation: number): number {
+  return (rawElevation - TERRAIN_SEA_LEVEL_BASE) * TERRAIN_HEIGHT_SCALE
+}
+
+function hashPayload(payloadVersion: number, cellCount: number, payloadBytes: number[]): string {
+  let h = 0x811c9dc5
+  h ^= payloadVersion & 0xff
+  h = Math.imul(h, 0x01000193)
+  h ^= cellCount & 0xff
+  h = Math.imul(h, 0x01000193)
+
+  const len = payloadBytes.length
+  const sample = Math.max(1, Math.floor(len / 64))
+  for (let i = 0; i < len; i += sample) {
+    h ^= payloadBytes[i] ?? 0
+    h = Math.imul(h, 0x01000193)
+  }
+  h ^= len & 0xffff
+  h = Math.imul(h, 0x01000193)
+  return `${(h >>> 0).toString(16)}:${len}`
 }
 
 function resolveLocalIdentityHex(world: CoreWorld): string {

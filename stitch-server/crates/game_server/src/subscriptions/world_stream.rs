@@ -20,6 +20,26 @@ pub fn terrain_chunk_stream_query(
     ))
 }
 
+pub fn terrain_chunk_payload_stream_query(
+    region_id: u64,
+    min_chunk_x: i32,
+    max_chunk_x: i32,
+    min_chunk_y: i32,
+    max_chunk_y: i32,
+) -> Result<String, String> {
+    if min_chunk_x > max_chunk_x {
+        return Err("min_chunk_x must be <= max_chunk_x".to_string());
+    }
+    if min_chunk_y > max_chunk_y {
+        return Err("min_chunk_y must be <= max_chunk_y".to_string());
+    }
+
+    Ok(format!(
+        "SELECT * FROM terrain_chunk_payload tcp WHERE tcp.region_id = {} AND tcp.chunk_x BETWEEN {} AND {} AND tcp.chunk_y BETWEEN {} AND {}",
+        region_id, min_chunk_x, max_chunk_x, min_chunk_y, max_chunk_y
+    ))
+}
+
 pub fn resource_node_stream_query(filter: &AoiFilter) -> String {
     format!(
         "SELECT * FROM resource_node rn WHERE {} AND {}",
@@ -41,6 +61,17 @@ mod tests {
         let query =
             terrain_chunk_stream_query(1, -2, 2, -3, 3).expect("valid range should construct");
         assert!(query.contains("FROM terrain_chunk_stream"));
+    }
+
+    #[test]
+    fn test_terrain_chunk_payload_stream_query_validates_bounds() {
+        let err = terrain_chunk_payload_stream_query(1, 3, 2, -1, 1)
+            .expect_err("invalid range should fail");
+        assert!(err.contains("min_chunk_x"));
+
+        let query = terrain_chunk_payload_stream_query(1, -2, 2, -3, 3)
+            .expect("valid range should construct");
+        assert!(query.contains("FROM terrain_chunk_payload"));
     }
 
     #[test]

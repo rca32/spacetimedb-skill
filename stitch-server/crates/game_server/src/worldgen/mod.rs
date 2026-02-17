@@ -7,11 +7,11 @@ use crate::tables::world_gen::{
     biome_gen_def, resource_clump_def, resource_gen_def, world_gen_params,
 };
 use crate::tables::world_state::{
-    region_state, resource_node, terrain_chunk, terrain_chunk_stream,
+    region_state, resource_node, terrain_chunk, terrain_chunk_payload, terrain_chunk_stream,
 };
 use crate::tables::{
     BiomeGenDef, RegionState, ResourceClumpDef, ResourceGenDef, ResourceNode, TerrainChunk,
-    TerrainChunkStream, WorldGenParams,
+    TerrainChunkPayload, TerrainChunkStream, WorldGenParams,
 };
 
 pub const WORLD_GEN_PARAMS_ID: u64 = 1;
@@ -72,6 +72,7 @@ struct ClumpMember {
 struct ChunkBuild {
     chunk: TerrainChunk,
     chunk_stream: TerrainChunkStream,
+    chunk_payload: TerrainChunkPayload,
     resources: Vec<ResourceNode>,
 }
 
@@ -143,9 +144,10 @@ pub fn ensure_world_generated(
         .any(|chunk| chunk.region_id == region_id);
 
     if has_chunks && !params.regenerate_on_start {
-        let backfilled = backfill_chunk_stream_from_chunks(ctx, region_id);
+        let stream_backfilled = backfill_chunk_stream_from_chunks(ctx, region_id);
+        let payload_backfilled = backfill_chunk_payload_from_chunks(ctx, region_id);
         return Ok(GenerateSummary {
-            chunk_count: backfilled,
+            chunk_count: stream_backfilled.saturating_add(payload_backfilled),
             resource_count: 0,
         });
     }
@@ -180,6 +182,7 @@ pub fn generate_region(
             let build = build_chunk(ctx, region_id, chunk_x, chunk_y, chunk_size, &config)?;
             upsert_chunk(ctx, build.chunk);
             upsert_chunk_stream(ctx, build.chunk_stream);
+            upsert_chunk_payload(ctx, build.chunk_payload);
             for resource in build.resources {
                 upsert_resource(ctx, resource);
                 summary.resource_count = summary.resource_count.saturating_add(1);
@@ -226,6 +229,7 @@ pub fn regenerate_chunk_range(
             let build = build_chunk(ctx, region_id, chunk_x, chunk_y, chunk_size, &config)?;
             upsert_chunk(ctx, build.chunk);
             upsert_chunk_stream(ctx, build.chunk_stream);
+            upsert_chunk_payload(ctx, build.chunk_payload);
             for resource in build.resources {
                 upsert_resource(ctx, resource);
                 summary.resource_count = summary.resource_count.saturating_add(1);
@@ -316,6 +320,17 @@ fn delete_region_world_data(ctx: &ReducerContext, region_id: u64) {
         ctx.db.terrain_chunk_stream().chunk_key().delete(key);
     }
 
+    let payload_keys: Vec<String> = ctx
+        .db
+        .terrain_chunk_payload()
+        .iter()
+        .filter(|chunk| chunk.region_id == region_id)
+        .map(|chunk| chunk.chunk_key)
+        .collect();
+    for key in payload_keys {
+        ctx.db.terrain_chunk_payload().chunk_key().delete(key);
+    }
+
     let resource_ids: Vec<u64> = ctx
         .db
         .resource_node()
@@ -370,6 +385,23 @@ fn delete_chunk_range_world_data(
         ctx.db.terrain_chunk_stream().chunk_key().delete(key);
     }
 
+    let payload_keys: Vec<String> = ctx
+        .db
+        .terrain_chunk_payload()
+        .iter()
+        .filter(|chunk| {
+            chunk.region_id == region_id
+                && chunk.chunk_x >= from_chunk_x
+                && chunk.chunk_x <= to_chunk_x
+                && chunk.chunk_y >= from_chunk_y
+                && chunk.chunk_y <= to_chunk_y
+        })
+        .map(|chunk| chunk.chunk_key)
+        .collect();
+    for key in payload_keys {
+        ctx.db.terrain_chunk_payload().chunk_key().delete(key);
+    }
+
     let resource_ids: Vec<u64> = ctx
         .db
         .resource_node()
@@ -406,6 +438,15 @@ fn upsert_chunk_stream(ctx: &ReducerContext, chunk: TerrainChunkStream) {
     }
 }
 
+fn upsert_chunk_payload(ctx: &ReducerContext, chunk: TerrainChunkPayload) {
+    let key = chunk.chunk_key.clone();
+    if ctx.db.terrain_chunk_payload().chunk_key().find(key).is_some() {
+        ctx.db.terrain_chunk_payload().chunk_key().update(chunk);
+    } else {
+        ctx.db.terrain_chunk_payload().insert(chunk);
+    }
+}
+
 fn backfill_chunk_stream_from_chunks(ctx: &ReducerContext, region_id: u64) -> u32 {
     let chunks: Vec<TerrainChunk> = ctx
         .db
@@ -438,6 +479,46 @@ fn backfill_chunk_stream_from_chunks(ctx: &ReducerContext, region_id: u64) -> u3
             height_min: chunk.height_min,
             height_max: chunk.height_max,
             water_ratio_permille: chunk.water_ratio_permille,
+        });
+        inserted = inserted.saturating_add(1);
+    }
+
+    inserted
+}
+
+fn backfill_chunk_payload_from_chunks(ctx: &ReducerContext, region_id: u64) -> u32 {
+    let chunks: Vec<TerrainChunk> = ctx
+        .db
+        .terrain_chunk()
+        .iter()
+        .filter(|chunk| chunk.region_id == region_id)
+        .collect();
+
+    let mut inserted = 0_u32;
+    for chunk in chunks {
+        if ctx
+            .db
+            .terrain_chunk_payload()
+            .chunk_key()
+            .find(chunk.chunk_key.clone())
+            .is_some()
+        {
+            continue;
+        }
+
+        let cell_count = u32::try_from(chunk.cell_payload.len() / 4).unwrap_or(0);
+        let bytes =
+            encode_cell_payload_i16_to_bytes(&chunk.cell_payload, chunk.cell_payload_version);
+        ctx.db.terrain_chunk_payload().insert(TerrainChunkPayload {
+            chunk_key: chunk.chunk_key,
+            region_id: chunk.region_id,
+            dimension_id: chunk.dimension_id,
+            chunk_x: chunk.chunk_x,
+            chunk_y: chunk.chunk_y,
+            cell_payload_version: chunk.cell_payload_version,
+            cell_payload_bytes: bytes,
+            cell_count,
+            generated_at: chunk.generated_at,
         });
         inserted = inserted.saturating_add(1);
     }
@@ -593,6 +674,10 @@ fn build_chunk(
         cell_payload.push(i16::try_from(cell.biome_id).unwrap_or(i16::MAX));
         cell_payload.push(flags);
     }
+    let cell_count = u32::try_from(chunk_size_usize * chunk_size_usize)
+        .map_err(|_| "cell count overflow".to_string())?;
+    let cell_payload_bytes =
+        encode_cell_payload_i16_to_bytes(&cell_payload, CELL_PAYLOAD_VERSION_V1);
 
     let chunk = TerrainChunk {
         chunk_key: chunk_key(region_id, 1, chunk_x, chunk_y),
@@ -622,12 +707,24 @@ fn build_chunk(
         height_max: chunk.height_max,
         water_ratio_permille: chunk.water_ratio_permille,
     };
+    let chunk_payload = TerrainChunkPayload {
+        chunk_key: chunk.chunk_key.clone(),
+        region_id: chunk.region_id,
+        dimension_id: chunk.dimension_id,
+        chunk_x: chunk.chunk_x,
+        chunk_y: chunk.chunk_y,
+        cell_payload_version: chunk.cell_payload_version,
+        cell_payload_bytes,
+        cell_count,
+        generated_at: chunk.generated_at,
+    };
 
     let resources =
         build_chunk_resources(ctx, region_id, chunk_x, chunk_y, &cells, &coords, config)?;
     Ok(ChunkBuild {
         chunk,
         chunk_stream,
+        chunk_payload,
         resources,
     })
 }
@@ -1158,6 +1255,18 @@ fn respawn_at_with_delay(base: Timestamp, seconds: u32) -> Timestamp {
     base + TimeDuration::from_duration(Duration::from_secs(u64::from(seconds)))
 }
 
+fn encode_cell_payload_i16_to_bytes(payload: &[i16], version: u16) -> Vec<u8> {
+    if version != CELL_PAYLOAD_VERSION_V1 {
+        return Vec::new();
+    }
+
+    let mut out = Vec::<u8>::with_capacity(payload.len() * 2);
+    for value in payload {
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+    out
+}
+
 fn fbm2d(x: f32, z: f32, seed: u64, octaves: u8, persistence: f32, lacunarity: f32) -> f32 {
     let mut frequency = 1.0_f32;
     let mut amplitude = 1.0_f32;
@@ -1237,4 +1346,33 @@ fn smoothstep(t: f32) -> f32 {
 
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t.clamp(0.0, 1.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{encode_cell_payload_i16_to_bytes, CELL_PAYLOAD_VERSION_V1};
+
+    fn decode_i16_le(bytes: &[u8]) -> Vec<i16> {
+        assert_eq!(bytes.len() % 2, 0);
+        let mut out = Vec::<i16>::with_capacity(bytes.len() / 2);
+        for pair in bytes.chunks_exact(2) {
+            out.push(i16::from_le_bytes([pair[0], pair[1]]));
+        }
+        out
+    }
+
+    #[test]
+    fn test_cell_payload_encoding_v1_length_matches() {
+        let values = vec![1_i16, -2_i16, 3_i16, 4_i16, -8_i16, 99_i16];
+        let encoded = encode_cell_payload_i16_to_bytes(&values, CELL_PAYLOAD_VERSION_V1);
+        assert_eq!(encoded.len(), values.len() * 2);
+    }
+
+    #[test]
+    fn test_cell_payload_encoding_v1_roundtrip() {
+        let values = vec![12_i16, 14_i16, 2_i16, 1_i16, -5_i16, 8_i16, 0_i16, 0_i16];
+        let encoded = encode_cell_payload_i16_to_bytes(&values, CELL_PAYLOAD_VERSION_V1);
+        let decoded = decode_i16_le(&encoded);
+        assert_eq!(decoded, values);
+    }
 }

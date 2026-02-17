@@ -90,5 +90,6 @@ pub use trade_market::{MarketFill, MarketOrder, TradeOffer, TradeSession};
 pub use transform_state::TransformState;
 pub use world_gen::{BiomeGenDef, ResourceClumpDef, ResourceGenDef, WorldGenParams};
 pub use world_state::{
-    EntityCore, InstanceState, RegionState, ResourceNode, TerrainChunk, TerrainChunkStream,
+    EntityCore, InstanceState, RegionState, ResourceNode, TerrainChunk, TerrainChunkPayload,
+    TerrainChunkStream,
 };

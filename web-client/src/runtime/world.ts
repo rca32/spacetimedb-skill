@@ -1,118 +1,41 @@
-import { Entity } from 'koota'
-import { buildWorldAoiQueries, hashQueries } from '../net/aoi'
+import { buildTerrainPayloadAoiQuery, buildWorldAoiQueries, hashQueries } from '../net/aoi'
 import { WorldStreamingRenderer } from '../render/world-streaming'
-import {
-  BuildingData,
-  ClaimData,
-  ChunkData,
-  IsBuilding,
-  IsClaim,
-  IsLocalPlayer,
-  IsNpc,
-  IsRemotePlayer,
-  IsResourceNode,
-  IsTerrainChunk,
-  NetEntity,
-  Position,
-  PresentationTransform,
-  ResourceData,
-  Rotation,
-  WorldObjectKind,
-} from '../core/traits'
+import { IsLocalPlayer, Rotation } from '../core/traits'
 import { ThirdPersonCameraController } from './third-person-camera'
 import { RuntimeContext, RuntimeModule } from './types'
+import {
+  clearWorld,
+  findLocalSession,
+  normalizeIdentityHex,
+  readTerrainChunkSize,
+  shouldReanchorAoi,
+  snapActorPresentationToTerrain,
+  syncBuildingState,
+  syncClaims,
+  syncNpcState,
+  syncResourceState,
+  syncTerrainChunkPayloads,
+  syncTerrainChunks,
+  syncTransformState,
+  type KnownKeyMap,
+} from './world-systems'
 
 const AOI_SUBSCRIPTION_KEY = 'world-aoi'
+const AOI_TERRAIN_PAYLOAD_SUBSCRIPTION_KEY = 'world-aoi-terrain-payload'
 const TERRAIN_RADIUS_CHUNKS = 3
 const DYNAMIC_RADIUS_CHUNKS = 2
 const COMBAT_LIMIT = 500
 const DEFAULT_CHUNK_SIZE = 32
 const ENABLE_WORLD_AOI_SUBSCRIPTION = (import.meta.env.VITE_ENABLE_WORLD_AOI_SUB ?? '1') === '1'
+const ENABLE_TERRAIN_PAYLOAD_SUBSCRIPTION = (import.meta.env.VITE_ENABLE_TERRAIN_PAYLOAD_SUB ?? '1') === '1'
 const AOI_UPDATE_MIN_INTERVAL_MS = 500
 
-type TransformStateRow = {
-  entityId: unknown
-  regionId: bigint
-  position: number[]
-  rotation: number[]
-}
-
-type PlayerSessionViewRow = {
-  identity: unknown
-  regionId: bigint
-}
-
-type WorldGenParamsRow = {
-  terrainChunkSize: number
-}
-
-type NpcStateRow = {
-  npcId: bigint
-  hexX: number
-  hexZ: number
-  destHexX: number
-  destHexZ: number
-  role: number
-  mood: number
-  scheduleKind: number
-  nextActionTs: bigint
-}
-
-type BuildingStateRow = {
-  entityId: bigint
-  hexX: number
-  hexZ: number
-  state: number
-  requiredItemDefId: bigint
-  buildProgress: number
-  buildRequired: number
-}
-
-type ResourceNodeRow = {
-  entityId: bigint
-  regionId: bigint
-  chunkX: number
-  chunkY: number
-  hexX: number
-  hexZ: number
-  resourceDefId: bigint
-  clumpId: number
-  resourceType: number
-  amount: number
-  maxAmount: number
-  isDepleted: boolean
-}
-
-type TerrainChunkRow = {
-  chunkKey: string
-  regionId: bigint
-  dimensionId: number
-  chunkX: number
-  chunkY: number
-  biomeId: number
-  seed: bigint
-  generatedAt: unknown
-  heightMin: number
-  heightMax: number
-  waterRatioPermille: number
-}
-
-type ClaimStateRow = {
-  claimId: bigint
-  ownerIdentity: unknown
-  totemBuildingId: unknown
-  regionId: unknown
-  centerX: number
-  centerZ: number
-  radius: number
-  tier: number
-}
-
 export function createWorldRuntime(): RuntimeModule {
-  const knownKeys = new Map<string, Set<string>>()
+  const knownKeys: KnownKeyMap = new Map()
   let streaming: WorldStreamingRenderer | null = null
   let cameraController: ThirdPersonCameraController | null = null
   let currentAoiHash = ''
+  let currentTerrainPayloadAoiHash = ''
   let localRegionId: bigint | null = null
   let localPosition = { x: 0, y: 0, z: 0 }
   let aoiAnchorPosition = { x: 0, z: 0 }
@@ -136,6 +59,7 @@ export function createWorldRuntime(): RuntimeModule {
           clearWorld(ctx, knownKeys)
           streaming?.clear()
           currentAoiHash = ''
+          currentTerrainPayloadAoiHash = ''
           localRegionId = null
           localPosition = { x: 0, y: 0, z: 0 }
           aoiAnchorPosition = { x: 0, z: 0 }
@@ -143,6 +67,7 @@ export function createWorldRuntime(): RuntimeModule {
           terrainChunkSize = DEFAULT_CHUNK_SIZE
           cameraController?.reset()
           ctx.net?.removeSubscription(AOI_SUBSCRIPTION_KEY)
+          ctx.net?.removeSubscription(AOI_TERRAIN_PAYLOAD_SUBSCRIPTION_KEY)
         }
         lastConnectionActive = false
         return
@@ -184,17 +109,56 @@ export function createWorldRuntime(): RuntimeModule {
           currentAoiHash = nextHash
           lastAoiUpdateAtMs = nowMs
         }
+
+        if (ENABLE_TERRAIN_PAYLOAD_SUBSCRIPTION) {
+          const payloadQuery = buildTerrainPayloadAoiQuery({
+            regionId: localRegionId,
+            centerX: aoiAnchorPosition.x,
+            centerZ: aoiAnchorPosition.z,
+            terrainRadius: TERRAIN_RADIUS_CHUNKS,
+            dynamicRadius: DYNAMIC_RADIUS_CHUNKS,
+            chunkSize: terrainChunkSize,
+            combatLimit: COMBAT_LIMIT,
+          })
+          const payloadHash = hashQueries([payloadQuery])
+          if (
+            payloadHash !== currentTerrainPayloadAoiHash &&
+            (intervalPassed || currentTerrainPayloadAoiHash === '')
+          ) {
+            ctx.net?.setSubscription(AOI_TERRAIN_PAYLOAD_SUBSCRIPTION_KEY, [payloadQuery])
+            currentTerrainPayloadAoiHash = payloadHash
+          }
+        } else {
+          currentTerrainPayloadAoiHash = ''
+          ctx.net?.removeSubscription(AOI_TERRAIN_PAYLOAD_SUBSCRIPTION_KEY)
+        }
       }
 
-      const nextLocalPosition = syncTransformState(ctx, knownKeys, connection.db.transformState.iter(), localIdentityHex)
+      const nextLocalPosition = syncTransformState(
+        ctx,
+        knownKeys,
+        connection.db.transformState.iter(),
+        localIdentityHex,
+      )
       if (nextLocalPosition) {
         localPosition = nextLocalPosition
       }
+
       syncNpcState(ctx, knownKeys, connection.db.npcState.iter())
       syncBuildingState(ctx, knownKeys, connection.db.buildingState.iter())
       syncResourceState(ctx, knownKeys, connection.db.resourceNode.iter())
       syncTerrainChunks(ctx, knownKeys, connection.db.terrainChunkStream.iter(), terrainChunkSize)
+      syncTerrainChunkPayloads(ctx, knownKeys, connection.db.terrainChunkPayload.iter())
       syncClaims(ctx, knownKeys, connection.db.claimState.iter())
+      const localGroundY = snapActorPresentationToTerrain(ctx.world)
+      if (localGroundY !== null) {
+        localPosition = {
+          x: localPosition.x,
+          y: localGroundY,
+          z: localPosition.z,
+        }
+      }
+
       const localPlayer = ctx.world.ecs.queryFirst(IsLocalPlayer, Rotation)
       const localRotation = localPlayer?.get(Rotation)
       const bodyYaw = localRotation ? quatYawFromY(localRotation.y, localRotation.w) : undefined
@@ -215,6 +179,7 @@ export function createWorldRuntime(): RuntimeModule {
     },
     stop(ctx: RuntimeContext) {
       ctx.net?.removeSubscription(AOI_SUBSCRIPTION_KEY)
+      ctx.net?.removeSubscription(AOI_TERRAIN_PAYLOAD_SUBSCRIPTION_KEY)
       clearWorld(ctx, knownKeys)
       streaming?.dispose(ctx.renderer.scene)
       streaming = null
@@ -222,341 +187,6 @@ export function createWorldRuntime(): RuntimeModule {
       ctx.logger.info('world runtime stop')
     },
   }
-}
-
-function syncTransformState(
-  ctx: RuntimeContext,
-  knownKeys: Map<string, Set<string>>,
-  rows: Iterable<TransformStateRow>,
-  localIdentityHex: string | null,
-): { x: number; y: number; z: number } | null {
-  const table = 'transform_state'
-  const seen = new Set<string>()
-  let localPos: { x: number; y: number; z: number } | null = null
-
-  for (const row of rows) {
-    const entityHex = toKeyString(row.entityId)
-    const normalizedEntityHex = normalizeIdentityHex(entityHex)
-    const key = `${table}:${entityHex}`
-    seen.add(key)
-    const isLocal = localIdentityHex !== null && normalizedEntityHex === localIdentityHex
-
-    upsertWorldEntity(ctx, key, (entity, isNew) => {
-      entity.add(NetEntity, WorldObjectKind, Position, Rotation, PresentationTransform)
-      entity.set(NetEntity, { table, serverId: entityHex })
-      entity.set(WorldObjectKind, { kind: 'Player' })
-      const rowPos = vec3FromArray(row.position)
-      const rowRot = quatFromArray(row.rotation)
-
-      if (isNew) {
-        entity.set(Position, rowPos)
-        entity.set(Rotation, rowRot)
-        entity.set(PresentationTransform, {
-          x: rowPos.x,
-          y: rowPos.y,
-          z: rowPos.z,
-          qx: rowRot.x,
-          qy: rowRot.y,
-          qz: rowRot.z,
-          qw: rowRot.w,
-        })
-      } else if (!isLocal) {
-        // Remote avatars follow authoritative stream directly.
-        entity.set(Position, rowPos)
-        entity.set(Rotation, rowRot)
-      }
-
-      if (isLocal) {
-        entity.add(IsLocalPlayer)
-        if (entity.has(IsRemotePlayer)) {
-          entity.remove(IsRemotePlayer)
-        }
-        const localPosition = entity.get(Position)
-        localPos = {
-          x: localPosition?.x ?? rowPos.x,
-          y: localPosition?.y ?? rowPos.y,
-          z: localPosition?.z ?? rowPos.z,
-        }
-      } else {
-        entity.add(IsRemotePlayer)
-        if (entity.has(IsLocalPlayer)) {
-          entity.remove(IsLocalPlayer)
-        }
-      }
-    })
-  }
-
-  pruneTable(ctx, knownKeys, table, seen)
-  return localPos
-}
-
-function syncNpcState(ctx: RuntimeContext, knownKeys: Map<string, Set<string>>, rows: Iterable<NpcStateRow>): void {
-  const table = 'npc_state'
-  const seen = new Set<string>()
-
-  for (const row of rows) {
-    const key = `${table}:${row.npcId.toString()}`
-    seen.add(key)
-    const targetPos = { x: row.hexX, y: 0, z: row.hexZ }
-
-    upsertWorldEntity(ctx, key, (entity, isNew) => {
-      entity.add(NetEntity, WorldObjectKind, Position, Rotation, PresentationTransform)
-      entity.set(NetEntity, { table, serverId: row.npcId.toString() })
-      entity.set(WorldObjectKind, { kind: 'Npc' })
-      entity.set(Position, targetPos)
-      entity.set(Rotation, { x: 0, y: 0, z: 0, w: 1 })
-      entity.add(IsNpc)
-
-      if (isNew) {
-        entity.set(PresentationTransform, {
-          x: targetPos.x,
-          y: targetPos.y,
-          z: targetPos.z,
-          qx: 0,
-          qy: 0,
-          qz: 0,
-          qw: 1,
-        })
-      } else if (!entity.has(PresentationTransform)) {
-        entity.set(PresentationTransform, {
-          x: targetPos.x,
-          y: targetPos.y,
-          z: targetPos.z,
-          qx: 0,
-          qy: 0,
-          qz: 0,
-          qw: 1,
-        })
-      }
-    })
-  }
-
-  pruneTable(ctx, knownKeys, table, seen)
-}
-
-function syncBuildingState(
-  ctx: RuntimeContext,
-  knownKeys: Map<string, Set<string>>,
-  rows: Iterable<BuildingStateRow>,
-): void {
-  const table = 'building_state'
-  const seen = new Set<string>()
-
-  for (const row of rows) {
-    const key = `${table}:${row.entityId.toString()}`
-    seen.add(key)
-
-    upsertWorldEntity(ctx, key, (entity) => {
-      entity.add(NetEntity, WorldObjectKind, Position, Rotation, BuildingData)
-      entity.set(NetEntity, { table, serverId: row.entityId.toString() })
-      entity.set(WorldObjectKind, { kind: 'Building' })
-      entity.set(Position, { x: row.hexX, y: 0, z: row.hexZ })
-      entity.set(Rotation, { x: 0, y: 0, z: 0, w: 1 })
-      entity.set(BuildingData, {
-        state: row.state,
-        buildProgress: row.buildProgress,
-        buildRequired: row.buildRequired,
-        requiredItemDefId: row.requiredItemDefId.toString(),
-      })
-      entity.add(IsBuilding)
-    })
-  }
-
-  pruneTable(ctx, knownKeys, table, seen)
-}
-
-function syncResourceState(
-  ctx: RuntimeContext,
-  knownKeys: Map<string, Set<string>>,
-  rows: Iterable<ResourceNodeRow>,
-): void {
-  const table = 'resource_node'
-  const seen = new Set<string>()
-
-  for (const row of rows) {
-    const key = `${table}:${row.entityId.toString()}`
-    seen.add(key)
-
-    upsertWorldEntity(ctx, key, (entity) => {
-      entity.add(NetEntity, WorldObjectKind, Position, Rotation, ResourceData)
-      entity.set(NetEntity, { table, serverId: row.entityId.toString() })
-      entity.set(WorldObjectKind, { kind: 'ResourceNode' })
-      entity.set(Position, { x: row.hexX, y: 0, z: row.hexZ })
-      entity.set(Rotation, { x: 0, y: 0, z: 0, w: 1 })
-      entity.set(ResourceData, {
-        resourceType: row.resourceType,
-        amount: row.amount,
-        maxAmount: row.maxAmount,
-        isDepleted: row.isDepleted,
-      })
-      entity.add(IsResourceNode)
-    })
-  }
-
-  pruneTable(ctx, knownKeys, table, seen)
-}
-
-function syncTerrainChunks(
-  ctx: RuntimeContext,
-  knownKeys: Map<string, Set<string>>,
-  rows: Iterable<TerrainChunkRow>,
-  chunkSize: number,
-): void {
-  const table = 'terrain_chunk_stream'
-  const seen = new Set<string>()
-
-  for (const row of rows) {
-    const key = `${table}:${row.chunkKey}`
-    seen.add(key)
-
-    upsertWorldEntity(ctx, key, (entity) => {
-      entity.add(NetEntity, WorldObjectKind, Position, Rotation, ChunkData)
-      entity.set(NetEntity, { table, serverId: row.chunkKey })
-      entity.set(WorldObjectKind, { kind: 'TerrainChunk' })
-      entity.set(Position, {
-        x: row.chunkX * chunkSize + chunkSize * 0.5,
-        y: 0,
-        z: row.chunkY * chunkSize + chunkSize * 0.5,
-      })
-      entity.set(Rotation, { x: 0, y: 0, z: 0, w: 1 })
-      entity.set(ChunkData, {
-        chunkX: row.chunkX,
-        chunkY: row.chunkY,
-        biomeId: row.biomeId,
-        chunkSize,
-      })
-      entity.add(IsTerrainChunk)
-    })
-  }
-
-  pruneTable(ctx, knownKeys, table, seen)
-}
-
-function syncClaims(ctx: RuntimeContext, knownKeys: Map<string, Set<string>>, rows: Iterable<ClaimStateRow>): void {
-  const table = 'claim_state'
-  const seen = new Set<string>()
-
-  for (const row of rows) {
-    const key = `${table}:${row.claimId.toString()}`
-    seen.add(key)
-
-    upsertWorldEntity(ctx, key, (entity) => {
-      entity.add(NetEntity, WorldObjectKind, Position, Rotation, ClaimData)
-      entity.set(NetEntity, { table, serverId: row.claimId.toString() })
-      entity.set(WorldObjectKind, { kind: 'Claim' })
-      entity.set(Position, { x: row.centerX, y: 0, z: row.centerZ })
-      entity.set(Rotation, { x: 0, y: 0, z: 0, w: 1 })
-      entity.set(ClaimData, {
-        radius: row.radius,
-        tier: row.tier,
-        ownerIdentityHex: toKeyString(row.ownerIdentity),
-        totemBuildingId: toKeyString(row.totemBuildingId),
-        regionId: toKeyString(row.regionId),
-      })
-      entity.add(IsClaim)
-    })
-  }
-
-  pruneTable(ctx, knownKeys, table, seen)
-}
-
-function upsertWorldEntity(
-  ctx: RuntimeContext,
-  key: string,
-  apply: (entity: Entity, isNew: boolean) => void,
-): Entity {
-  return ctx.world.upsertByNetKey(key, apply)
-}
-
-function pruneTable(ctx: RuntimeContext, knownKeys: Map<string, Set<string>>, table: string, seen: Set<string>): void {
-  const previous = knownKeys.get(table)
-  if (previous) {
-    for (const key of previous) {
-      if (!seen.has(key)) {
-        ctx.world.despawnByNetKey(key)
-      }
-    }
-  }
-  knownKeys.set(table, seen)
-}
-
-function clearWorld(ctx: RuntimeContext, knownKeys: Map<string, Set<string>>): void {
-  knownKeys.clear()
-  ctx.world.clear()
-}
-
-function toKeyString(value: unknown): string {
-  if (typeof value === 'string') {
-    return value
-  }
-  if (typeof value === 'number') {
-    return String(value)
-  }
-  if (typeof value === 'bigint') {
-    return value.toString()
-  }
-  if (value && typeof value === 'object' && 'toHexString' in value) {
-    const candidate = value as { toHexString: () => string }
-    return candidate.toHexString()
-  }
-  return String(value)
-}
-
-function vec3FromArray(values: number[]): { x: number; y: number; z: number } {
-  return {
-    x: values[0] ?? 0,
-    y: values[1] ?? 0,
-    z: values[2] ?? 0,
-  }
-}
-
-function quatFromArray(values: number[]): { x: number; y: number; z: number; w: number } {
-  return {
-    x: values[0] ?? 0,
-    y: values[1] ?? 0,
-    z: values[2] ?? 0,
-    w: values[3] ?? 1,
-  }
-}
-
-function findLocalSession(rows: Iterable<PlayerSessionViewRow>, localIdentityHex: string): PlayerSessionViewRow | null {
-  for (const row of rows) {
-    if (normalizeIdentityHex(toKeyString(row.identity)) === localIdentityHex) {
-      return row
-    }
-  }
-  return null
-}
-
-function normalizeIdentityHex(value: string | null): string | null {
-  if (value === null) {
-    return null
-  }
-  const trimmed = value.trim()
-  if (trimmed.length === 0) {
-    return null
-  }
-  return trimmed.toLowerCase().replace(/^0x/, '')
-}
-
-function readTerrainChunkSize(rows: Iterable<WorldGenParamsRow>, fallback: number): number {
-  for (const row of rows) {
-    const size = Math.floor(row.terrainChunkSize)
-    if (Number.isFinite(size) && size > 0 && size <= 512) {
-      return size
-    }
-  }
-  return fallback
-}
-
-function shouldReanchorAoi(
-  localPosition: { x: number; z: number },
-  anchorPosition: { x: number; z: number },
-  distanceThreshold: number,
-): boolean {
-  const dx = localPosition.x - anchorPosition.x
-  const dz = localPosition.z - anchorPosition.z
-  return dx * dx + dz * dz >= distanceThreshold * distanceThreshold
 }
 
 function quatYawFromY(y: number, w: number): number {

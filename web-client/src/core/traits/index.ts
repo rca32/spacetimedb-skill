@@ -22,7 +22,28 @@ export const PresentationTransform = trait({
 })
 export const NetEntity = trait({ table: '', serverId: '' })
 export const WorldObjectKind = trait({ kind: 'Player' as WorldObjectKindType })
-export const ChunkData = trait({ chunkX: 0, chunkY: 0, biomeId: 0, chunkSize: 16 })
+export const ChunkData = trait({
+  chunkKey: '',
+  chunkX: 0,
+  chunkY: 0,
+  biomeId: 0,
+  chunkSize: 16,
+  heightMin: 0,
+  heightMax: 0,
+  waterRatioPermille: 0,
+  payloadVersion: 0,
+})
+export const ChunkPayloadData = trait(() => ({
+  chunkKey: '',
+  payloadVersion: 0,
+  cellCount: 0,
+  payloadBytes: [] as number[],
+}))
+export const ChunkMeshState = trait({
+  meshKey: '',
+  lastPayloadHash: '',
+  lodLevel: 0,
+})
 export const BuildingData = trait({
   state: 0,
   buildProgress: 0,
@@ -135,6 +156,7 @@ export const IsNpc = trait()
 export const IsBuilding = trait()
 export const IsResourceNode = trait()
 export const IsTerrainChunk = trait()
+export const IsTerrainChunkPayload = trait()
 export const IsClaim = trait()
 export const IsInventoryView = trait()
 export const IsTradeEntity = trait()

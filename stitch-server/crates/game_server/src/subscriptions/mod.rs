@@ -18,4 +18,6 @@ pub use social_stream::{
     guild_project_stream_query, guild_state_stream_query, party_member_stream_query,
     party_state_stream_query, social_feed_stream_query,
 };
-pub use world_stream::{resource_node_stream_query, terrain_chunk_stream_query};
+pub use world_stream::{
+    resource_node_stream_query, terrain_chunk_payload_stream_query, terrain_chunk_stream_query,
+};

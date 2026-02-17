@@ -406,6 +406,8 @@ import TaxPolicyRow from "./tax_policy_table";
 export { TaxPolicyRow };
 import TerrainChunkRow from "./terrain_chunk_table";
 export { TerrainChunkRow };
+import TerrainChunkPayloadRow from "./terrain_chunk_payload_table";
+export { TerrainChunkPayloadRow };
 import TerrainChunkStreamRow from "./terrain_chunk_stream_table";
 export { TerrainChunkStreamRow };
 import ThreatStateRow from "./threat_state_table";
@@ -648,6 +650,8 @@ import TaxPolicy from "./tax_policy_type";
 export { TaxPolicy };
 import TerrainChunk from "./terrain_chunk_type";
 export { TerrainChunk };
+import TerrainChunkPayload from "./terrain_chunk_payload_type";
+export { TerrainChunkPayload };
 import TerrainChunkStream from "./terrain_chunk_stream_type";
 export { TerrainChunkStream };
 import ThreatState from "./threat_state_type";
@@ -1908,6 +1912,17 @@ const tablesSchema = __schema(
       { name: 'terrain_chunk_chunk_key_key', constraint: 'unique', columns: ['chunkKey'] },
     ],
   }, TerrainChunkRow),
+  __table({
+    name: 'terrain_chunk_payload',
+    indexes: [
+      { name: 'chunk_key', algorithm: 'btree', columns: [
+        'chunkKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'terrain_chunk_payload_chunk_key_key', constraint: 'unique', columns: ['chunkKey'] },
+    ],
+  }, TerrainChunkPayloadRow),
   __table({
     name: 'terrain_chunk_stream',
     indexes: [

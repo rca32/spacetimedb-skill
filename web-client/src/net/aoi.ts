@@ -66,6 +66,12 @@ export function buildWorldAoiQueries(anchor: AoiAnchor): string[] {
   ]
 }
 
+export function buildTerrainPayloadAoiQuery(anchor: AoiAnchor): string {
+  const terrainBounds = computeChunkBounds(anchor, anchor.terrainRadius)
+  const region = anchor.regionId.toString()
+  return `SELECT * FROM terrain_chunk_payload WHERE region_id = ${region} AND chunk_x >= ${terrainBounds.minX} AND chunk_x <= ${terrainBounds.maxX} AND chunk_y >= ${terrainBounds.minY} AND chunk_y <= ${terrainBounds.maxY}`
+}
+
 export function hashQueries(queries: string[]): string {
   return queries.join(' || ')
 }

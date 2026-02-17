@@ -62,6 +62,20 @@ pub struct TerrainChunkStream {
     pub water_ratio_permille: u16,
 }
 
+#[spacetimedb::table(name = terrain_chunk_payload, public)]
+pub struct TerrainChunkPayload {
+    #[primary_key]
+    pub chunk_key: String,
+    pub region_id: u64,
+    pub dimension_id: u32,
+    pub chunk_x: i32,
+    pub chunk_y: i32,
+    pub cell_payload_version: u16,
+    pub cell_payload_bytes: Vec<u8>,
+    pub cell_count: u32,
+    pub generated_at: Timestamp,
+}
+
 #[spacetimedb::table(name = resource_node, public)]
 pub struct ResourceNode {
     #[primary_key]
