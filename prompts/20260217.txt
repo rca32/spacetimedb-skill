@@ -2,8 +2,8 @@
 ----------------------
 사용스킬[$koota,$three-best-practices,$spacetimedb-korean,$agent-browser]
 [필수 읽기]
-CLIENTDESIGN/00-master.md
-CLIENTDESIGN/12-camera-system-cinemachine-port-plan.md
+WEBCLIENTDESIGN/00-master.md
+WEBCLIENTDESIGN/12-camera-system-cinemachine-port-plan.md
 prompts/20260216_worklog.md
 
 `com.unity.cinemachine`의 고급 3인칭 카메라 기능을 포팅하고 싶어
@@ -13,7 +13,7 @@ prompts/20260216_worklog.md
 
 사용스킬[$koota,$three-best-practices,$spacetimedb-korean,$agent-browser]
 [필수 읽기]
-CLIENTDESIGN/00-master.md
+WEBCLIENTDESIGN/00-master.md
 
 현재 상태에서 지형 생성을 하고 싶어  assetdirectory/test-sets/environment 이용해서 다양한 건물과 환경을 만들어죠
 
@@ -22,7 +22,7 @@ CLIENTDESIGN/00-master.md
 
 사용스킬[$koota,$three-best-practices,$spacetimedb-korean,$agent-browser]
 [필수 읽기]
-CLIENTDESIGN/00-master.md
+WEBCLIENTDESIGN/00-master.md
 rompts/20260217_worklog.md
 BitCraftPublicDoc/5-hex-grid-coordinate-system.md
 BitCraftPublicDoc/6-world-generator-architecture.md

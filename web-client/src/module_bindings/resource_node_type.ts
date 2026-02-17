@@ -12,8 +12,17 @@ import {
 
 export default __t.object("ResourceNode", {
   entityId: __t.u64(),
+  regionId: __t.u64(),
+  chunkX: __t.i32(),
+  chunkY: __t.i32(),
+  hexX: __t.i32(),
+  hexZ: __t.i32(),
+  resourceDefId: __t.u64(),
+  clumpId: __t.i32(),
   resourceType: __t.u8(),
   amount: __t.u32(),
+  maxAmount: __t.u32(),
+  isDepleted: __t.bool(),
   respawnAt: __t.timestamp(),
 });
 

@@ -13,10 +13,17 @@ import {
 export default __t.object("TerrainChunk", {
   chunkKey: __t.string(),
   regionId: __t.u64(),
+  dimensionId: __t.u32(),
   chunkX: __t.i32(),
   chunkY: __t.i32(),
   biomeId: __t.u16(),
   seed: __t.u64(),
+  generatedAt: __t.timestamp(),
+  heightMin: __t.i16(),
+  heightMax: __t.i16(),
+  waterRatioPermille: __t.u16(),
+  cellPayloadVersion: __t.u16(),
+  cellPayload: __t.array(__t.i16()),
 });
 
 

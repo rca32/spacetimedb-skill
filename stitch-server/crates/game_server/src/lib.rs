@@ -15,6 +15,7 @@ pub mod subscriptions;
 pub mod tables;
 pub mod utils;
 pub mod validation;
+pub mod worldgen;
 
 use tables::item_def::item_def;
 use tables::static_data::{building_def, combat_action_def, quest_chain_def};

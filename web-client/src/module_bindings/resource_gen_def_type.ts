@@ -10,17 +10,17 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.object("NpcState", {
-  npcId: __t.u64(),
-  regionId: __t.u64(),
-  hexX: __t.i32(),
-  hexZ: __t.i32(),
-  destHexX: __t.i32(),
-  destHexZ: __t.i32(),
-  role: __t.u8(),
-  mood: __t.u8(),
-  scheduleKind: __t.u8(),
-  nextActionTs: __t.u64(),
+export default __t.object("ResourceGenDef", {
+  resourceType: __t.u8(),
+  resourceDefId: __t.u64(),
+  baseChancePermille: __t.u16(),
+  minElevation: __t.i16(),
+  maxElevation: __t.i16(),
+  minWaterDepth: __t.i16(),
+  maxWaterDepth: __t.i16(),
+  noiseThresholdPermille: __t.u16(),
+  maxAmount: __t.u32(),
+  respawnSeconds: __t.u32(),
 });
 
 

@@ -19,6 +19,7 @@ use crate::tables::player_progression::{
 };
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
+use crate::tables::world_gen::world_gen_params;
 use crate::tables::world_state::{region_state, resource_node, terrain_chunk};
 use crate::tables::{
     CharacterStats, EnvironmentEffectDesc, EnvironmentEffectExposure, EnvironmentEffectLoopTimer,
@@ -343,12 +344,13 @@ pub(crate) fn ensure_default_agent_timers(ctx: &ReducerContext) {
 
 #[spacetimedb::reducer]
 pub fn start_world_agents(ctx: &ReducerContext) -> Result<(), String> {
+    crate::worldgen::ensure_default_worldgen_config(ctx);
     ensure_default_agent_timers(ctx);
-    seed_world_if_empty(ctx);
+    seed_world_if_empty(ctx)?;
     Ok(())
 }
 
-fn seed_world_if_empty(ctx: &ReducerContext) {
+fn seed_world_if_empty(ctx: &ReducerContext) -> Result<(), String> {
     if ctx
         .db
         .region_state()
@@ -364,36 +366,19 @@ fn seed_world_if_empty(ctx: &ReducerContext) {
         });
     }
 
-    if ctx.db.terrain_chunk().iter().next().is_none() {
-        for chunk_x in -3_i32..=3_i32 {
-            for chunk_y in -3_i32..=3_i32 {
-                let biome = ((chunk_x.abs() + chunk_y.abs()) % 5) as u16;
-                ctx.db.terrain_chunk().insert(TerrainChunk {
-                    chunk_key: format!("r1:{chunk_x}:{chunk_y}"),
-                    region_id: STARTER_REGION_ID,
-                    chunk_x,
-                    chunk_y,
-                    biome_id: biome,
-                    seed: 1_337,
-                });
-            }
-        }
-    }
-
-    if ctx.db.resource_node().iter().next().is_none() {
-        for node_id in 1_u64..=24_u64 {
-            ctx.db.resource_node().insert(ResourceNode {
-                entity_id: node_id,
-                resource_type: (node_id % 3) as u8,
-                amount: 100,
-                respawn_at: ctx.timestamp,
-            });
-        }
+    let summary = crate::worldgen::ensure_world_generated(ctx, STARTER_REGION_ID)?;
+    if summary.chunk_count > 0 || summary.resource_count > 0 {
+        log::info!(
+            "world generated for starter region: chunks={} resources={}",
+            summary.chunk_count,
+            summary.resource_count
+        );
     }
 
     let now_us = to_micros_u64(ctx);
     ensure_seeded_npcs(ctx, now_us);
     ensure_npc_schedules(ctx, now_us);
+    Ok(())
 }
 
 fn ensure_seeded_npcs(ctx: &ReducerContext, now_us: u64) {
@@ -684,13 +669,23 @@ pub fn resource_regen_agent_loop(ctx: &ReducerContext, arg: ResourceRegenLoopTim
         .resource_node()
         .iter()
         .filter_map(|mut node| {
-            if node.amount >= 100 {
+            let max_amount = if node.max_amount == 0 {
+                100
+            } else {
+                node.max_amount
+            };
+            if node.amount >= max_amount {
+                node.max_amount = max_amount;
+                node.is_depleted = false;
                 return None;
             }
             if ctx.timestamp.duration_since(node.respawn_at).is_none() {
                 return None;
             }
-            node.amount = node.amount.saturating_add(5).min(100);
+            let step = (max_amount / 20).max(1);
+            node.amount = node.amount.saturating_add(step).min(max_amount);
+            node.max_amount = max_amount;
+            node.is_depleted = node.amount == 0;
             node.respawn_at = ctx.timestamp;
             Some(node)
         })
@@ -761,6 +756,13 @@ pub fn environment_effect_agent_loop(ctx: &ReducerContext, arg: EnvironmentEffec
         .filter(|e| e.enabled)
         .collect();
 
+    let terrain_chunk_size = ctx
+        .db
+        .world_gen_params()
+        .id()
+        .find(crate::worldgen::WORLD_GEN_PARAMS_ID)
+        .map(|params| f32::from(params.terrain_chunk_size).max(1.0))
+        .unwrap_or(32.0);
     let terrain: Vec<TerrainChunk> = ctx.db.terrain_chunk().iter().collect();
 
     for session in ctx.db.session_state().iter() {
@@ -773,8 +775,8 @@ pub fn environment_effect_agent_loop(ctx: &ReducerContext, arg: EnvironmentEffec
             continue;
         }
 
-        let chunk_x = (transform.position[0] / 32.0).floor() as i32;
-        let chunk_y = (transform.position[2] / 32.0).floor() as i32;
+        let chunk_x = (transform.position[0] / terrain_chunk_size).floor() as i32;
+        let chunk_y = (transform.position[2] / terrain_chunk_size).floor() as i32;
         let biome_id = terrain
             .iter()
             .find(|c| {

@@ -326,9 +326,10 @@ export class WorldStreamingRenderer {
     world.ecs.query(IsTerrainChunk, NetEntity, Position, ChunkData).readEach(([net, position, chunk]) => {
       const key = `${net.table}:${net.serverId}`
       seenTerrain.add(key)
+      const chunkScale = Math.max(0.25, chunk.chunkSize / 16)
       this.terrainPool.upsert(
         key,
-        { x: position.x, y: position.y, z: position.z, sx: 1, sy: 1, sz: 1 },
+        { x: position.x, y: position.y, z: position.z, sx: chunkScale, sy: 1, sz: chunkScale },
         biomeColor(chunk.biomeId),
       )
       this.syncChunkEnvironment(key, position, chunk, environmentConfig, seenGltf)

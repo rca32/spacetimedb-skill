@@ -10,17 +10,10 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.object("NpcState", {
-  npcId: __t.u64(),
-  regionId: __t.u64(),
-  hexX: __t.i32(),
-  hexZ: __t.i32(),
-  destHexX: __t.i32(),
-  destHexZ: __t.i32(),
-  role: __t.u8(),
-  mood: __t.u8(),
-  scheduleKind: __t.u8(),
-  nextActionTs: __t.u64(),
+export default __t.object("NpcAiLoopTimer", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  lastRunAt: __t.timestamp(),
 });
 
 

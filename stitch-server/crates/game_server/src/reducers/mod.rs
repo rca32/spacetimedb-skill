@@ -10,3 +10,4 @@ pub mod ops_moderation;
 pub mod player;
 pub mod social;
 pub mod trade_market;
+pub mod worldgen;

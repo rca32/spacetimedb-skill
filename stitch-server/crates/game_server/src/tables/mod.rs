@@ -7,10 +7,10 @@ pub mod combat;
 pub mod economy;
 pub mod environment_effect;
 pub mod housing;
+pub mod id_lease_state;
 pub mod inventory_container;
 pub mod inventory_lock;
 pub mod inventory_slot;
-pub mod id_lease_state;
 pub mod item_def;
 pub mod item_instance;
 pub mod item_stack;
@@ -28,6 +28,7 @@ pub mod social;
 pub mod static_data;
 pub mod trade_market;
 pub mod transform_state;
+pub mod world_gen;
 pub mod world_state;
 
 pub use account::Account;
@@ -47,10 +48,10 @@ pub use housing::{
     DimensionDesc, DimensionNetwork, HousingState, InteriorCollapseTimer, RentState,
     RentWhitelistEntry,
 };
+pub use id_lease_state::IdLeaseState;
 pub use inventory_container::InventoryContainer;
 pub use inventory_lock::InventoryLock;
 pub use inventory_slot::InventorySlot;
-pub use id_lease_state::IdLeaseState;
 pub use item_def::ItemDef;
 pub use item_instance::ItemInstance;
 pub use item_stack::ItemStack;
@@ -87,4 +88,7 @@ pub use social::{
 pub use static_data::{BuildingDef, CombatActionDef, QuestChainDef};
 pub use trade_market::{MarketFill, MarketOrder, TradeOffer, TradeSession};
 pub use transform_state::TransformState;
-pub use world_state::{EntityCore, InstanceState, RegionState, ResourceNode, TerrainChunk};
+pub use world_gen::{BiomeGenDef, ResourceClumpDef, ResourceGenDef, WorldGenParams};
+pub use world_state::{
+    EntityCore, InstanceState, RegionState, ResourceNode, TerrainChunk, TerrainChunkStream,
+};

@@ -22,7 +22,7 @@ export const PresentationTransform = trait({
 })
 export const NetEntity = trait({ table: '', serverId: '' })
 export const WorldObjectKind = trait({ kind: 'Player' as WorldObjectKindType })
-export const ChunkData = trait({ chunkX: 0, chunkY: 0, biomeId: 0 })
+export const ChunkData = trait({ chunkX: 0, chunkY: 0, biomeId: 0, chunkSize: 16 })
 export const BuildingData = trait({
   state: 0,
   buildProgress: 0,
@@ -36,7 +36,7 @@ export const ClaimData = trait({
   totemBuildingId: '',
   regionId: '',
 })
-export const ResourceData = trait({ resourceType: 0, amount: 0 })
+export const ResourceData = trait({ resourceType: 0, amount: 0, maxAmount: 0, isDepleted: false })
 
 export const InventoryContainerViewData = trait({
   ownerIdentityHex: '',

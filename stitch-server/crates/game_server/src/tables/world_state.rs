@@ -33,17 +33,49 @@ pub struct TerrainChunk {
     #[primary_key]
     pub chunk_key: String,
     pub region_id: u64,
+    pub dimension_id: u32,
     pub chunk_x: i32,
     pub chunk_y: i32,
     pub biome_id: u16,
     pub seed: u64,
+    pub generated_at: Timestamp,
+    pub height_min: i16,
+    pub height_max: i16,
+    pub water_ratio_permille: u16,
+    pub cell_payload_version: u16,
+    pub cell_payload: Vec<i16>,
+}
+
+#[spacetimedb::table(name = terrain_chunk_stream, public)]
+pub struct TerrainChunkStream {
+    #[primary_key]
+    pub chunk_key: String,
+    pub region_id: u64,
+    pub dimension_id: u32,
+    pub chunk_x: i32,
+    pub chunk_y: i32,
+    pub biome_id: u16,
+    pub seed: u64,
+    pub generated_at: Timestamp,
+    pub height_min: i16,
+    pub height_max: i16,
+    pub water_ratio_permille: u16,
 }
 
 #[spacetimedb::table(name = resource_node, public)]
 pub struct ResourceNode {
     #[primary_key]
     pub entity_id: u64,
+    pub region_id: u64,
+    pub chunk_x: i32,
+    pub chunk_y: i32,
+    pub hex_x: i32,
+    pub hex_z: i32,
+    pub resource_def_id: u64,
+    pub clump_id: i32,
     pub resource_type: u8,
     pub amount: u32,
+    pub max_amount: u32,
+    pub is_depleted: bool,
     pub respawn_at: Timestamp,
 }

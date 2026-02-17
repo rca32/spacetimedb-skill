@@ -300,12 +300,13 @@ agent-browser screenshot --full /tmp/worldgen-seed-1337-full.png
 - 리스크: 기존 기능 회귀(건축/환경효과)
   - 대응: legacy 경로 플래그 유지 후 단계적 전환
 
-## 11. 최종 체크리스트
-- [ ] worldgen 스키마 확장 및 마이그레이션 완료
-- [ ] deterministic terrain/biome/resource 생성 완료
-- [ ] `resource_node` 좌표 authoritative 반영 완료
-- [ ] AOI selective subscription 전환 완료
-- [ ] web-client chunk mesh 파이프 전환 완료
+## 11. 최종 체크리스트 (상태 업데이트: 2026-02-17)
+- 상태 표기: `[x]` 완료, `[~]` 부분완료, `[ ]` 미완료
+- [x] worldgen 스키마 확장 및 마이그레이션 완료
+- [~] deterministic terrain/biome/resource 생성 완료 (수계 2차/결정론 테스트 스냅샷 미완료)
+- [x] `resource_node` 좌표 authoritative 반영 완료
+- [x] AOI selective subscription 전환 완료
+- [~] web-client chunk mesh 파이프 전환 완료 (`terrain_chunk_stream` 기반 안정화 완료, `cell_payload` 실지형 메시 파이프 미완료)
 - [ ] 성능/메모리 기준 통과
 - [ ] agent-browser 시각 회귀 기준샷 확보
-- [ ] 운영 기본 명령(`publish -> seed -> import -> generate -> start_world_agents`) 문서화 완료
+- [x] 운영 기본 명령(`publish -> seed -> import -> generate -> start_world_agents`) 문서화 완료

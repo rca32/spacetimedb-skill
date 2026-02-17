@@ -10,17 +10,10 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.object("NpcState", {
-  npcId: __t.u64(),
-  regionId: __t.u64(),
-  hexX: __t.i32(),
-  hexZ: __t.i32(),
-  destHexX: __t.i32(),
-  destHexZ: __t.i32(),
-  role: __t.u8(),
-  mood: __t.u8(),
-  scheduleKind: __t.u8(),
-  nextActionTs: __t.u64(),
-});
+import NpcAiLoopTimer from "./npc_ai_loop_timer_type";
 
-
+export default {
+  get arg() {
+    return NpcAiLoopTimer;
+  },
+};

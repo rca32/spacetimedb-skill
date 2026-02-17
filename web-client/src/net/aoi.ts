@@ -35,15 +35,16 @@ export function buildWorldAoiQueries(anchor: AoiAnchor): string[] {
   const terrainBounds = computeChunkBounds(anchor, anchor.terrainRadius)
   const dynamicChunkBounds = computeChunkBounds(anchor, anchor.dynamicRadius)
   const minHexX = dynamicChunkBounds.minX * anchor.chunkSize
-  const maxHexX = (dynamicChunkBounds.maxX + 1) * anchor.chunkSize
+  const maxHexX = (dynamicChunkBounds.maxX + 1) * anchor.chunkSize - 1
   const minHexZ = dynamicChunkBounds.minY * anchor.chunkSize
-  const maxHexZ = (dynamicChunkBounds.maxY + 1) * anchor.chunkSize
+  const maxHexZ = (dynamicChunkBounds.maxY + 1) * anchor.chunkSize - 1
 
   const region = anchor.regionId.toString()
   const minimalAoi = (import.meta.env.VITE_MINIMAL_AOI ?? '0') === '1'
 
   if (minimalAoi) {
     return [
+      'SELECT * FROM world_gen_params',
       `SELECT * FROM transform_state WHERE region_id = ${region}`,
       `SELECT * FROM npc_state WHERE region_id = ${region}`,
       `SELECT * FROM combat_state WHERE region_id = ${region}`,
@@ -51,9 +52,9 @@ export function buildWorldAoiQueries(anchor: AoiAnchor): string[] {
   }
 
   return [
+    'SELECT * FROM world_gen_params',
     `SELECT * FROM transform_state WHERE region_id = ${region}`,
-    // Keep terrain stable to avoid visible popping/vanishing while moving.
-    `SELECT * FROM terrain_chunk WHERE region_id = ${region}`,
+    `SELECT * FROM terrain_chunk_stream WHERE region_id = ${region} AND chunk_x >= ${terrainBounds.minX} AND chunk_x <= ${terrainBounds.maxX} AND chunk_y >= ${terrainBounds.minY} AND chunk_y <= ${terrainBounds.maxY}`,
     `SELECT * FROM building_state WHERE region_id = ${region} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
     `SELECT * FROM claim_state WHERE region_id = ${region}`,
     `SELECT * FROM combat_state WHERE region_id = ${region}`,
@@ -61,8 +62,7 @@ export function buildWorldAoiQueries(anchor: AoiAnchor): string[] {
     // Cap logic should be handled client-side until server query support is expanded.
     `SELECT * FROM attack_outcome WHERE region_id = ${region}`,
     `SELECT * FROM npc_state WHERE region_id = ${region}`,
-    // resource_node currently has no region_id column in server schema.
-    'SELECT * FROM resource_node',
+    `SELECT * FROM resource_node WHERE region_id = ${region} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
   ]
 }
 

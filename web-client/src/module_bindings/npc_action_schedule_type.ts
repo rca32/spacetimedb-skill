@@ -17,3 +17,4 @@ export default __t.object("NpcActionSchedule", {
   targetRegionId: __t.option(__t.u64()),
 });
 
+

@@ -11,17 +11,14 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  entityId: __t.u64().primaryKey().name("entity_id"),
-  regionId: __t.u64().name("region_id"),
-  chunkX: __t.i32().name("chunk_x"),
-  chunkY: __t.i32().name("chunk_y"),
-  hexX: __t.i32().name("hex_x"),
-  hexZ: __t.i32().name("hex_z"),
+  resourceType: __t.u8().primaryKey().name("resource_type"),
   resourceDefId: __t.u64().name("resource_def_id"),
-  clumpId: __t.i32().name("clump_id"),
-  resourceType: __t.u8().name("resource_type"),
-  amount: __t.u32(),
+  baseChancePermille: __t.u16().name("base_chance_permille"),
+  minElevation: __t.i16().name("min_elevation"),
+  maxElevation: __t.i16().name("max_elevation"),
+  minWaterDepth: __t.i16().name("min_water_depth"),
+  maxWaterDepth: __t.i16().name("max_water_depth"),
+  noiseThresholdPermille: __t.u16().name("noise_threshold_permille"),
   maxAmount: __t.u32().name("max_amount"),
-  isDepleted: __t.bool().name("is_depleted"),
-  respawnAt: __t.timestamp().name("respawn_at"),
+  respawnSeconds: __t.u32().name("respawn_seconds"),
 });

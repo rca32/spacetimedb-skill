@@ -5,6 +5,7 @@ pub mod building_stream;
 pub mod combat_stream;
 pub mod inventory_stream;
 pub mod social_stream;
+pub mod world_stream;
 
 pub use aoi::{position_stream_query, AoiFilter};
 pub use building_stream::{building_state_stream_query, claim_state_stream_query};
@@ -17,3 +18,4 @@ pub use social_stream::{
     guild_project_stream_query, guild_state_stream_query, party_member_stream_query,
     party_state_stream_query, social_feed_stream_query,
 };
+pub use world_stream::{resource_node_stream_query, terrain_chunk_stream_query};

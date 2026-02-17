@@ -22,6 +22,4 @@ export default __t.row({
   heightMin: __t.i16().name("height_min"),
   heightMax: __t.i16().name("height_max"),
   waterRatioPermille: __t.u16().name("water_ratio_permille"),
-  cellPayloadVersion: __t.u16().name("cell_payload_version"),
-  cellPayload: __t.array(__t.i16()).name("cell_payload"),
 });

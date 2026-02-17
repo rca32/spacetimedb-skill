@@ -26,10 +26,9 @@ const AOI_SUBSCRIPTION_KEY = 'world-aoi'
 const TERRAIN_RADIUS_CHUNKS = 3
 const DYNAMIC_RADIUS_CHUNKS = 2
 const COMBAT_LIMIT = 500
-const CHUNK_SIZE = 16
+const DEFAULT_CHUNK_SIZE = 32
 const ENABLE_WORLD_AOI_SUBSCRIPTION = (import.meta.env.VITE_ENABLE_WORLD_AOI_SUB ?? '1') === '1'
 const AOI_UPDATE_MIN_INTERVAL_MS = 500
-const AOI_REANCHOR_DISTANCE = CHUNK_SIZE * 1.5
 
 type TransformStateRow = {
   entityId: unknown
@@ -41,6 +40,10 @@ type TransformStateRow = {
 type PlayerSessionViewRow = {
   identity: unknown
   regionId: bigint
+}
+
+type WorldGenParamsRow = {
+  terrainChunkSize: number
 }
 
 type NpcStateRow = {
@@ -67,15 +70,31 @@ type BuildingStateRow = {
 
 type ResourceNodeRow = {
   entityId: bigint
+  regionId: bigint
+  chunkX: number
+  chunkY: number
+  hexX: number
+  hexZ: number
+  resourceDefId: bigint
+  clumpId: number
   resourceType: number
   amount: number
+  maxAmount: number
+  isDepleted: boolean
 }
 
 type TerrainChunkRow = {
   chunkKey: string
+  regionId: bigint
+  dimensionId: number
   chunkX: number
   chunkY: number
   biomeId: number
+  seed: bigint
+  generatedAt: unknown
+  heightMin: number
+  heightMax: number
+  waterRatioPermille: number
 }
 
 type ClaimStateRow = {
@@ -99,6 +118,7 @@ export function createWorldRuntime(): RuntimeModule {
   let aoiAnchorPosition = { x: 0, z: 0 }
   let lastAoiUpdateAtMs = 0
   let lastConnectionActive = false
+  let terrainChunkSize = DEFAULT_CHUNK_SIZE
 
   return {
     name: 'WorldRuntime',
@@ -120,6 +140,7 @@ export function createWorldRuntime(): RuntimeModule {
           localPosition = { x: 0, y: 0, z: 0 }
           aoiAnchorPosition = { x: 0, z: 0 }
           lastAoiUpdateAtMs = 0
+          terrainChunkSize = DEFAULT_CHUNK_SIZE
           cameraController?.reset()
           ctx.net?.removeSubscription(AOI_SUBSCRIPTION_KEY)
         }
@@ -127,6 +148,8 @@ export function createWorldRuntime(): RuntimeModule {
         return
       }
       lastConnectionActive = true
+
+      terrainChunkSize = readTerrainChunkSize(connection.db.worldGenParams.iter(), terrainChunkSize)
 
       if (localIdentityHex) {
         const session = findLocalSession(connection.db.playerSessionView.iter(), localIdentityHex)
@@ -139,7 +162,7 @@ export function createWorldRuntime(): RuntimeModule {
         const nowMs = Date.now()
         if (
           currentAoiHash === '' ||
-          shouldReanchorAoi(localPosition, aoiAnchorPosition, AOI_REANCHOR_DISTANCE)
+          shouldReanchorAoi(localPosition, aoiAnchorPosition, terrainChunkSize * 1.5)
         ) {
           aoiAnchorPosition = { x: localPosition.x, z: localPosition.z }
         }
@@ -150,7 +173,7 @@ export function createWorldRuntime(): RuntimeModule {
           centerZ: aoiAnchorPosition.z,
           terrainRadius: TERRAIN_RADIUS_CHUNKS,
           dynamicRadius: DYNAMIC_RADIUS_CHUNKS,
-          chunkSize: CHUNK_SIZE,
+          chunkSize: terrainChunkSize,
           combatLimit: COMBAT_LIMIT,
         })
 
@@ -170,7 +193,7 @@ export function createWorldRuntime(): RuntimeModule {
       syncNpcState(ctx, knownKeys, connection.db.npcState.iter())
       syncBuildingState(ctx, knownKeys, connection.db.buildingState.iter())
       syncResourceState(ctx, knownKeys, connection.db.resourceNode.iter())
-      syncTerrainChunks(ctx, knownKeys, connection.db.terrainChunk.iter())
+      syncTerrainChunks(ctx, knownKeys, connection.db.terrainChunkStream.iter(), terrainChunkSize)
       syncClaims(ctx, knownKeys, connection.db.claimState.iter())
       const localPlayer = ctx.world.ecs.queryFirst(IsLocalPlayer, Rotation)
       const localRotation = localPlayer?.get(Rotation)
@@ -355,18 +378,18 @@ function syncResourceState(
     seen.add(key)
 
     upsertWorldEntity(ctx, key, (entity) => {
-      entity.add(NetEntity, WorldObjectKind, ResourceData)
+      entity.add(NetEntity, WorldObjectKind, Position, Rotation, ResourceData)
       entity.set(NetEntity, { table, serverId: row.entityId.toString() })
       entity.set(WorldObjectKind, { kind: 'ResourceNode' })
-      entity.set(ResourceData, { resourceType: row.resourceType, amount: row.amount })
+      entity.set(Position, { x: row.hexX, y: 0, z: row.hexZ })
+      entity.set(Rotation, { x: 0, y: 0, z: 0, w: 1 })
+      entity.set(ResourceData, {
+        resourceType: row.resourceType,
+        amount: row.amount,
+        maxAmount: row.maxAmount,
+        isDepleted: row.isDepleted,
+      })
       entity.add(IsResourceNode)
-
-      if (!entity.has(Position)) {
-        entity.add(Position, Rotation)
-        const seed = seededPosition(row.entityId)
-        entity.set(Position, { x: seed.x, y: 0, z: seed.z })
-        entity.set(Rotation, { x: 0, y: 0, z: 0, w: 1 })
-      }
     })
   }
 
@@ -377,8 +400,9 @@ function syncTerrainChunks(
   ctx: RuntimeContext,
   knownKeys: Map<string, Set<string>>,
   rows: Iterable<TerrainChunkRow>,
+  chunkSize: number,
 ): void {
-  const table = 'terrain_chunk'
+  const table = 'terrain_chunk_stream'
   const seen = new Set<string>()
 
   for (const row of rows) {
@@ -390,12 +414,17 @@ function syncTerrainChunks(
       entity.set(NetEntity, { table, serverId: row.chunkKey })
       entity.set(WorldObjectKind, { kind: 'TerrainChunk' })
       entity.set(Position, {
-        x: row.chunkX * CHUNK_SIZE + CHUNK_SIZE * 0.5,
+        x: row.chunkX * chunkSize + chunkSize * 0.5,
         y: 0,
-        z: row.chunkY * CHUNK_SIZE + CHUNK_SIZE * 0.5,
+        z: row.chunkY * chunkSize + chunkSize * 0.5,
       })
       entity.set(Rotation, { x: 0, y: 0, z: 0, w: 1 })
-      entity.set(ChunkData, { chunkX: row.chunkX, chunkY: row.chunkY, biomeId: row.biomeId })
+      entity.set(ChunkData, {
+        chunkX: row.chunkX,
+        chunkY: row.chunkY,
+        biomeId: row.biomeId,
+        chunkSize,
+      })
       entity.add(IsTerrainChunk)
     })
   }
@@ -510,11 +539,14 @@ function normalizeIdentityHex(value: string | null): string | null {
   return trimmed.toLowerCase().replace(/^0x/, '')
 }
 
-function seededPosition(seed: bigint): { x: number; z: number } {
-  const numeric = Number(seed % 9973n)
-  const x = (numeric % 128) - 64
-  const z = (Math.floor(numeric / 128) % 128) - 64
-  return { x, z }
+function readTerrainChunkSize(rows: Iterable<WorldGenParamsRow>, fallback: number): number {
+  for (const row of rows) {
+    const size = Math.floor(row.terrainChunkSize)
+    if (Number.isFinite(size) && size > 0 && size <= 512) {
+      return size
+    }
+  }
+  return fallback
 }
 
 function shouldReanchorAoi(

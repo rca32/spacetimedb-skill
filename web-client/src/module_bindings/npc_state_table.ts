@@ -17,8 +17,8 @@ export default __t.row({
   hexZ: __t.i32().name("hex_z"),
   destHexX: __t.i32().name("dest_hex_x"),
   destHexZ: __t.i32().name("dest_hex_z"),
-  role: __t.u8().name("role"),
-  mood: __t.u8().name("mood"),
+  role: __t.u8(),
+  mood: __t.u8(),
   scheduleKind: __t.u8().name("schedule_kind"),
   nextActionTs: __t.u64().name("next_action_ts"),
 });

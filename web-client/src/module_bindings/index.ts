@@ -66,6 +66,10 @@ import EconomySetParamReducer from "./economy_set_param_reducer";
 export { EconomySetParamReducer };
 import EnvironmentEffectAgentLoopReducer from "./environment_effect_agent_loop_reducer";
 export { EnvironmentEffectAgentLoopReducer };
+import GenerateWorldReducer from "./generate_world_reducer";
+export { GenerateWorldReducer };
+import GenerateWorldFromParamsReducer from "./generate_world_from_params_reducer";
+export { GenerateWorldFromParamsReducer };
 import GuildCreateReducer from "./guild_create_reducer";
 export { GuildCreateReducer };
 import GuildJoinReducer from "./guild_join_reducer";
@@ -114,6 +118,8 @@ import MovementFeedbackCleanupReducer from "./movement_feedback_cleanup_reducer"
 export { MovementFeedbackCleanupReducer };
 import MovementFeedbackCleanupGlobalReducer from "./movement_feedback_cleanup_global_reducer";
 export { MovementFeedbackCleanupGlobalReducer };
+import NpcAiAgentLoopReducer from "./npc_ai_agent_loop_reducer";
+export { NpcAiAgentLoopReducer };
 import NpcQuestReducer from "./npc_quest_reducer";
 export { NpcQuestReducer };
 import NpcTalkReducer from "./npc_talk_reducer";
@@ -134,6 +140,8 @@ import QuestChainStartReducer from "./quest_chain_start_reducer";
 export { QuestChainStartReducer };
 import QuestStageCompleteReducer from "./quest_stage_complete_reducer";
 export { QuestStageCompleteReducer };
+import RegenerateChunksReducer from "./regenerate_chunks_reducer";
+export { RegenerateChunksReducer };
 import RentSetWhitelistReducer from "./rent_set_whitelist_reducer";
 export { RentSetWhitelistReducer };
 import ReportReviewReducer from "./report_review_reducer";
@@ -150,6 +158,8 @@ import SeedDataReducer from "./seed_data_reducer";
 export { SeedDataReducer };
 import SessionCleanupAgentLoopReducer from "./session_cleanup_agent_loop_reducer";
 export { SessionCleanupAgentLoopReducer };
+import SetWorldgenParamsReducer from "./set_worldgen_params_reducer";
+export { SetWorldgenParamsReducer };
 import SignInReducer from "./sign_in_reducer";
 export { SignInReducer };
 import SignOutReducer from "./sign_out_reducer";
@@ -200,6 +210,8 @@ import BalanceParamsRow from "./balance_params_table";
 export { BalanceParamsRow };
 import BanListRow from "./ban_list_table";
 export { BanListRow };
+import BiomeGenDefRow from "./biome_gen_def_table";
+export { BiomeGenDefRow };
 import BuffStateRow from "./buff_state_table";
 export { BuffStateRow };
 import BuildingDefRow from "./building_def_table";
@@ -296,6 +308,8 @@ import NpcActionResultRow from "./npc_action_result_table";
 export { NpcActionResultRow };
 import NpcActionScheduleRow from "./npc_action_schedule_table";
 export { NpcActionScheduleRow };
+import NpcAiLoopTimerRow from "./npc_ai_loop_timer_table";
+export { NpcAiLoopTimerRow };
 import NpcConversationSessionRow from "./npc_conversation_session_table";
 export { NpcConversationSessionRow };
 import NpcConversationTurnRow from "./npc_conversation_turn_table";
@@ -366,6 +380,10 @@ import RentWhitelistEntryRow from "./rent_whitelist_entry_table";
 export { RentWhitelistEntryRow };
 import ReportQueueRow from "./report_queue_table";
 export { ReportQueueRow };
+import ResourceClumpDefRow from "./resource_clump_def_table";
+export { ResourceClumpDefRow };
+import ResourceGenDefRow from "./resource_gen_def_table";
+export { ResourceGenDefRow };
 import ResourceNodeRow from "./resource_node_table";
 export { ResourceNodeRow };
 import ResourceRegenLoopTimerRow from "./resource_regen_loop_timer_table";
@@ -388,6 +406,8 @@ import TaxPolicyRow from "./tax_policy_table";
 export { TaxPolicyRow };
 import TerrainChunkRow from "./terrain_chunk_table";
 export { TerrainChunkRow };
+import TerrainChunkStreamRow from "./terrain_chunk_stream_table";
+export { TerrainChunkStreamRow };
 import ThreatStateRow from "./threat_state_table";
 export { ThreatStateRow };
 import TradeOfferRow from "./trade_offer_table";
@@ -398,6 +418,8 @@ import TransformStateRow from "./transform_state_table";
 export { TransformStateRow };
 import WalletRow from "./wallet_table";
 export { WalletRow };
+import WorldGenParamsRow from "./world_gen_params_table";
+export { WorldGenParamsRow };
 
 // Import and reexport all types
 import Account from "./account_type";
@@ -430,6 +452,8 @@ import BalanceParams from "./balance_params_type";
 export { BalanceParams };
 import BanList from "./ban_list_type";
 export { BanList };
+import BiomeGenDef from "./biome_gen_def_type";
+export { BiomeGenDef };
 import BuffState from "./buff_state_type";
 export { BuffState };
 import BuildingDef from "./building_def_type";
@@ -526,6 +550,8 @@ import NpcActionResult from "./npc_action_result_type";
 export { NpcActionResult };
 import NpcActionSchedule from "./npc_action_schedule_type";
 export { NpcActionSchedule };
+import NpcAiLoopTimer from "./npc_ai_loop_timer_type";
+export { NpcAiLoopTimer };
 import NpcConversationSession from "./npc_conversation_session_type";
 export { NpcConversationSession };
 import NpcConversationTurn from "./npc_conversation_turn_type";
@@ -596,6 +622,10 @@ import RentWhitelistEntry from "./rent_whitelist_entry_type";
 export { RentWhitelistEntry };
 import ReportQueue from "./report_queue_type";
 export { ReportQueue };
+import ResourceClumpDef from "./resource_clump_def_type";
+export { ResourceClumpDef };
+import ResourceGenDef from "./resource_gen_def_type";
+export { ResourceGenDef };
 import ResourceNode from "./resource_node_type";
 export { ResourceNode };
 import ResourceRegenLoopTimer from "./resource_regen_loop_timer_type";
@@ -618,6 +648,8 @@ import TaxPolicy from "./tax_policy_type";
 export { TaxPolicy };
 import TerrainChunk from "./terrain_chunk_type";
 export { TerrainChunk };
+import TerrainChunkStream from "./terrain_chunk_stream_type";
+export { TerrainChunkStream };
 import ThreatState from "./threat_state_type";
 export { ThreatState };
 import TradeOffer from "./trade_offer_type";
@@ -628,6 +660,8 @@ import TransformState from "./transform_state_type";
 export { TransformState };
 import Wallet from "./wallet_type";
 export { Wallet };
+import WorldGenParams from "./world_gen_params_type";
+export { WorldGenParams };
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema(
@@ -796,6 +830,17 @@ const tablesSchema = __schema(
       { name: 'ban_list_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, BanListRow),
+  __table({
+    name: 'biome_gen_def',
+    indexes: [
+      { name: 'biome_id', algorithm: 'btree', columns: [
+        'biomeId',
+      ] },
+    ],
+    constraints: [
+      { name: 'biome_gen_def_biome_id_key', constraint: 'unique', columns: ['biomeId'] },
+    ],
+  }, BiomeGenDefRow),
   __table({
     name: 'buff_state',
     indexes: [
@@ -1325,6 +1370,17 @@ const tablesSchema = __schema(
     ],
   }, NpcActionScheduleRow),
   __table({
+    name: 'npc_ai_loop_timer',
+    indexes: [
+      { name: 'scheduled_id', algorithm: 'btree', columns: [
+        'scheduledId',
+      ] },
+    ],
+    constraints: [
+      { name: 'npc_ai_loop_timer_scheduled_id_key', constraint: 'unique', columns: ['scheduledId'] },
+    ],
+  }, NpcAiLoopTimerRow),
+  __table({
     name: 'npc_conversation_session',
     indexes: [
       { name: 'session_id', algorithm: 'btree', columns: [
@@ -1710,6 +1766,28 @@ const tablesSchema = __schema(
     ],
   }, ReportQueueRow),
   __table({
+    name: 'resource_clump_def',
+    indexes: [
+      { name: 'clump_key', algorithm: 'btree', columns: [
+        'clumpKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'resource_clump_def_clump_key_key', constraint: 'unique', columns: ['clumpKey'] },
+    ],
+  }, ResourceClumpDefRow),
+  __table({
+    name: 'resource_gen_def',
+    indexes: [
+      { name: 'resource_type', algorithm: 'btree', columns: [
+        'resourceType',
+      ] },
+    ],
+    constraints: [
+      { name: 'resource_gen_def_resource_type_key', constraint: 'unique', columns: ['resourceType'] },
+    ],
+  }, ResourceGenDefRow),
+  __table({
     name: 'resource_node',
     indexes: [
       { name: 'entity_id', algorithm: 'btree', columns: [
@@ -1831,6 +1909,17 @@ const tablesSchema = __schema(
     ],
   }, TerrainChunkRow),
   __table({
+    name: 'terrain_chunk_stream',
+    indexes: [
+      { name: 'chunk_key', algorithm: 'btree', columns: [
+        'chunkKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'terrain_chunk_stream_chunk_key_key', constraint: 'unique', columns: ['chunkKey'] },
+    ],
+  }, TerrainChunkStreamRow),
+  __table({
     name: 'threat_state',
     indexes: [
       { name: 'threat_key', algorithm: 'btree', columns: [
@@ -1885,6 +1974,17 @@ const tablesSchema = __schema(
       { name: 'wallet_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, WalletRow),
+  __table({
+    name: 'world_gen_params',
+    indexes: [
+      { name: 'id', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'world_gen_params_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, WorldGenParamsRow),
 );
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -1906,6 +2006,8 @@ const reducersSchema = __reducers(
   __reducerSchema("dimension_network_next_id", DimensionNetworkNextIdReducer),
   __reducerSchema("economy_set_param", EconomySetParamReducer),
   __reducerSchema("environment_effect_agent_loop", EnvironmentEffectAgentLoopReducer),
+  __reducerSchema("generate_world", GenerateWorldReducer),
+  __reducerSchema("generate_world_from_params", GenerateWorldFromParamsReducer),
   __reducerSchema("guild_create", GuildCreateReducer),
   __reducerSchema("guild_join", GuildJoinReducer),
   __reducerSchema("guild_project_update", GuildProjectUpdateReducer),
@@ -1929,6 +2031,7 @@ const reducersSchema = __reducers(
   __reducerSchema("move_to", MoveToReducer),
   __reducerSchema("movement_feedback_cleanup", MovementFeedbackCleanupReducer),
   __reducerSchema("movement_feedback_cleanup_global", MovementFeedbackCleanupGlobalReducer),
+  __reducerSchema("npc_ai_agent_loop", NpcAiAgentLoopReducer),
   __reducerSchema("npc_quest", NpcQuestReducer),
   __reducerSchema("npc_talk", NpcTalkReducer),
   __reducerSchema("npc_trade", NpcTradeReducer),
@@ -1939,6 +2042,7 @@ const reducersSchema = __reducers(
   __reducerSchema("player_regen_agent_loop", PlayerRegenAgentLoopReducer),
   __reducerSchema("quest_chain_start", QuestChainStartReducer),
   __reducerSchema("quest_stage_complete", QuestStageCompleteReducer),
+  __reducerSchema("regenerate_chunks", RegenerateChunksReducer),
   __reducerSchema("rent_set_whitelist", RentSetWhitelistReducer),
   __reducerSchema("report_review", ReportReviewReducer),
   __reducerSchema("report_submit", ReportSubmitReducer),
@@ -1947,6 +2051,7 @@ const reducersSchema = __reducers(
   __reducerSchema("role_revoke", RoleRevokeReducer),
   __reducerSchema("seed_data", SeedDataReducer),
   __reducerSchema("session_cleanup_agent_loop", SessionCleanupAgentLoopReducer),
+  __reducerSchema("set_worldgen_params", SetWorldgenParamsReducer),
   __reducerSchema("sign_in", SignInReducer),
   __reducerSchema("sign_out", SignOutReducer),
   __reducerSchema("start_world_agents", StartWorldAgentsReducer),
@@ -2010,3 +2115,4 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
+

@@ -11,8 +11,11 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  npcId: __t.u64().primaryKey().name("npc_id"),
-  nextActionAt: __t.u64().name("next_action_at"),
-  actionType: __t.u8().name("action_type"),
-  targetRegionId: __t.option(__t.u64()).name("target_region_id"),
+  biomeId: __t.u16().primaryKey().name("biome_id"),
+  name: __t.string(),
+  minElevation: __t.i16().name("min_elevation"),
+  maxElevation: __t.i16().name("max_elevation"),
+  moistureMin: __t.i16().name("moisture_min"),
+  moistureMax: __t.i16().name("moisture_max"),
+  resourceBiasPermille: __t.u16().name("resource_bias_permille"),
 });
