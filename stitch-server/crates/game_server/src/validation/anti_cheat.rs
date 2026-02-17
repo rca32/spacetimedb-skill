@@ -32,7 +32,7 @@ pub(crate) fn is_duplicate_request(ctx: &ReducerContext, request_id: &str) -> bo
 }
 
 pub(crate) fn validate_actor_progression(
-    actor_state: Option<MovementActorState>,
+    actor_state: Option<&MovementActorState>,
     client_ts_ms: u64,
     next_position: &[f32],
 ) -> Result<(), &'static str> {

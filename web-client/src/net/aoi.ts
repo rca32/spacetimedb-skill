@@ -72,6 +72,14 @@ export function buildTerrainPayloadAoiQuery(anchor: AoiAnchor): string {
   return `SELECT * FROM terrain_chunk_payload WHERE region_id = ${region} AND chunk_x >= ${terrainBounds.minX} AND chunk_x <= ${terrainBounds.maxX} AND chunk_y >= ${terrainBounds.minY} AND chunk_y <= ${terrainBounds.maxY}`
 }
 
+export function buildPathDebugQueries(regionId: bigint): string[] {
+  const region = regionId.toString()
+  return [
+    `SELECT * FROM path_result WHERE region_id = ${region}`,
+    'SELECT * FROM path_step',
+  ]
+}
+
 export function hashQueries(queries: string[]): string {
   return queries.join(' || ')
 }

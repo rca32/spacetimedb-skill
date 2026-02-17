@@ -34,3 +34,21 @@ BitCraftServer : 실제 소스
 이제 BitCraftPublicDoc 설명된 ,world-generator,terrain 등등을 포팅해야되..
 상세한 포팅 계획을 세우서 WORLDGENERATORDESIGN 밑에 만들어죠, server 랑 web-client 모두 계획에 포함
 되어야해
+
+
+사용스킬[$koota,$three-best-practices,$spacetimedb-korean,$agent-browser]
+[필수 읽기]
+WORLDGENERATORDESIGN/00-master.md
+rompts/20260217_worklog.md
+
+아직 미구현 된 Stitch World Generator 하고 싶어
+
+
+사용스킬[$koota,$three-best-practices,$spacetimedb-korean,$agent-browser]
+[필수 읽기]
+WORLDGENERATORDESIGN/00-master.md
+rompts/20260217_worklog.md
+BitCraftPublicDoc/26-pathfinding-algorithm.md
+BitCraftServer : BitCraftServer 실제 소스
+
+지형 충돌,가지 못하는 지형 생성, pathfind 등을 구형 해야 할것 같아.

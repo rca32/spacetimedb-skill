@@ -93,6 +93,30 @@ export type ClaimStateRow = {
   tier: number
 }
 
+export type PathResultRow = {
+  pathId: string
+  requesterIdentity: unknown
+  regionId: bigint
+  startHexX: number
+  startHexZ: number
+  goalHexX: number
+  goalHexZ: number
+  status: number
+  nodeLimit: number
+  exploredNodes: number
+  stepCount: number
+  createdAt: unknown
+  expiresAt: unknown
+}
+
+export type PathStepRow = {
+  stepKey: string
+  pathId: string
+  stepIndex: number
+  hexX: number
+  hexZ: number
+}
+
 export function upsertWorldEntity(
   ctx: RuntimeContext,
   key: string,

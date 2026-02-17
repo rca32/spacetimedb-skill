@@ -1,4 +1,9 @@
-import { buildTerrainPayloadAoiQuery, buildWorldAoiQueries, hashQueries } from '../net/aoi'
+import {
+  buildPathDebugQueries,
+  buildTerrainPayloadAoiQuery,
+  buildWorldAoiQueries,
+  hashQueries,
+} from '../net/aoi'
 import { WorldStreamingRenderer } from '../render/world-streaming'
 import { IsLocalPlayer, Rotation } from '../core/traits'
 import { ThirdPersonCameraController } from './third-person-camera'
@@ -13,6 +18,8 @@ import {
   syncBuildingState,
   syncClaims,
   syncNpcState,
+  syncPathResults,
+  syncPathSteps,
   syncResourceState,
   syncTerrainChunkPayloads,
   syncTerrainChunks,
@@ -22,12 +29,14 @@ import {
 
 const AOI_SUBSCRIPTION_KEY = 'world-aoi'
 const AOI_TERRAIN_PAYLOAD_SUBSCRIPTION_KEY = 'world-aoi-terrain-payload'
+const AOI_PATH_DEBUG_SUBSCRIPTION_KEY = 'world-path-debug'
 const TERRAIN_RADIUS_CHUNKS = 3
 const DYNAMIC_RADIUS_CHUNKS = 2
 const COMBAT_LIMIT = 500
 const DEFAULT_CHUNK_SIZE = 32
 const ENABLE_WORLD_AOI_SUBSCRIPTION = (import.meta.env.VITE_ENABLE_WORLD_AOI_SUB ?? '1') === '1'
 const ENABLE_TERRAIN_PAYLOAD_SUBSCRIPTION = (import.meta.env.VITE_ENABLE_TERRAIN_PAYLOAD_SUB ?? '1') === '1'
+const ENABLE_PATH_DEBUG_OVERLAY_SUBSCRIPTION = (import.meta.env.VITE_DEBUG_PATH_OVERLAY ?? '0') === '1'
 const AOI_UPDATE_MIN_INTERVAL_MS = 500
 
 export function createWorldRuntime(): RuntimeModule {
@@ -36,6 +45,7 @@ export function createWorldRuntime(): RuntimeModule {
   let cameraController: ThirdPersonCameraController | null = null
   let currentAoiHash = ''
   let currentTerrainPayloadAoiHash = ''
+  let currentPathDebugHash = ''
   let localRegionId: bigint | null = null
   let localPosition = { x: 0, y: 0, z: 0 }
   let aoiAnchorPosition = { x: 0, z: 0 }
@@ -60,6 +70,7 @@ export function createWorldRuntime(): RuntimeModule {
           streaming?.clear()
           currentAoiHash = ''
           currentTerrainPayloadAoiHash = ''
+          currentPathDebugHash = ''
           localRegionId = null
           localPosition = { x: 0, y: 0, z: 0 }
           aoiAnchorPosition = { x: 0, z: 0 }
@@ -68,6 +79,7 @@ export function createWorldRuntime(): RuntimeModule {
           cameraController?.reset()
           ctx.net?.removeSubscription(AOI_SUBSCRIPTION_KEY)
           ctx.net?.removeSubscription(AOI_TERRAIN_PAYLOAD_SUBSCRIPTION_KEY)
+          ctx.net?.removeSubscription(AOI_PATH_DEBUG_SUBSCRIPTION_KEY)
         }
         lastConnectionActive = false
         return
@@ -132,6 +144,18 @@ export function createWorldRuntime(): RuntimeModule {
           currentTerrainPayloadAoiHash = ''
           ctx.net?.removeSubscription(AOI_TERRAIN_PAYLOAD_SUBSCRIPTION_KEY)
         }
+
+        if (ENABLE_PATH_DEBUG_OVERLAY_SUBSCRIPTION) {
+          const pathQueries = buildPathDebugQueries(localRegionId)
+          const pathHash = hashQueries(pathQueries)
+          if (pathHash !== currentPathDebugHash && (intervalPassed || currentPathDebugHash === '')) {
+            ctx.net?.setSubscription(AOI_PATH_DEBUG_SUBSCRIPTION_KEY, pathQueries)
+            currentPathDebugHash = pathHash
+          }
+        } else {
+          currentPathDebugHash = ''
+          ctx.net?.removeSubscription(AOI_PATH_DEBUG_SUBSCRIPTION_KEY)
+        }
       }
 
       const nextLocalPosition = syncTransformState(
@@ -150,6 +174,8 @@ export function createWorldRuntime(): RuntimeModule {
       syncTerrainChunks(ctx, knownKeys, connection.db.terrainChunkStream.iter(), terrainChunkSize)
       syncTerrainChunkPayloads(ctx, knownKeys, connection.db.terrainChunkPayload.iter())
       syncClaims(ctx, knownKeys, connection.db.claimState.iter())
+      syncPathResults(ctx, knownKeys, connection.db.pathResult.iter())
+      syncPathSteps(ctx, knownKeys, connection.db.pathStep.iter())
       const localGroundY = snapActorPresentationToTerrain(ctx.world)
       if (localGroundY !== null) {
         localPosition = {
@@ -180,6 +206,7 @@ export function createWorldRuntime(): RuntimeModule {
     stop(ctx: RuntimeContext) {
       ctx.net?.removeSubscription(AOI_SUBSCRIPTION_KEY)
       ctx.net?.removeSubscription(AOI_TERRAIN_PAYLOAD_SUBSCRIPTION_KEY)
+      ctx.net?.removeSubscription(AOI_PATH_DEBUG_SUBSCRIPTION_KEY)
       clearWorld(ctx, knownKeys)
       streaming?.dispose(ctx.renderer.scene)
       streaming = null

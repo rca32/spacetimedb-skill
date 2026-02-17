@@ -18,6 +18,7 @@ pub mod live_ops;
 pub mod movement;
 pub mod npc_quest;
 pub mod ops_moderation;
+pub mod pathfinding;
 pub mod permission_state;
 pub mod player_progression;
 pub mod player_state;
@@ -66,6 +67,7 @@ pub use npc_quest::{
 pub use ops_moderation::{
     AuditLog, BanList, ModerationAction, ModerationFlag, RateLimitBucket, ReportQueue,
 };
+pub use pathfinding::{NpcPathState, PathResult, PathStep};
 pub use permission_state::PermissionState;
 pub use player_progression::{
     AchievementDef, AchievementState, ActionState, BuffState, CharacterStats, KnowledgeState,

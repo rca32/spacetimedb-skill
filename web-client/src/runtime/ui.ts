@@ -384,13 +384,22 @@ function resolveOverlay(state: RuntimeContext['appState']['value']): string | nu
 function mapMovementRejectMessage(reasonCode: string | null, streak: number): string {
   switch (reasonCode) {
     case 'OUT_OF_REGION':
+    case 'region_mismatch':
       return `이동 거절 ${streak}회: region 동기화 중입니다.`
     case 'RATE_LIMITED':
+    case 'non_monotonic_timestamp':
       return `이동 거절 ${streak}회: 입력 속도를 낮춰주세요.`
     case 'ANTI_CHEAT':
+    case 'distance_exceeded':
       return `이동 거절 ${streak}회: 비정상 이동이 감지되었습니다.`
     case 'INVALID_POSITION':
+    case 'invalid_position':
+    case 'terrain_missing':
       return `이동 거절 ${streak}회: 이동 불가능한 위치입니다.`
+    case 'terrain_blocked':
+      return `이동 거절 ${streak}회: 물/장애 지형은 통과할 수 없습니다.`
+    case 'slope_blocked':
+      return `이동 거절 ${streak}회: 경사가 너무 가파른 지형입니다.`
     default:
       return `이동 거절 ${streak}회가 연속 발생했습니다.`
   }

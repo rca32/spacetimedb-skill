@@ -1,5 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
+use crate::services::nav;
 use crate::services::projection_views;
 use crate::tables::movement::movement_actor_state;
 use crate::tables::movement::movement_request_log;
@@ -99,7 +100,7 @@ pub fn move_to(
 
     let actor_state = ctx.db.movement_actor_state().identity().find(ctx.sender);
     if let Err(reason) =
-        anti_cheat::validate_actor_progression(actor_state, client_ts_ms, &next_position)
+        anti_cheat::validate_actor_progression(actor_state.as_ref(), client_ts_ms, &next_position)
     {
         log::warn!(
             "move_to dropped anti_cheat: identity={} request_id={} reason={} region_id={} client_ts_ms={}",
@@ -108,6 +109,40 @@ pub fn move_to(
             reason,
             region_id,
             client_ts_ms
+        );
+        anti_cheat::log_movement_violation(
+            ctx,
+            reason,
+            next_position,
+            &request_id,
+            region_id,
+            client_ts_ms,
+        );
+        return Ok(());
+    }
+
+    let current_position = ctx
+        .db
+        .transform_state()
+        .entity_id()
+        .find(ctx.sender)
+        .map(|row| row.position)
+        .or_else(|| actor_state.as_ref().map(|row| row.last_position.clone()))
+        .unwrap_or_else(|| next_position.clone());
+
+    if let Err(reason) =
+        nav::validate_segment_positions(ctx, region_id, &current_position, &next_position)
+    {
+        log::warn!(
+            "move_to dropped terrain_validation: identity={} request_id={} reason={} region_id={} client_ts_ms={} pos=({},{},{})",
+            ctx.sender,
+            request_id,
+            reason,
+            region_id,
+            client_ts_ms,
+            x,
+            y,
+            z
         );
         anti_cheat::log_movement_violation(
             ctx,

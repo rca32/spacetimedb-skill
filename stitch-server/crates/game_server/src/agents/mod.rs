@@ -4,6 +4,8 @@ use std::time::Duration;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table};
 
+use crate::services::hex_coords::HexCoord;
+use crate::services::pathfinding;
 use crate::tables::agent_timers::{
     environment_effect_loop_timer, npc_ai_loop_timer, player_regen_loop_timer,
     resource_regen_loop_timer, session_cleanup_loop_timer,
@@ -36,6 +38,8 @@ const ENVIRONMENT_EFFECT_INTERVAL_SECS: u64 = 5;
 const SESSION_IDLE_TIMEOUT_SECS: u64 = 30 * 60;
 const NPC_AI_INTERVAL_SECS: u64 = 2;
 const NPC_AI_STEP_HEX: i32 = 2;
+const NPC_AI_PATH_NODE_LIMIT: u32 = 2_048;
+const NPC_AI_PATH_KEEP_ROWS_PER_IDENTITY: u32 = 64;
 const STARTER_REGION_ID: u64 = 1;
 
 #[derive(Clone, Copy)]
@@ -473,20 +477,57 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
         if action_type == 0 || action_type == 3 {
             schedule.next_action_at = now_us + npc_next_delay(action_type);
             schedule.action_type = action_type;
+            npc.dest_hex_x = npc.hex_x;
+            npc.dest_hex_z = npc.hex_z;
             npc.next_action_ts = now_us + npc_next_delay(action_type);
             npc_updates.push(npc);
         } else {
-            let (next_hex_x, next_hex_z) =
+            let (target_hex_x, target_hex_z) =
                 compute_npc_destination(npc.npc_id, npc.hex_x, npc.hex_z, action_type, npc.mood);
-
-            process_npc_movement(
-                &mut npc,
-                &mut schedule,
-                now_us,
-                action_type,
-                next_hex_x,
-                next_hex_z,
-            );
+            let current = HexCoord::new(npc.hex_x, npc.hex_z, 1);
+            let target = HexCoord::new(target_hex_x, target_hex_z, 1);
+            let next_step = match pathfinding::request_npc_step(
+                ctx,
+                npc.npc_id,
+                npc.region_id,
+                current,
+                target,
+                NPC_AI_PATH_NODE_LIMIT,
+            ) {
+                Ok(step) => step,
+                Err(err) => {
+                    log::warn!(
+                        "npc_ai path request failed: npc_id={} region_id={} start=({}, {}) target=({}, {}) error={}",
+                        npc.npc_id,
+                        npc.region_id,
+                        npc.hex_x,
+                        npc.hex_z,
+                        target_hex_x,
+                        target_hex_z,
+                        err
+                    );
+                    None
+                }
+            };
+            if let Some(step) = next_step {
+                process_npc_movement(
+                    &mut npc,
+                    &mut schedule,
+                    now_us,
+                    action_type,
+                    step.q,
+                    step.r,
+                    target_hex_x,
+                    target_hex_z,
+                );
+            } else {
+                // Keep destination intent even when path is temporarily unavailable.
+                npc.dest_hex_x = target_hex_x;
+                npc.dest_hex_z = target_hex_z;
+                npc.next_action_ts = now_us + npc_next_delay(action_type);
+                schedule.next_action_at = npc.next_action_ts;
+                schedule.action_type = action_type;
+            }
             npc.mood = npc.mood.wrapping_add(1);
             npc_updates.push(npc);
         }
@@ -507,6 +548,15 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
         {
             ctx.db.npc_action_schedule().npc_id().update(schedule);
         }
+    }
+
+    let removed_paths =
+        pathfinding::prune_path_results(ctx, NPC_AI_PATH_KEEP_ROWS_PER_IDENTITY);
+    if removed_paths > 0 {
+        log::info!(
+            "npc_ai_agent_loop pruned stale paths: removed={}",
+            removed_paths
+        );
     }
 
     if let Some(mut timer) = ctx
@@ -551,13 +601,15 @@ fn process_npc_movement(
     schedule: &mut NpcActionSchedule,
     now_us: u64,
     action_type: u8,
-    next_hex_x: i32,
-    next_hex_z: i32,
+    step_hex_x: i32,
+    step_hex_z: i32,
+    dest_hex_x: i32,
+    dest_hex_z: i32,
 ) {
-    npc.dest_hex_x = next_hex_x;
-    npc.dest_hex_z = next_hex_z;
-    npc.hex_x = next_hex_x;
-    npc.hex_z = next_hex_z;
+    npc.dest_hex_x = dest_hex_x;
+    npc.dest_hex_z = dest_hex_z;
+    npc.hex_x = step_hex_x;
+    npc.hex_z = step_hex_z;
     npc.next_action_ts = now_us + npc_next_delay(action_type);
     schedule.next_action_at = npc.next_action_ts;
     schedule.action_type = action_type;

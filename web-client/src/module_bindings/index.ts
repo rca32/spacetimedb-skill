@@ -136,6 +136,8 @@ import PartyTransferLeaderReducer from "./party_transfer_leader_reducer";
 export { PartyTransferLeaderReducer };
 import PlayerRegenAgentLoopReducer from "./player_regen_agent_loop_reducer";
 export { PlayerRegenAgentLoopReducer };
+import PruneExpiredPathsReducer from "./prune_expired_paths_reducer";
+export { PruneExpiredPathsReducer };
 import QuestChainStartReducer from "./quest_chain_start_reducer";
 export { QuestChainStartReducer };
 import QuestStageCompleteReducer from "./quest_stage_complete_reducer";
@@ -148,6 +150,8 @@ import ReportReviewReducer from "./report_review_reducer";
 export { ReportReviewReducer };
 import ReportSubmitReducer from "./report_submit_reducer";
 export { ReportSubmitReducer };
+import RequestPathReducer from "./request_path_reducer";
+export { RequestPathReducer };
 import ResourceRegenAgentLoopReducer from "./resource_regen_agent_loop_reducer";
 export { ResourceRegenAgentLoopReducer };
 import RoleGrantReducer from "./role_grant_reducer";
@@ -322,6 +326,8 @@ import NpcMemoryLongRow from "./npc_memory_long_table";
 export { NpcMemoryLongRow };
 import NpcMemoryShortRow from "./npc_memory_short_table";
 export { NpcMemoryShortRow };
+import NpcPathStateRow from "./npc_path_state_table";
+export { NpcPathStateRow };
 import NpcPolicyViolationRow from "./npc_policy_violation_table";
 export { NpcPolicyViolationRow };
 import NpcRelationRow from "./npc_relation_table";
@@ -340,6 +346,10 @@ import PartyMemberRow from "./party_member_table";
 export { PartyMemberRow };
 import PartyStateRow from "./party_state_table";
 export { PartyStateRow };
+import PathResultRow from "./path_result_table";
+export { PathResultRow };
+import PathStepRow from "./path_step_table";
+export { PathStepRow };
 import PermissionStateRow from "./permission_state_table";
 export { PermissionStateRow };
 import PlayerInventoryContainerViewRow from "./player_inventory_container_view_table";
@@ -566,6 +576,8 @@ import NpcMemoryLong from "./npc_memory_long_type";
 export { NpcMemoryLong };
 import NpcMemoryShort from "./npc_memory_short_type";
 export { NpcMemoryShort };
+import NpcPathState from "./npc_path_state_type";
+export { NpcPathState };
 import NpcPolicyViolation from "./npc_policy_violation_type";
 export { NpcPolicyViolation };
 import NpcRelation from "./npc_relation_type";
@@ -584,6 +596,10 @@ import PartyMember from "./party_member_type";
 export { PartyMember };
 import PartyState from "./party_state_type";
 export { PartyState };
+import PathResult from "./path_result_type";
+export { PathResult };
+import PathStep from "./path_step_type";
+export { PathStep };
 import PermissionState from "./permission_state_type";
 export { PermissionState };
 import PlayerInventoryContainerView from "./player_inventory_container_view_type";
@@ -1451,6 +1467,17 @@ const tablesSchema = __schema(
     ],
   }, NpcMemoryShortRow),
   __table({
+    name: 'npc_path_state',
+    indexes: [
+      { name: 'npc_id', algorithm: 'btree', columns: [
+        'npcId',
+      ] },
+    ],
+    constraints: [
+      { name: 'npc_path_state_npc_id_key', constraint: 'unique', columns: ['npcId'] },
+    ],
+  }, NpcPathStateRow),
+  __table({
     name: 'npc_policy_violation',
     indexes: [
       { name: 'violation_id', algorithm: 'btree', columns: [
@@ -1549,6 +1576,28 @@ const tablesSchema = __schema(
       { name: 'party_state_party_id_key', constraint: 'unique', columns: ['partyId'] },
     ],
   }, PartyStateRow),
+  __table({
+    name: 'path_result',
+    indexes: [
+      { name: 'path_id', algorithm: 'btree', columns: [
+        'pathId',
+      ] },
+    ],
+    constraints: [
+      { name: 'path_result_path_id_key', constraint: 'unique', columns: ['pathId'] },
+    ],
+  }, PathResultRow),
+  __table({
+    name: 'path_step',
+    indexes: [
+      { name: 'step_key', algorithm: 'btree', columns: [
+        'stepKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'path_step_step_key_key', constraint: 'unique', columns: ['stepKey'] },
+    ],
+  }, PathStepRow),
   __table({
     name: 'permission_state',
     indexes: [
@@ -2055,12 +2104,14 @@ const reducersSchema = __reducers(
   __reducerSchema("party_leave", PartyLeaveReducer),
   __reducerSchema("party_transfer_leader", PartyTransferLeaderReducer),
   __reducerSchema("player_regen_agent_loop", PlayerRegenAgentLoopReducer),
+  __reducerSchema("prune_expired_paths", PruneExpiredPathsReducer),
   __reducerSchema("quest_chain_start", QuestChainStartReducer),
   __reducerSchema("quest_stage_complete", QuestStageCompleteReducer),
   __reducerSchema("regenerate_chunks", RegenerateChunksReducer),
   __reducerSchema("rent_set_whitelist", RentSetWhitelistReducer),
   __reducerSchema("report_review", ReportReviewReducer),
   __reducerSchema("report_submit", ReportSubmitReducer),
+  __reducerSchema("request_path", RequestPathReducer),
   __reducerSchema("resource_regen_agent_loop", ResourceRegenAgentLoopReducer),
   __reducerSchema("role_grant", RoleGrantReducer),
   __reducerSchema("role_revoke", RoleRevokeReducer),

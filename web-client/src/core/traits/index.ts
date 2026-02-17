@@ -7,6 +7,7 @@ export type WorldObjectKindType =
   | 'ResourceNode'
   | 'TerrainChunk'
   | 'Claim'
+  | 'Path'
 
 export const Position = trait({ x: 0, y: 0, z: 0 })
 export const Rotation = trait({ x: 0, y: 0, z: 0, w: 1 })
@@ -58,6 +59,25 @@ export const ClaimData = trait({
   regionId: '',
 })
 export const ResourceData = trait({ resourceType: 0, amount: 0, maxAmount: 0, isDepleted: false })
+export const PathResultData = trait({
+  pathId: '',
+  requesterIdentityHex: '',
+  regionId: '',
+  startHexX: 0,
+  startHexZ: 0,
+  goalHexX: 0,
+  goalHexZ: 0,
+  status: 0,
+  stepCount: 0,
+  createdAt: '',
+  expiresAt: '',
+})
+export const PathStepData = trait({
+  pathId: '',
+  stepIndex: 0,
+  hexX: 0,
+  hexZ: 0,
+})
 
 export const InventoryContainerViewData = trait({
   ownerIdentityHex: '',
@@ -158,6 +178,8 @@ export const IsResourceNode = trait()
 export const IsTerrainChunk = trait()
 export const IsTerrainChunkPayload = trait()
 export const IsClaim = trait()
+export const IsPathResult = trait()
+export const IsPathStep = trait()
 export const IsInventoryView = trait()
 export const IsTradeEntity = trait()
 export const IsEconomyEntity = trait()

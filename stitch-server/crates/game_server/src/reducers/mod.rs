@@ -7,6 +7,7 @@ pub mod id_allocator;
 pub mod inventory;
 pub mod npc_quest;
 pub mod ops_moderation;
+pub mod pathfinding;
 pub mod player;
 pub mod social;
 pub mod trade_market;
