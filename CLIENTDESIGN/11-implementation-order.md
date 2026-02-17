@@ -79,6 +79,16 @@
 - 로컬 검증:
   - `cd stitch-client && cargo check` 통과
 
+## Phase 3A: Camera System Upgrade (Cinemachine Port)
+- [ ] ThirdPersonFollow parity hardening (collision/damping 보강)
+- [ ] ThirdPersonAim 확장 도입 (center lock + aim target 보정)
+- [ ] aim/free 모드 전환 리그 구현 (coupling 정책 연동)
+- [ ] 카메라 회귀 테스트 세트 확장
+
+완료 기준:
+- 초기 카메라 지하 하강/역방향 이동/조준 불일치 재현 0건
+- 상세 설계: `12-camera-system-cinemachine-port-plan.md`
+
 ## Phase 4: Combat + Resources
 - [ ] 공격 state machine 구현
 - [ ] `attack_*` 호출 체인 구현

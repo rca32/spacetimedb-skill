@@ -1,4 +1,4 @@
-import { GLTFLoader } from 'three-stdlib'
+import { FBXLoader, GLTFLoader } from 'three-stdlib'
 import * as THREE from 'three'
 import type { AssetManifest } from './asset-mapping'
 import { ASSET_MANIFEST_PATH } from './asset-mapping'
@@ -17,6 +17,7 @@ export interface AssetLoaderResult {
 
 class AssetLoaderImpl {
   private gltfLoader = new GLTFLoader()
+  private fbxLoader = new FBXLoader()
   private textureLoader = new THREE.TextureLoader()
   private audioContext: AudioContext | null = null
   private modelCache = new Map<string, LoadedModel>()
@@ -52,10 +53,20 @@ class AssetLoaderImpl {
       return cached
     }
 
-    const gltf = await this.gltfLoader.loadAsync(path)
-    const result: LoadedModel = {
-      scene: gltf.scene,
-      animations: gltf.animations,
+    const lower = path.toLowerCase()
+    let result: LoadedModel
+    if (lower.endsWith('.fbx')) {
+      const fbx = await this.fbxLoader.loadAsync(path)
+      result = {
+        scene: fbx,
+        animations: fbx.animations,
+      }
+    } else {
+      const gltf = await this.gltfLoader.loadAsync(path)
+      result = {
+        scene: gltf.scene,
+        animations: gltf.animations,
+      }
     }
 
     this.modelCache.set(path, result)
@@ -146,11 +157,12 @@ class AssetLoaderImpl {
   }
 
   private async loadAssetByPath(path: string): Promise<void> {
-    if (path.endsWith('.glb') || path.endsWith('.gltf')) {
+    const lower = path.toLowerCase()
+    if (lower.endsWith('.glb') || lower.endsWith('.gltf') || lower.endsWith('.fbx')) {
       await this.loadModel(path)
-    } else if (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.webp')) {
+    } else if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.webp')) {
       await this.loadTexture(path)
-    } else if (path.endsWith('.mp3') || path.endsWith('.wav') || path.endsWith('.ogg')) {
+    } else if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.ogg')) {
       await this.loadAudio(path)
     }
   }

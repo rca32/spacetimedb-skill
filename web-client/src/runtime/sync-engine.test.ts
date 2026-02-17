@@ -371,6 +371,11 @@ describe('SyncEngine rollback/replay', () => {
     expect(engine.getViewPitch()).toBeGreaterThan(minPitch - 1e-6)
   })
 
+  it('starts with a slight downward default pitch', () => {
+    const engine = new SyncEngine(createLogger())
+    expect(engine.getViewPitch()).toBeLessThan(0)
+  })
+
   it('suppresses immediate movement when yaw turns sharply', () => {
     const identityHex = 'local-identity'
     const feedbackRows: FeedbackRow[] = []

@@ -689,7 +689,7 @@ function loadSyncOptions(): SyncOptions {
   const rawViewPitchMaxRad = (envNumber('VITE_SYNC_VIEW_PITCH_MAX_DEG', 65) * Math.PI) / 180
   const viewPitchMaxRad = Math.max(viewPitchMinRad + 0.01, rawViewPitchMaxRad)
   const viewPitchDefaultRad = clampNumber(
-    (envNumber('VITE_SYNC_VIEW_PITCH_DEFAULT_DEG', 18) * Math.PI) / 180,
+    (envNumber('VITE_SYNC_VIEW_PITCH_DEFAULT_DEG', -18) * Math.PI) / 180,
     viewPitchMinRad,
     viewPitchMaxRad,
   )

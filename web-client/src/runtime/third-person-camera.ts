@@ -9,6 +9,7 @@ export interface ThirdPersonCameraOptions {
   cameraSide: number
   cameraDistance: number
   minDistance: number
+  minCameraHeightOffset: number
   lookAheadDistance: number
   positionDamping: number
   aimDamping: number
@@ -101,10 +102,13 @@ export class ThirdPersonCameraController {
     this.desiredLookAt.copy(this.desiredHand).addScaledVector(this.targetForward, this.options.lookAheadDistance)
 
     this.applyCollisionResolution(input.scene, desiredDistance, dtSeconds)
+    const minCameraY = input.targetY + this.options.minCameraHeightOffset
+    this.clampCameraY(this.desiredCamera, minCameraY)
 
     if (!this.initialized) {
       this.smoothedCamera.copy(this.desiredCamera)
       this.smoothedLookAt.copy(this.desiredLookAt)
+      this.clampCameraY(this.smoothedCamera, minCameraY)
       input.camera.position.copy(this.smoothedCamera)
       input.camera.lookAt(this.smoothedLookAt)
       this.previousTargetPosition.copy(this.root)
@@ -116,10 +120,17 @@ export class ThirdPersonCameraController {
     const aimAlpha = dampingAlpha(this.options.aimDamping, dtSeconds)
     this.smoothedCamera.lerp(this.desiredCamera, posAlpha)
     this.smoothedLookAt.lerp(this.desiredLookAt, aimAlpha)
+    this.clampCameraY(this.smoothedCamera, minCameraY)
 
     input.camera.position.copy(this.smoothedCamera)
     input.camera.lookAt(this.smoothedLookAt)
     this.previousTargetPosition.copy(this.root)
+  }
+
+  private clampCameraY(position: THREE.Vector3, minY: number): void {
+    if (position.y < minY) {
+      position.y = minY
+    }
   }
 
   private updateRigDampingCorrection(dtSeconds: number): void {
@@ -244,6 +255,7 @@ function loadCameraOptions(): ThirdPersonCameraOptions {
     cameraSide: clamp(envNumber('VITE_CAMERA_SIDE', 1), 0, 1),
     cameraDistance: envNumber('VITE_CAMERA_DISTANCE', 5.5),
     minDistance: envNumber('VITE_CAMERA_MIN_DISTANCE', 1.1),
+    minCameraHeightOffset: envNumber('VITE_CAMERA_MIN_HEIGHT_OFFSET', 0.15),
     lookAheadDistance: envNumber('VITE_CAMERA_LOOKAHEAD', 0),
     positionDamping: envNumber('VITE_CAMERA_POSITION_DAMPING', 9),
     aimDamping: envNumber('VITE_CAMERA_AIM_DAMPING', 12),

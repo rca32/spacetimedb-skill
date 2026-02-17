@@ -59,7 +59,13 @@
         "run_forward": "sprint",
         "run_backward": "sprint",
         "run_left": "sprint",
-        "run_right": "sprint"
+        "run_right": "sprint",
+        "turn_left": "wheelchair-look-left",
+        "turn_right": "wheelchair-look-right",
+        "turn_back": "wheelchair-move-back",
+        "turn_left_external": "/assets/animations/mixamo/left_turn_90_with_skin.fbx",
+        "turn_right_external": "/assets/animations/mixamo/right_turn_90_with_skin.fbx",
+        "turn_back_external": "/assets/animations/mixamo/quick_180_turn_with_skin.fbx"
       },
       "remotePlayer": {
         "idle": "idle",
@@ -70,7 +76,13 @@
         "run_forward": "sprint",
         "run_backward": "sprint",
         "run_left": "sprint",
-        "run_right": "sprint"
+        "run_right": "sprint",
+        "turn_left": "wheelchair-look-left",
+        "turn_right": "wheelchair-look-right",
+        "turn_back": "wheelchair-move-back",
+        "turn_left_external": "/assets/animations/mixamo/left_turn_90_with_skin.fbx",
+        "turn_right_external": "/assets/animations/mixamo/right_turn_90_with_skin.fbx",
+        "turn_back_external": "/assets/animations/mixamo/quick_180_turn_with_skin.fbx"
       },
       "npc": {
         "idle": "idle",
@@ -81,7 +93,13 @@
         "run_forward": "sprint",
         "run_backward": "sprint",
         "run_left": "sprint",
-        "run_right": "sprint"
+        "run_right": "sprint",
+        "turn_left": "wheelchair-look-left",
+        "turn_right": "wheelchair-look-right",
+        "turn_back": "wheelchair-move-back",
+        "turn_left_external": "/assets/animations/mixamo/left_turn_90_with_skin.fbx",
+        "turn_right_external": "/assets/animations/mixamo/right_turn_90_with_skin.fbx",
+        "turn_back_external": "/assets/animations/mixamo/quick_180_turn_with_skin.fbx"
       }
     }
   },

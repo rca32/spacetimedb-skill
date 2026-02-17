@@ -12,6 +12,7 @@ function createController(): ThirdPersonCameraController {
     cameraSide: 1,
     cameraDistance: 5,
     minDistance: 1,
+    minCameraHeightOffset: 0,
     lookAheadDistance: 0,
     positionDamping: 20,
     aimDamping: 20,
@@ -70,5 +71,43 @@ describe('ThirdPersonCameraController', () => {
 
     expect(camera.position.z).toBeLessThan(2)
     expect(camera.position.z).toBeGreaterThan(1)
+  })
+
+  it('never lets camera drop below configured minimum height', () => {
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1000)
+    const controller = new ThirdPersonCameraController({
+      followHeight: 0,
+      shoulderOffsetX: 0,
+      shoulderOffsetY: 0,
+      shoulderOffsetZ: 0,
+      verticalArmLength: 0,
+      cameraSide: 1,
+      cameraDistance: 5,
+      minDistance: 1,
+      minCameraHeightOffset: 0.25,
+      lookAheadDistance: 0,
+      positionDamping: 20,
+      aimDamping: 20,
+      collisionBuffer: 0.1,
+      collisionDampingInto: 0,
+      collisionDampingFrom: 0,
+      collisionSmoothingTime: 0,
+      pitchMinRad: -Math.PI / 2,
+      pitchMaxRad: Math.PI / 2,
+    })
+
+    controller.update({
+      camera,
+      scene,
+      targetX: 0,
+      targetY: 0,
+      targetZ: 0,
+      viewYaw: 0,
+      viewPitch: Math.PI / 3,
+      dtSeconds: 1 / 60,
+    })
+
+    expect(camera.position.y).toBeGreaterThan(0.249)
   })
 })

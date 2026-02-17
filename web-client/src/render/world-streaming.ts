@@ -24,7 +24,7 @@ import {
   getCharacterModelPath,
   getResourceModelPath,
 } from './asset-mapping'
-import { AssetLoader } from './asset-loader'
+import { AssetLoader, type LoadedModel } from './asset-loader'
 import { MaterialPalette } from './materials'
 
 const DUMMY = new THREE.Object3D()
@@ -72,12 +72,23 @@ type DirectionalActionSet = {
   runRight: THREE.AnimationAction
 }
 
+type TurnActionSet = {
+  turnLeft?: THREE.AnimationAction
+  turnRight?: THREE.AnimationAction
+  turnBack?: THREE.AnimationAction
+}
+
 type CharacterAnimator = {
+  key: string
+  object: THREE.Object3D
+  modelPath: string
   mixer: THREE.AnimationMixer
   actions: Map<string, THREE.AnimationAction>
   activeAction: THREE.AnimationAction | null
   directionalActions: DirectionalActionSet | null
+  turnActions: TurnActionSet | null
   lastPosition: THREE.Vector3
+  lastYawRad: number
   motion: CharacterMotion
   idleElapsedSeconds: number
   nextIdleVariantAtSeconds: number
@@ -97,17 +108,35 @@ const CHARACTER_FORWARD_YAW_OFFSET = Math.PI
 const IDLE_VARIATION_MIN_SECONDS = 4
 const IDLE_VARIATION_MAX_SECONDS = 8
 const DIRECTIONAL_WEIGHT_LERP_RATE = 14
+const IDLE_TURN_ENTER_RATE_RAD_PER_SEC = (20 * Math.PI) / 180
+const IDLE_TURN_FULL_RATE_RAD_PER_SEC = (90 * Math.PI) / 180
+const IDLE_TURN_BACK_MIN_DELTA_RAD = (120 * Math.PI) / 180
 const FOOTSTEP_DISTANCE_WALK = 1.1
 const FOOTSTEP_DISTANCE_RUN = 0.7
 const FOOTSTEP_VOLUME_WALK = 0.22
 const FOOTSTEP_VOLUME_RUN = 0.3
 const FOOTSTEP_SFX_NAMES = ['footstep_01', 'footstep_02'] as const
+const MIXAMO_HIP_BONE = 'mixamorig:Hips'
+const CHARACTER_GAMER_TO_MIXAMO_BONE_MAP: Record<string, string> = {
+  root: MIXAMO_HIP_BONE,
+  'leg-left': 'mixamorig:LeftUpLeg',
+  'leg-right': 'mixamorig:RightUpLeg',
+  torso: 'mixamorig:Spine2',
+  'arm-left': 'mixamorig:LeftArm',
+  'arm-right': 'mixamorig:RightArm',
+  head: 'mixamorig:Head',
+}
 const WORLD_UP_AXIS = new THREE.Vector3(0, 1, 0)
 const TMP_MODEL_QUAT = new THREE.Quaternion()
 const TMP_YAW_OFFSET_QUAT = new THREE.Quaternion()
 const TMP_INVERSE_MODEL_QUAT = new THREE.Quaternion()
 const TMP_WORLD_MOVE = new THREE.Vector3()
 const TMP_LOCAL_MOVE = new THREE.Vector3()
+
+type ExternalClipSpec = {
+  path: string
+  clipName?: string
+}
 
 class InstancedPool {
   readonly mesh: THREE.InstancedMesh
@@ -201,6 +230,8 @@ export class WorldStreamingRenderer {
   private readonly characterAnimators = new Map<string, CharacterAnimator>()
   private readonly pendingModelLoads = new Map<string, Promise<void>>()
   private readonly failedModelPaths = new Set<string>()
+  private readonly retargetedClipCache = new Map<string, THREE.AnimationClip>()
+  private readonly failedExternalActionBindings = new Set<string>()
 
   constructor(scene: THREE.Scene, materials: MaterialPalette) {
     const terrainGeometry = new THREE.PlaneGeometry(16, 16)
@@ -513,12 +544,17 @@ export class WorldStreamingRenderer {
 
     const existing = this.characterAnimators.get(key)
     if (existing) {
+      existing.key = key
+      existing.object = object
+      existing.modelPath = path
       existing.mixer = new THREE.AnimationMixer(object)
       existing.actions.clear()
       existing.lastPosition.copy(object.position)
+      existing.lastYawRad = quatYaw(object.quaternion)
       existing.motion = 'idle'
       existing.activeAction = null
       existing.directionalActions = null
+      existing.turnActions = null
       existing.idleElapsedSeconds = 0
       existing.nextIdleVariantAtSeconds = randomIdleVariantSeconds()
       existing.footstepDistanceAccum = 0
@@ -542,11 +578,16 @@ export class WorldStreamingRenderer {
     }
 
     this.characterAnimators.set(key, {
+      key,
+      object,
+      modelPath: path,
       mixer,
       actions,
       activeAction: null,
       directionalActions: null,
+      turnActions: null,
       lastPosition: object.position.clone(),
+      lastYawRad: quatYaw(object.quaternion),
       motion: 'idle',
       idleElapsedSeconds: 0,
       nextIdleVariantAtSeconds: randomIdleVariantSeconds(),
@@ -647,6 +688,15 @@ export class WorldStreamingRenderer {
     const runBackward = this.resolveActionByAlias(animator, aliases.run_backward) ?? runForward
     const runLeft = this.resolveActionByAlias(animator, aliases.run_left) ?? runForward
     const runRight = this.resolveActionByAlias(animator, aliases.run_right) ?? runForward
+    const turnLeft =
+      this.resolveExternalActionByAlias(animator, aliases.turn_left_external, 'turn_left_external') ??
+      this.resolveActionByAlias(animator, aliases.turn_left)
+    const turnRight =
+      this.resolveExternalActionByAlias(animator, aliases.turn_right_external, 'turn_right_external') ??
+      this.resolveActionByAlias(animator, aliases.turn_right)
+    const turnBack =
+      this.resolveExternalActionByAlias(animator, aliases.turn_back_external, 'turn_back_external') ??
+      this.resolveActionByAlias(animator, aliases.turn_back)
 
     const directionalActions: DirectionalActionSet = {
       idle,
@@ -659,8 +709,25 @@ export class WorldStreamingRenderer {
       runLeft,
       runRight,
     }
+    const turnActions: TurnActionSet | null =
+      turnLeft || turnRight || turnBack
+        ? {
+            turnLeft,
+            turnRight,
+            turnBack,
+          }
+        : null
 
     const uniqueActions = new Set<THREE.AnimationAction>(Object.values(directionalActions))
+    if (turnActions?.turnLeft) {
+      uniqueActions.add(turnActions.turnLeft)
+    }
+    if (turnActions?.turnRight) {
+      uniqueActions.add(turnActions.turnRight)
+    }
+    if (turnActions?.turnBack) {
+      uniqueActions.add(turnActions.turnBack)
+    }
     for (const action of uniqueActions) {
       action.enabled = true
       action.clampWhenFinished = false
@@ -670,6 +737,7 @@ export class WorldStreamingRenderer {
     }
 
     animator.directionalActions = directionalActions
+    animator.turnActions = turnActions
     animator.activeAction = null
     animator.idleElapsedSeconds = 0
     animator.nextIdleVariantAtSeconds = randomIdleVariantSeconds()
@@ -698,6 +766,111 @@ export class WorldStreamingRenderer {
     return undefined
   }
 
+  private resolveExternalActionByAlias(
+    animator: CharacterAnimator,
+    alias: string | undefined,
+    actionSlot: string,
+  ): THREE.AnimationAction | undefined {
+    const spec = parseExternalClipSpec(alias)
+    if (!spec) {
+      return undefined
+    }
+
+    const actionName = externalActionName(actionSlot, spec)
+    const existing = animator.actions.get(actionName)
+    if (existing) {
+      return existing
+    }
+
+    const bindKey = `${animator.modelPath}|${actionName}`
+    if (this.failedExternalActionBindings.has(bindKey)) {
+      return undefined
+    }
+
+    if (this.failedModelPaths.has(spec.path)) {
+      this.failedExternalActionBindings.add(bindKey)
+      return undefined
+    }
+
+    const sourceModel = AssetLoader.getModel(spec.path)
+    if (!sourceModel) {
+      this.queueModelLoad(spec.path)
+      return undefined
+    }
+
+    const bound = this.bindRetargetedExternalAction(animator, sourceModel, spec, actionName)
+    if (!bound) {
+      this.failedExternalActionBindings.add(bindKey)
+      return undefined
+    }
+    return bound
+  }
+
+  private bindRetargetedExternalAction(
+    animator: CharacterAnimator,
+    sourceModel: LoadedModel,
+    spec: ExternalClipSpec,
+    actionName: string,
+  ): THREE.AnimationAction | undefined {
+    const sourceClip = this.selectSourceClip(sourceModel, spec.clipName)
+    if (!sourceClip) {
+      return undefined
+    }
+
+    const targetMesh = findPrimarySkinnedMesh(animator.object)
+    const sourceMesh = findPrimarySkinnedMesh(sourceModel.scene)
+    if (!targetMesh || !sourceMesh) {
+      return undefined
+    }
+
+    const targetSignature = skeletonSignature(targetMesh.skeleton)
+    const sourceSignature = skeletonSignature(sourceMesh.skeleton)
+    const cacheKey = `${animator.modelPath}|${spec.path}|${spec.clipName ?? ''}|${targetSignature}|${sourceSignature}`
+
+    let clip = this.retargetedClipCache.get(cacheKey)
+    if (!clip) {
+      const retargetOptions = buildRetargetOptions(targetMesh.skeleton, sourceMesh.skeleton)
+      try {
+        clip = SkeletonUtils.retargetClip(targetMesh, sourceMesh, sourceClip, retargetOptions)
+      } catch {
+        return undefined
+      }
+      clip.name = actionName
+      targetMesh.skeleton.pose()
+      this.retargetedClipCache.set(cacheKey, clip)
+    }
+
+    const action = animator.mixer.clipAction(clip)
+    action.clampWhenFinished = false
+    action.setLoop(THREE.LoopRepeat, Number.POSITIVE_INFINITY)
+    animator.actions.set(actionName, action)
+    return action
+  }
+
+  private selectSourceClip(sourceModel: LoadedModel, clipName: string | undefined): THREE.AnimationClip | undefined {
+    if (sourceModel.animations.length === 0) {
+      return undefined
+    }
+
+    if (!clipName || clipName.trim().length === 0) {
+      return sourceModel.animations[0]
+    }
+
+    const wanted = normalizeAnimationName(clipName)
+    for (const clip of sourceModel.animations) {
+      if (normalizeAnimationName(clip.name) === wanted) {
+        return clip
+      }
+    }
+    for (const clip of sourceModel.animations) {
+      const normalized = normalizeAnimationName(clip.name)
+      if (normalized.includes(wanted) || wanted.includes(normalized)) {
+        return clip
+      }
+    }
+    return sourceModel.animations[0]
+  }
+
   private updateDirectionalAnimationState(
     animator: CharacterAnimator,
     transform: ModelTransform,
@@ -715,10 +888,27 @@ export class WorldStreamingRenderer {
     const speed = distance / dtSeconds
     const nextMotion = this.resolveCharacterMotion(animator.motion, speed)
     const blend = computeDirectionalBlend(dx, dz, transform)
+    const yaw = yawFromModelTransform(transform)
+    const yawDelta = normalizeAngle(yaw - animator.lastYawRad)
 
     const targets = new Map<THREE.AnimationAction, number>()
     if (nextMotion === 'idle') {
-      this.accumulateActionWeight(targets, directional.idle, 1)
+      const turnBlend = computeIdleTurnBlend(yawDelta, dtSeconds, Boolean(animator.turnActions?.turnBack))
+      const turnAction =
+        turnBlend.back > 0
+          ? animator.turnActions?.turnBack
+          : turnBlend.left > 0
+            ? animator.turnActions?.turnLeft
+            : turnBlend.right > 0
+              ? animator.turnActions?.turnRight
+              : undefined
+
+      if (turnAction && turnBlend.weight > 0) {
+        this.accumulateActionWeight(targets, directional.idle, 1 - turnBlend.weight)
+        this.accumulateActionWeight(targets, turnAction, turnBlend.weight)
+      } else {
+        this.accumulateActionWeight(targets, directional.idle, 1)
+      }
       animator.footstepDistanceAccum = 0
     } else {
       const useRun = nextMotion === 'run'
@@ -741,6 +931,15 @@ export class WorldStreamingRenderer {
     }
 
     const uniqueActions = new Set<THREE.AnimationAction>(Object.values(directional))
+    if (animator.turnActions?.turnLeft) {
+      uniqueActions.add(animator.turnActions.turnLeft)
+    }
+    if (animator.turnActions?.turnRight) {
+      uniqueActions.add(animator.turnActions.turnRight)
+    }
+    if (animator.turnActions?.turnBack) {
+      uniqueActions.add(animator.turnActions.turnBack)
+    }
     for (const action of uniqueActions) {
       const target = targets.get(action) ?? 0
       this.blendActionWeight(action, target, dtSeconds)
@@ -749,6 +948,7 @@ export class WorldStreamingRenderer {
     animator.motion = nextMotion
     animator.idleElapsedSeconds = 0
     animator.lastPosition.set(transform.x, transform.y, transform.z)
+    animator.lastYawRad = yaw
   }
 
   private accumulateActionWeight(
@@ -949,6 +1149,73 @@ function tableFromWorldKey(key: string): string {
   return key.slice(0, separator)
 }
 
+function parseExternalClipSpec(alias: string | undefined): ExternalClipSpec | null {
+  if (!alias || alias.trim().length === 0) {
+    return null
+  }
+
+  const raw = alias.trim()
+  const [pathPart, clipPart] = raw.split('#', 2)
+  const path = pathPart.trim()
+  if (path.length === 0) {
+    return null
+  }
+
+  const lower = path.toLowerCase()
+  if (!lower.endsWith('.fbx') && !lower.endsWith('.glb') && !lower.endsWith('.gltf')) {
+    return null
+  }
+
+  const clipName = clipPart && clipPart.trim().length > 0 ? clipPart.trim() : undefined
+  return { path, clipName }
+}
+
+function externalActionName(actionSlot: string, spec: ExternalClipSpec): string {
+  return `external:${actionSlot}:${spec.path}${spec.clipName ? `#${spec.clipName}` : ''}`
+}
+
+function findPrimarySkinnedMesh(object: THREE.Object3D): THREE.SkinnedMesh | null {
+  if ((object as THREE.SkinnedMesh).isSkinnedMesh) {
+    return object as THREE.SkinnedMesh
+  }
+
+  let found: THREE.SkinnedMesh | null = null
+  object.traverse((node) => {
+    if (!found && (node as THREE.SkinnedMesh).isSkinnedMesh) {
+      found = node as THREE.SkinnedMesh
+    }
+  })
+  return found
+}
+
+function skeletonSignature(skeleton: THREE.Skeleton): string {
+  return skeleton.bones.map((bone) => bone.name).join('|')
+}
+
+function buildRetargetOptions(
+  targetSkeleton: THREE.Skeleton,
+  sourceSkeleton: THREE.Skeleton,
+): Record<string, unknown> {
+  const sourceBones = new Set(sourceSkeleton.bones.map((bone) => bone.name))
+  const targetBones = targetSkeleton.bones.map((bone) => bone.name)
+  const sourceIsMixamo = sourceBones.has(MIXAMO_HIP_BONE)
+  const targetIsMixamo = targetBones.includes(MIXAMO_HIP_BONE)
+
+  if (sourceIsMixamo && !targetIsMixamo && targetBones.includes('root')) {
+    return {
+      hip: MIXAMO_HIP_BONE,
+      names: CHARACTER_GAMER_TO_MIXAMO_BONE_MAP,
+      useFirstFramePosition: false,
+    }
+  }
+
+  return {
+    hip: sourceIsMixamo ? MIXAMO_HIP_BONE : 'hip',
+    names: {},
+    useFirstFramePosition: false,
+  }
+}
+
 export function computeDirectionalBlend(
   dx: number,
   dz: number,
@@ -989,4 +1256,62 @@ export function computeDirectionalBlend(
     left: left * inv,
     right: right * inv,
   }
+}
+
+export function computeIdleTurnBlend(
+  yawDeltaRad: number,
+  dtSeconds: number,
+  hasTurnBack: boolean,
+): { left: number; right: number; back: number; weight: number } {
+  if (dtSeconds <= Number.EPSILON) {
+    return { left: 0, right: 0, back: 0, weight: 0 }
+  }
+
+  const magnitude = Math.abs(yawDeltaRad)
+  const turnRate = magnitude / dtSeconds
+  if (turnRate <= IDLE_TURN_ENTER_RATE_RAD_PER_SEC) {
+    return { left: 0, right: 0, back: 0, weight: 0 }
+  }
+
+  const span = Math.max(1e-5, IDLE_TURN_FULL_RATE_RAD_PER_SEC - IDLE_TURN_ENTER_RATE_RAD_PER_SEC)
+  const weight = Math.max(0, Math.min(1, (turnRate - IDLE_TURN_ENTER_RATE_RAD_PER_SEC) / span))
+  if (hasTurnBack && magnitude >= IDLE_TURN_BACK_MIN_DELTA_RAD) {
+    return { left: 0, right: 0, back: 1, weight }
+  }
+
+  if (yawDeltaRad > 0) {
+    return { left: 1, right: 0, back: 0, weight }
+  }
+  return { left: 0, right: 1, back: 0, weight }
+}
+
+function yawFromModelTransform(transform: ModelTransform): number {
+  TMP_MODEL_QUAT.set(
+    transform.qx ?? 0,
+    transform.qy ?? 0,
+    transform.qz ?? 0,
+    transform.qw ?? 1,
+  ).normalize()
+
+  if ((transform.yawOffset ?? 0) !== 0) {
+    TMP_YAW_OFFSET_QUAT.setFromAxisAngle(WORLD_UP_AXIS, transform.yawOffset ?? 0)
+    TMP_MODEL_QUAT.multiply(TMP_YAW_OFFSET_QUAT)
+  }
+
+  return normalizeAngle(quatYaw(TMP_MODEL_QUAT))
+}
+
+function quatYaw(quat: THREE.Quaternion): number {
+  return Math.atan2(2 * quat.w * quat.y, 1 - 2 * quat.y * quat.y)
+}
+
+function normalizeAngle(angle: number): number {
+  const twoPi = Math.PI * 2
+  let normalized = angle % twoPi
+  if (normalized > Math.PI) {
+    normalized -= twoPi
+  } else if (normalized < -Math.PI) {
+    normalized += twoPi
+  }
+  return normalized
 }

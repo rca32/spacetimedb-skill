@@ -54,6 +54,12 @@ export interface CharacterAnimationAliases {
   run_backward?: string
   run_left?: string
   run_right?: string
+  turn_left?: string
+  turn_right?: string
+  turn_back?: string
+  turn_left_external?: string
+  turn_right_external?: string
+  turn_back_external?: string
 }
 
 export const ASSET_MANIFEST_PATH = '/assets/manifest.json'

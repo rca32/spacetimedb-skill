@@ -28,4 +28,13 @@ Phase 1 skeleton for web runtime.
 - Current player model: `/assets/models/characters/character_gamer.glb` (Kenney mini-arcade).
 - 8-way alias mapping is enabled in `manifest.json`.
 - Temporary directional clips use `wheelchair-move-left/right/back` aliases until dedicated strafe/back locomotion clips are imported.
+- Idle turn aliases are enabled:
+  - `turn_left -> wheelchair-look-left`
+  - `turn_right -> wheelchair-look-right`
+  - `turn_back -> wheelchair-move-back` (fallback)
+- External Mixamo turn clips are wired:
+  - `turn_left_external -> /assets/animations/mixamo/left_turn_90_with_skin.fbx`
+  - `turn_right_external -> /assets/animations/mixamo/right_turn_90_with_skin.fbx`
+  - `turn_back_external -> /assets/animations/mixamo/quick_180_turn_with_skin.fbx`
+- Runtime uses `SkeletonUtils.retargetClip` to map Mixamo `mixamorig:*` bones onto `character_gamer` (`root/leg/torso/arm/head`) at load time.
 - Mixamo 9-clip target remains the final goal (`walk/run` forward/back/left/right + `idle`).

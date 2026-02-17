@@ -34,14 +34,32 @@
 
 ## 4. 3D Third-Person Camera
 구성:
-- Follow target: 로컬 플레이어 transform
-- Pivot + spring arm + collision probe
-- 카메라 보간은 `FixedUpdate`
+- Follow target: 로컬 플레이어 `Position` + 입력 기반 `viewYaw/viewPitch`
+- Rig: `Root -> Shoulder -> Hand -> Camera`
+- 동기화: 입력 yaw/pitch와 body yaw를 분리하고, 이동 시 body가 회전 수렴
+- 충돌: 장애물 감지 시 카메라 pull-in + in/out damping + hold smoothing
+- 안정성: 카메라 최소 높이 하한(`targetY + minCameraHeightOffset`) 강제
 
 권장 파라미터:
 - 기본 거리 5.5m
-- 높이 2.0m
-- 회전 감도 0.12
+- follow height 0.35m
+- 최소 거리 1.1m
+- 회전 감도 0.12 deg/pixel
+- 기본 pitch -18 deg
+
+환경 변수(현재 구현):
+- `VITE_CAMERA_FOLLOW_HEIGHT`
+- `VITE_CAMERA_SHOULDER_OFFSET_X/Y/Z`
+- `VITE_CAMERA_VERTICAL_ARM_LENGTH`
+- `VITE_CAMERA_SIDE`, `VITE_CAMERA_DISTANCE`, `VITE_CAMERA_MIN_DISTANCE`
+- `VITE_CAMERA_POSITION_DAMPING`, `VITE_CAMERA_AIM_DAMPING`
+- `VITE_CAMERA_COLLISION_BUFFER`, `VITE_CAMERA_COLLISION_DAMPING_INTO`, `VITE_CAMERA_COLLISION_DAMPING_FROM`, `VITE_CAMERA_COLLISION_SMOOTHING_SECONDS`
+- `VITE_CAMERA_MIN_HEIGHT_OFFSET`
+- `VITE_SYNC_MOUSE_TURN_SENS_DEG`, `VITE_SYNC_MOUSE_PITCH_SENS_DEG`
+- `VITE_SYNC_BODY_COUPLING_MODE`, `VITE_SYNC_BODY_TURN_SPEED_DEG`, `VITE_SYNC_TURN_SLOWDOWN_START_DEG`, `VITE_SYNC_TURN_STOP_DEG`
+
+상세 명세와 고도화 계획:
+- `12-camera-system-cinemachine-port-plan.md`
 
 ## 5. LOD/Streaming
 - `terrain_chunk`: chunk 단위 mesh/cache

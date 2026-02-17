@@ -43,6 +43,7 @@
 - `09-domain-social-npc-quest.md`: 소셜/NPC/퀘스트 도메인
 - `10-observability-testing.md`: 관측/검증 전략
 - `11-implementation-order.md`: 구현 순서 체크리스트
+- `12-camera-system-cinemachine-port-plan.md`: 현재 카메라 구현 명세 + Cinemachine 고도화 포팅 계획
 
 ## 6. High-Level Runtime States
 `ClientAppState`:
