@@ -19,6 +19,7 @@ export interface AssetManifest {
       resourceMapping: Record<string, string>
     }
     effects: Record<string, string>
+    environment?: EnvironmentModelConfig
   }
   textures: {
     terrain: Record<string, string>
@@ -42,6 +43,14 @@ export interface AssetManifest {
     normal: string[]
     lazy?: string[]
   }
+}
+
+export interface EnvironmentModelConfig {
+  terrainOverlayByBiome?: Record<string, string[]>
+  decorationPaths?: string[]
+  landmarkPaths?: string[]
+  decorationPerChunk?: number
+  landmarkChance?: number
 }
 
 export interface CharacterAnimationAliases {
@@ -82,6 +91,10 @@ export function getCharacterAnimationAliases(
   manifest: AssetManifest,
 ): CharacterAnimationAliases | null {
   return manifest.animations?.characters?.[kind] ?? null
+}
+
+export function getEnvironmentModelConfig(manifest: AssetManifest): EnvironmentModelConfig | null {
+  return manifest.models.environment ?? null
 }
 
 export function getSfxPath(name: string, manifest: AssetManifest): string | undefined {

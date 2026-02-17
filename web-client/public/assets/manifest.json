@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-02-13",
+  "generatedAt": "2026-02-17",
   "models": {
     "characters": {
       "localPlayer": "/assets/models/characters/character_gamer.glb",
@@ -8,11 +8,13 @@
       "npc": "/assets/models/characters/character_gamer.glb"
     },
     "buildings": {
-      "fallback": "/assets/models/buildings/box.glb",
-      "textured": "/assets/models/buildings/box_textured.glb",
+      "fallback": "/assets/models/environment/structures/building-a.glb",
+      "textured": "/assets/models/environment/buildings/building-sample-house-a.glb",
       "mapping": {
-        "1": "/assets/models/buildings/box_textured.glb",
-        "2": "/assets/models/buildings/box.glb"
+        "1": "/assets/models/environment/structures/building-a.glb",
+        "2": "/assets/models/environment/structures/building-d.glb",
+        "1001": "/assets/models/environment/buildings/building-sample-house-a.glb",
+        "1002": "/assets/models/environment/buildings/building-sample-tower-a.glb"
       }
     },
     "props": {
@@ -25,7 +27,44 @@
         "3": "/assets/models/props/resource_small.glb"
       }
     },
-    "effects": {}
+    "effects": {},
+    "environment": {
+      "terrainOverlayByBiome": {
+        "0": [
+          "/assets/models/environment/nature/ground_grass.glb"
+        ],
+        "1": [
+          "/assets/models/environment/nature/ground_grass.glb",
+          "/assets/models/environment/buildings/ground-hills.glb"
+        ],
+        "2": [
+          "/assets/models/environment/buildings/ground-hills.glb"
+        ]
+      },
+      "decorationPaths": [
+        "/assets/models/environment/rocks/tree-large.glb",
+        "/assets/models/environment/rocks/tree-small.glb",
+        "/assets/models/environment/rocks/rock_largeA.glb",
+        "/assets/models/environment/rocks/rocks-large.glb",
+        "/assets/models/environment/rocks/rock_smallA.glb",
+        "/assets/models/environment/rocks/cliff_rock.glb",
+        "/assets/models/environment/nature/log_large.glb",
+        "/assets/models/environment/nature/path_stone.glb",
+        "/assets/models/environment/nature/fence_gate.glb"
+      ],
+      "landmarkPaths": [
+        "/assets/models/environment/structures/building-a.glb",
+        "/assets/models/environment/structures/building-c.glb",
+        "/assets/models/environment/structures/building-f.glb",
+        "/assets/models/environment/buildings/building-sample-house-b.glb",
+        "/assets/models/environment/buildings/building-sample-tower-a.glb",
+        "/assets/models/environment/buildings/tower-square.glb",
+        "/assets/models/environment/buildings/bridge-straight.glb",
+        "/assets/models/environment/buildings/flag-banner-long.glb"
+      ],
+      "decorationPerChunk": 4,
+      "landmarkChance": 0.34
+    }
   },
   "textures": {
     "terrain": {},
@@ -108,12 +147,16 @@
       "/assets/models/characters/character_gamer.glb"
     ],
     "high": [
-      "/assets/models/buildings/box.glb",
+      "/assets/models/environment/structures/building-a.glb",
+      "/assets/models/environment/rocks/tree-large.glb",
       "/assets/models/props/resource_large.glb",
       "/assets/audio/sfx/ui_click.mp3"
     ],
     "normal": [
-      "/assets/models/buildings/box_textured.glb",
+      "/assets/models/environment/buildings/building-sample-house-a.glb",
+      "/assets/models/environment/buildings/building-sample-house-b.glb",
+      "/assets/models/environment/rocks/rock_largeA.glb",
+      "/assets/models/environment/nature/ground_grass.glb",
       "/assets/models/props/resource_medium.glb",
       "/assets/models/props/resource_small.glb",
       "/assets/audio/sfx/attack_swing.mp3",
@@ -127,7 +170,7 @@
     ]
   },
   "notes": {
-    "source": "Models: Kenney Mini Arcade character_gamer (current player) + Khronos placeholders. Audio SFX: Mixkit (UI/attack) + Kenney RPG sounds (footstep). Music: Kevin MacLeod / Incompetech (CC-BY 3.0)",
+    "source": "Models: Kenney Mini Arcade character_gamer + assetdirectory/test-sets/environment (Kenney environment kit). Audio SFX: Mixkit (UI/attack) + Kenney RPG sounds (footstep). Music: Kevin MacLeod / Incompetech (CC-BY 3.0)",
     "placeholder": false,
     "licenseNote": "Kevin MacLeod music requires attribution. See https://incompetech.com",
     "replacementGuidance": "Replace with production assets from Kenney, Kaykit, or custom models. Update manifest.json paths accordingly."

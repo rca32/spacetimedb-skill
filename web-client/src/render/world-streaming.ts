@@ -19,9 +19,11 @@ import {
 } from '../core/traits'
 import {
   CharacterAnimationAliases,
+  EnvironmentModelConfig,
   getBuildingModelPath,
   getCharacterAnimationAliases,
   getCharacterModelPath,
+  getEnvironmentModelConfig,
   getResourceModelPath,
 } from './asset-mapping'
 import { AssetLoader, type LoadedModel } from './asset-loader'
@@ -37,9 +39,45 @@ const GLTF_BUILDING_SCALE = 0.8
 const GLTF_RESOURCE_SCALE = 0.8
 const GLTF_PLAYER_SCALE = 0.9
 const GLTF_NPC_SCALE = 0.85
+const TERRAIN_CHUNK_SIZE = 16
+const CHUNK_DECORATION_MARGIN = 2.3
+const DEFAULT_DECORATION_PER_CHUNK = 4
+const DEFAULT_LANDMARK_CHANCE = 0.34
 const BIOME_COLORS = [0x284032, 0x395629, 0x5b4d2d, 0x30495e, 0x4d3b55, 0x6c5e39].map(
   (hex) => new THREE.Color(hex),
 )
+const DEFAULT_TERRAIN_OVERLAY_BY_BIOME: Record<string, string[]> = {
+  '0': ['/assets/models/environment/nature/ground_grass.glb'],
+  '1': [
+    '/assets/models/environment/nature/ground_grass.glb',
+    '/assets/models/environment/buildings/ground-hills.glb',
+  ],
+  '2': ['/assets/models/environment/buildings/ground-hills.glb'],
+}
+const DEFAULT_TERRAIN_BIOME_BUCKET_COUNT = Object.keys(DEFAULT_TERRAIN_OVERLAY_BY_BIOME).length
+const DEFAULT_ENV_DECORATION_PATHS = [
+  '/assets/models/environment/rocks/tree-large.glb',
+  '/assets/models/environment/rocks/tree-small.glb',
+  '/assets/models/environment/rocks/rock_largeA.glb',
+  '/assets/models/environment/rocks/rocks-large.glb',
+  '/assets/models/environment/rocks/rock_smallA.glb',
+  '/assets/models/environment/rocks/cliff_rock.glb',
+  '/assets/models/environment/nature/log_large.glb',
+  '/assets/models/environment/nature/path_stone.glb',
+  '/assets/models/environment/nature/fence_gate.glb',
+  '/assets/models/environment/walls/wall-corner.glb',
+  '/assets/models/environment/walls/stairs-stone.glb',
+] as const
+const DEFAULT_ENV_LANDMARK_PATHS = [
+  '/assets/models/environment/structures/building-a.glb',
+  '/assets/models/environment/structures/building-c.glb',
+  '/assets/models/environment/structures/building-f.glb',
+  '/assets/models/environment/buildings/building-sample-house-b.glb',
+  '/assets/models/environment/buildings/building-sample-tower-a.glb',
+  '/assets/models/environment/buildings/tower-square.glb',
+  '/assets/models/environment/buildings/bridge-straight.glb',
+  '/assets/models/environment/buildings/flag-banner-long.glb',
+] as const
 
 type InstanceTransform = {
   x: number
@@ -283,6 +321,7 @@ export class WorldStreamingRenderer {
     const seenGltf = new Set<string>()
     const localIdentityHex = resolveLocalIdentityHex(world)
     const manifest = AssetLoader.getManifest()
+    const environmentConfig = manifest ? getEnvironmentModelConfig(manifest) : null
 
     world.ecs.query(IsTerrainChunk, NetEntity, Position, ChunkData).readEach(([net, position, chunk]) => {
       const key = `${net.table}:${net.serverId}`
@@ -292,6 +331,7 @@ export class WorldStreamingRenderer {
         { x: position.x, y: position.y, z: position.z, sx: 1, sy: 1, sz: 1 },
         biomeColor(chunk.biomeId),
       )
+      this.syncChunkEnvironment(key, position, chunk, environmentConfig, seenGltf)
     })
 
     world.ecs.query(IsBuilding, NetEntity, Position, BuildingData).readEach(([net, position, building]) => {
@@ -455,6 +495,96 @@ export class WorldStreamingRenderer {
     this.npcPool.mesh.instanceMatrix.needsUpdate = true
   }
 
+  private syncChunkEnvironment(
+    chunkKey: string,
+    position: { x: number; y: number; z: number },
+    chunk: { chunkX: number; chunkY: number; biomeId: number },
+    environmentConfig: EnvironmentModelConfig | null,
+    seenGltf: Set<string>,
+  ): void {
+    const baseSeed = hashInt3(chunk.chunkX, chunk.chunkY, chunk.biomeId ^ 0x9e3779b9)
+
+    const terrainOverlayPath = pickPathForSeed(resolveTerrainOverlayPaths(chunk.biomeId, environmentConfig), baseSeed)
+    if (terrainOverlayPath) {
+      this.upsertGltfRenderable(
+        `${chunkKey}:env:terrain`,
+        terrainOverlayPath,
+        {
+          x: position.x,
+          y: position.y - 0.02,
+          z: position.z,
+          sx: 1,
+          sy: 1,
+          sz: 1,
+          yawOffset: seededRange(mixSeed(baseSeed, 17), 0, Math.PI * 2),
+        },
+        seenGltf,
+        false,
+        false,
+      )
+    }
+
+    const decorationPaths = resolveEnvironmentDecorationPaths(environmentConfig)
+    const decorationCount = resolveDecorationCount(environmentConfig)
+    const radius = TERRAIN_CHUNK_SIZE * 0.5 - CHUNK_DECORATION_MARGIN
+    for (let slot = 0; slot < decorationCount; slot += 1) {
+      const slotSeed = mixSeed(baseSeed, slot + 1)
+      const modelPath = pickPathForSeed(decorationPaths, slotSeed)
+      if (!modelPath) {
+        continue
+      }
+
+      const scale = seededRange(mixSeed(slotSeed, 31), 0.72, 1.28)
+      this.upsertGltfRenderable(
+        `${chunkKey}:env:deco:${slot}`,
+        modelPath,
+        {
+          x: position.x + seededRange(mixSeed(slotSeed, 7), -radius, radius),
+          y: position.y + seededRange(mixSeed(slotSeed, 13), -0.08, 0.18),
+          z: position.z + seededRange(mixSeed(slotSeed, 19), -radius, radius),
+          sx: scale,
+          sy: scale,
+          sz: scale,
+          yawOffset: seededRange(mixSeed(slotSeed, 23), 0, Math.PI * 2),
+        },
+        seenGltf,
+        false,
+        isEnvironmentObstacleModel(modelPath),
+      )
+    }
+
+    const landmarkRoll = seededUnit(mixSeed(baseSeed, 97))
+    if (landmarkRoll > resolveLandmarkChance(environmentConfig)) {
+      return
+    }
+
+    const landmarkPath = pickPathForSeed(
+      resolveEnvironmentLandmarkPaths(environmentConfig),
+      mixSeed(baseSeed, 103),
+    )
+    if (!landmarkPath) {
+      return
+    }
+
+    const landmarkScale = seededRange(mixSeed(baseSeed, 109), 0.9, 1.22)
+    this.upsertGltfRenderable(
+      `${chunkKey}:env:landmark`,
+      landmarkPath,
+      {
+        x: position.x + seededRange(mixSeed(baseSeed, 113), -3.2, 3.2),
+        y: position.y,
+        z: position.z + seededRange(mixSeed(baseSeed, 127), -3.2, 3.2),
+        sx: landmarkScale,
+        sy: landmarkScale,
+        sz: landmarkScale,
+        yawOffset: seededRange(mixSeed(baseSeed, 131), 0, Math.PI * 2),
+      },
+      seenGltf,
+      false,
+      true,
+    )
+  }
+
   clear(): void {
     this.terrainPool.removeMissing(new Set())
     this.buildingPool.removeMissing(new Set())
@@ -484,6 +614,7 @@ export class WorldStreamingRenderer {
     transform: ModelTransform,
     seenGltf: Set<string>,
     trackAnimation = false,
+    cameraObstacleOverride?: boolean,
   ): boolean {
     const existing = this.gltfObjects.get(key)
     const existingPath = this.gltfPathByKey.get(key)
@@ -513,7 +644,8 @@ export class WorldStreamingRenderer {
 
     const clone = SkeletonUtils.clone(model.scene)
     const table = tableFromWorldKey(key)
-    const cameraObstacle = table === 'building_state' || table === 'resource_node'
+    const defaultCameraObstacle = table === 'building_state' || table === 'resource_node'
+    const cameraObstacle = cameraObstacleOverride ?? defaultCameraObstacle
     clone.userData.cameraObstacle = cameraObstacle
     clone.traverse((node) => {
       node.userData.cameraObstacle = cameraObstacle
@@ -1130,6 +1262,96 @@ function resolveLocalIdentityHex(world: CoreWorld): string {
 function biomeColor(biomeId: number): THREE.Color {
   const index = Math.abs(biomeId) % BIOME_COLORS.length
   return BIOME_COLORS[index]
+}
+
+function resolveTerrainOverlayPaths(
+  biomeId: number,
+  environmentConfig: EnvironmentModelConfig | null,
+): readonly string[] {
+  const configured = environmentConfig?.terrainOverlayByBiome?.[String(biomeId)]
+  if (configured && configured.length > 0) {
+    return configured
+  }
+
+  const fallbackKey = String(Math.abs(biomeId) % DEFAULT_TERRAIN_BIOME_BUCKET_COUNT)
+  return DEFAULT_TERRAIN_OVERLAY_BY_BIOME[fallbackKey] ?? DEFAULT_TERRAIN_OVERLAY_BY_BIOME['0']
+}
+
+function resolveEnvironmentDecorationPaths(environmentConfig: EnvironmentModelConfig | null): readonly string[] {
+  const configured = environmentConfig?.decorationPaths
+  if (configured && configured.length > 0) {
+    return configured
+  }
+  return DEFAULT_ENV_DECORATION_PATHS
+}
+
+function resolveEnvironmentLandmarkPaths(environmentConfig: EnvironmentModelConfig | null): readonly string[] {
+  const configured = environmentConfig?.landmarkPaths
+  if (configured && configured.length > 0) {
+    return configured
+  }
+  return DEFAULT_ENV_LANDMARK_PATHS
+}
+
+function resolveDecorationCount(environmentConfig: EnvironmentModelConfig | null): number {
+  const raw = environmentConfig?.decorationPerChunk ?? DEFAULT_DECORATION_PER_CHUNK
+  return clamp(Math.round(raw), 1, 8)
+}
+
+function resolveLandmarkChance(environmentConfig: EnvironmentModelConfig | null): number {
+  const raw = environmentConfig?.landmarkChance ?? DEFAULT_LANDMARK_CHANCE
+  return clamp(raw, 0, 1)
+}
+
+function pickPathForSeed(paths: readonly string[], seed: number): string | null {
+  if (paths.length === 0) {
+    return null
+  }
+  const index = Math.floor(seededUnit(seed) * paths.length) % paths.length
+  const path = paths[index]
+  return path && path.length > 0 ? path : null
+}
+
+function isEnvironmentObstacleModel(path: string): boolean {
+  const lower = path.toLowerCase()
+  return (
+    lower.includes('/buildings/') ||
+    lower.includes('/structures/') ||
+    lower.includes('/walls/') ||
+    lower.includes('/rocks/')
+  )
+}
+
+function hashInt3(a: number, b: number, c: number): number {
+  let h = Math.imul(a | 0, 0x9e3779b1) ^ Math.imul(b | 0, 0x85ebca6b) ^ Math.imul(c | 0, 0xc2b2ae35)
+  h ^= h >>> 16
+  h = Math.imul(h, 0x7feb352d)
+  h ^= h >>> 15
+  h = Math.imul(h, 0x846ca68b)
+  h ^= h >>> 16
+  return h >>> 0
+}
+
+function mixSeed(seed: number, salt: number): number {
+  return hashInt3(seed | 0, salt | 0, 0x1f123bb5)
+}
+
+function seededUnit(seed: number): number {
+  return (seed >>> 0) / 0xffffffff
+}
+
+function seededRange(seed: number, min: number, max: number): number {
+  return min + (max - min) * seededUnit(seed)
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (value < min) {
+    return min
+  }
+  if (value > max) {
+    return max
+  }
+  return value
 }
 
 function randomIdleVariantSeconds(): number {
