@@ -2,4 +2,6 @@
 ----------------------
 사용스킬[$koota,$three-best-practices,$spacetimedb-korean,$agent-browser]
 [필수 읽기]
+CLIENTDESIGN/00-master.md
+CLIENTDESIGN/12-camera-system-cinemachine-port-plan.md
 prompts/20260216_worklog.md

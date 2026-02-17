@@ -601,6 +601,7 @@ export interface RuntimeContext {
     getDiagnostics: () => SyncDiagnosticsSnapshot
     getViewYaw: () => number
     getViewPitch: () => number
+    isAimModeActive: () => boolean
   }
   frame: number
 }

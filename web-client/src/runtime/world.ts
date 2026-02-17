@@ -172,6 +172,9 @@ export function createWorldRuntime(): RuntimeModule {
       syncResourceState(ctx, knownKeys, connection.db.resourceNode.iter())
       syncTerrainChunks(ctx, knownKeys, connection.db.terrainChunk.iter())
       syncClaims(ctx, knownKeys, connection.db.claimState.iter())
+      const localPlayer = ctx.world.ecs.queryFirst(IsLocalPlayer, Rotation)
+      const localRotation = localPlayer?.get(Rotation)
+      const bodyYaw = localRotation ? quatYawFromY(localRotation.y, localRotation.w) : undefined
       cameraController?.update({
         camera: ctx.renderer.camera,
         scene: ctx.renderer.scene,
@@ -180,6 +183,8 @@ export function createWorldRuntime(): RuntimeModule {
         targetZ: localPosition.z,
         viewYaw: ctx.sync?.getViewYaw() ?? 0,
         viewPitch: ctx.sync?.getViewPitch() ?? 0,
+        bodyYaw,
+        aimMode: ctx.sync?.isAimModeActive() ?? false,
         dtSeconds,
       })
 
@@ -520,4 +525,8 @@ function shouldReanchorAoi(
   const dx = localPosition.x - anchorPosition.x
   const dz = localPosition.z - anchorPosition.z
   return dx * dx + dz * dz >= distanceThreshold * distanceThreshold
+}
+
+function quatYawFromY(y: number, w: number): number {
+  return Math.atan2(2 * w * y, 1 - 2 * y * y)
 }

@@ -359,6 +359,56 @@ describe('SyncEngine rollback/replay', () => {
     expect(Math.abs(bodyYaw)).toBeLessThan(1e-6)
   })
 
+  it('forces coupled body rotation while aim mode is active', () => {
+    const identityHex = 'local-identity'
+    const feedbackRows: FeedbackRow[] = []
+    const sentPayloads: Array<{ requestId: string; x: number; y: number; z: number }> = []
+    const connection = createMockConnection(identityHex, feedbackRows, sentPayloads)
+    const localPlayer = createMockEntity({ x: 0, y: 0, z: 0 })
+    const engine = new SyncEngine(createLogger())
+
+    engine.handleMouseMove(450)
+    engine.setAimModeActive(true)
+    expect(engine.isAimModeActive()).toBe(true)
+
+    engine.tick({ connection, identityHex, localPlayer, dtSeconds: 0.08 })
+    const rot = localPlayer.readRotation()
+    const bodyYaw = Math.atan2(2 * rot.w * rot.y, 1 - 2 * rot.y * rot.y)
+    expect(Math.abs(bodyYaw)).toBeGreaterThan(0.01)
+  })
+
+  it('returns to configured coupling mode after aim mode release', () => {
+    const identityHex = 'local-identity'
+    const feedbackRows: FeedbackRow[] = []
+    const sentPayloads: Array<{ requestId: string; x: number; y: number; z: number }> = []
+    const connection = createMockConnection(identityHex, feedbackRows, sentPayloads)
+    const localPlayer = createMockEntity({ x: 0, y: 0, z: 0 })
+    const engine = new SyncEngine(createLogger())
+
+    engine.handleMouseMove(450)
+    engine.setAimModeActive(true)
+    engine.tick({ connection, identityHex, localPlayer, dtSeconds: 0.08 })
+
+    const beforeRelease = localPlayer.readRotation()
+    const bodyYawBeforeRelease = Math.atan2(
+      2 * beforeRelease.w * beforeRelease.y,
+      1 - 2 * beforeRelease.y * beforeRelease.y,
+    )
+    expect(Math.abs(bodyYawBeforeRelease)).toBeGreaterThan(0.01)
+
+    engine.setAimModeActive(false)
+    expect(engine.isAimModeActive()).toBe(false)
+    engine.handleMouseMove(450)
+    engine.tick({ connection, identityHex, localPlayer, dtSeconds: 0.08 })
+
+    const afterRelease = localPlayer.readRotation()
+    const bodyYawAfterRelease = Math.atan2(
+      2 * afterRelease.w * afterRelease.y,
+      1 - 2 * afterRelease.y * afterRelease.y,
+    )
+    expect(Math.abs(bodyYawAfterRelease - bodyYawBeforeRelease)).toBeLessThan(1e-4)
+  })
+
   it('clamps view pitch to configured min/max', () => {
     const engine = new SyncEngine(createLogger())
     const minPitch = (-35 * Math.PI) / 180

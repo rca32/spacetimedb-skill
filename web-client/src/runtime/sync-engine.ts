@@ -213,6 +213,7 @@ export class SyncEngine {
   private viewPitch = 0
   private bodyYaw = 0
   private bodyYawInitialized = false
+  private aimModeActive = false
 
   constructor(private readonly logger: Logger) {
     this.options = loadSyncOptions()
@@ -238,6 +239,7 @@ export class SyncEngine {
 
   handleWindowBlur(): void {
     this.pressed.clear()
+    this.aimModeActive = false
   }
 
   handleMouseMove(deltaX: number, deltaY = 0): void {
@@ -259,6 +261,14 @@ export class SyncEngine {
 
   getViewPitch(): number {
     return this.viewPitch
+  }
+
+  setAimModeActive(active: boolean): void {
+    this.aimModeActive = active
+  }
+
+  isAimModeActive(): boolean {
+    return this.aimModeActive
   }
 
   resetAll(): void {
@@ -347,6 +357,7 @@ export class SyncEngine {
 
     const axis = movementAxis(this.pressed)
     const hasMovementInput = axis.x !== 0 || axis.z !== 0
+    const couplingMode = this.resolveBodyCouplingMode()
 
     if (!this.bodyYawInitialized) {
       const existingYaw = readYawRotation(localPlayer)
@@ -354,7 +365,7 @@ export class SyncEngine {
       this.bodyYawInitialized = true
     }
 
-    if (shouldRotateBodyForMode(this.options.bodyCouplingMode, hasMovementInput)) {
+    if (shouldRotateBodyForMode(couplingMode, hasMovementInput)) {
       this.stepBodyYaw(dtSeconds)
     }
     writeYawRotation(localPlayer, this.bodyYaw)
@@ -363,13 +374,13 @@ export class SyncEngine {
       return
     }
 
-    const yawError = yawErrorForMovementScale(this.options.bodyCouplingMode, this.viewYaw, this.bodyYaw)
+    const yawError = yawErrorForMovementScale(couplingMode, this.viewYaw, this.bodyYaw)
     const moveSpeedScale = moveSpeedScaleFromYawError(yawError, this.options)
     if (moveSpeedScale <= Number.EPSILON) {
       return
     }
 
-    const movementYaw = movementYawForMode(this.options.bodyCouplingMode, this.viewYaw, this.bodyYaw)
+    const movementYaw = movementYawForMode(couplingMode, this.viewYaw, this.bodyYaw)
     const worldAxis = rotateMovementAxis(axis, movementYaw)
 
     const len = Math.hypot(worldAxis.x, worldAxis.z)
@@ -398,6 +409,13 @@ export class SyncEngine {
     const delta = normalizeAngle(this.viewYaw - this.bodyYaw)
     const step = Math.max(-maxStep, Math.min(maxStep, delta))
     this.bodyYaw = normalizeAngle(this.bodyYaw + step)
+  }
+
+  private resolveBodyCouplingMode(): BodyCouplingMode {
+    if (this.aimModeActive) {
+      return 'coupled'
+    }
+    return this.options.bodyCouplingMode
   }
 
   private flushMoveCommand(
@@ -681,6 +699,7 @@ export class SyncEngine {
     this.viewPitch = this.options.viewPitchDefaultRad
     this.bodyYaw = 0
     this.bodyYawInitialized = false
+    this.aimModeActive = false
   }
 }
 

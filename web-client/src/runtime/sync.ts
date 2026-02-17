@@ -10,9 +10,11 @@ export function createSyncRuntime(): RuntimeModule {
   let onMouseDown: ((event: MouseEvent) => void) | null = null
   let onMouseMove: ((event: MouseEvent) => void) | null = null
   let onMouseUp: ((event: MouseEvent) => void) | null = null
+  let onContextMenu: ((event: MouseEvent) => void) | null = null
   let onPointerLockChange: (() => void) | null = null
   let onWindowBlur: (() => void) | null = null
   let dragTurning = false
+  const turnButtons = new Set<number>()
 
   return {
     name: 'SyncRuntime',
@@ -38,6 +40,7 @@ export function createSyncRuntime(): RuntimeModule {
           },
         getViewYaw: () => engine?.getViewYaw() ?? 0,
         getViewPitch: () => engine?.getViewPitch() ?? 0,
+        isAimModeActive: () => engine?.isAimModeActive() ?? false,
       }
 
       onKeyDown = (event) => {
@@ -47,12 +50,19 @@ export function createSyncRuntime(): RuntimeModule {
         engine?.handleKeyUp(event.code)
       }
       onMouseDown = (event) => {
-        if (event.button !== 0 || !canvas || event.target !== canvas) {
+        if (!canvas || event.target !== canvas) {
           return
         }
-        dragTurning = true
-        if (document.pointerLockElement !== canvas) {
-          void canvas.requestPointerLock?.()
+        if (event.button === 0 || event.button === 2) {
+          turnButtons.add(event.button)
+          dragTurning = turnButtons.size > 0
+          if (event.button === 2) {
+            engine?.setAimModeActive(true)
+            event.preventDefault()
+          }
+          if (document.pointerLockElement !== canvas) {
+            void canvas.requestPointerLock?.()
+          }
         }
       }
       onMouseMove = (event) => {
@@ -63,17 +73,26 @@ export function createSyncRuntime(): RuntimeModule {
         engine?.handleMouseMove(event.movementX, event.movementY)
       }
       onMouseUp = (event) => {
-        if (event.button === 0) {
-          dragTurning = false
+        if (event.button === 0 || event.button === 2) {
+          turnButtons.delete(event.button)
+          dragTurning = turnButtons.size > 0
+          if (event.button === 2) {
+            engine?.setAimModeActive(false)
+          }
         }
+      }
+      onContextMenu = (event) => {
+        event.preventDefault()
       }
       onPointerLockChange = () => {
         if (!canvas || document.pointerLockElement !== canvas) {
-          dragTurning = false
+          dragTurning = turnButtons.size > 0
         }
       }
       onWindowBlur = () => {
+        turnButtons.clear()
         dragTurning = false
+        engine?.setAimModeActive(false)
         engine?.handleWindowBlur()
       }
 
@@ -81,6 +100,9 @@ export function createSyncRuntime(): RuntimeModule {
       window.addEventListener('keyup', onKeyUp)
       if (onMouseDown && canvas) {
         canvas.addEventListener('mousedown', onMouseDown)
+      }
+      if (onContextMenu && canvas) {
+        canvas.addEventListener('contextmenu', onContextMenu)
       }
       if (onMouseMove) {
         window.addEventListener('mousemove', onMouseMove)
@@ -116,6 +138,10 @@ export function createSyncRuntime(): RuntimeModule {
         canvas.removeEventListener('mousedown', onMouseDown)
       }
       onMouseDown = null
+      if (onContextMenu && canvas) {
+        canvas.removeEventListener('contextmenu', onContextMenu)
+      }
+      onContextMenu = null
       if (onMouseMove) {
         window.removeEventListener('mousemove', onMouseMove)
         onMouseMove = null
@@ -135,7 +161,9 @@ export function createSyncRuntime(): RuntimeModule {
       if (canvas && document.pointerLockElement === canvas) {
         document.exitPointerLock?.()
       }
+      turnButtons.clear()
       dragTurning = false
+      engine?.setAimModeActive(false)
       canvas = null
 
       engine?.resetAll()

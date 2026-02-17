@@ -188,12 +188,13 @@ function formatSyncDiagnostics(ctx: RuntimeContext): string {
   }
   const viewYaw = ctx.sync?.getViewYaw() ?? 0
   const viewPitch = ctx.sync?.getViewPitch() ?? 0
+  const aimMode = ctx.sync?.isAimModeActive() ?? false
   const localPlayer = ctx.world.ecs.queryFirst(IsLocalPlayer, Rotation)
   const localRot = localPlayer?.get(Rotation)
   const localYaw = localRot ? quatYawFromY(localRot.y, localRot.w) : null
   const localState = localYaw === null ? 'none' : localYaw.toFixed(2)
 
-  return `ack=${d.ackTotal}/${d.sentTotal} pend=${d.pendingCount} timeout=${d.timeoutExpiredTotal} skip(s=${d.skippedSession},i=${d.skippedIdentity},o=${d.skippedDuplicateOrOld}) yaw(v=${viewYaw.toFixed(2)},l=${localState}) pitch(v=${viewPitch.toFixed(2)})`
+  return `ack=${d.ackTotal}/${d.sentTotal} pend=${d.pendingCount} timeout=${d.timeoutExpiredTotal} skip(s=${d.skippedSession},i=${d.skippedIdentity},o=${d.skippedDuplicateOrOld}) yaw(v=${viewYaw.toFixed(2)},l=${localState}) pitch(v=${viewPitch.toFixed(2)}) aim=${aimMode ? 'on' : 'off'}`
 }
 
 function quatYawFromY(y: number, w: number): number {
