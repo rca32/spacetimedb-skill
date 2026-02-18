@@ -3,11 +3,12 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-use spacetimedb::{ReducerContext, ScheduleAt, Table};
+use spacetimedb::{Identity, ReducerContext, ScheduleAt, Table};
 
 use crate::services::projection_views;
 use crate::services::hex_coords::HexCoord;
 use crate::services::pathfinding;
+use crate::services::permissions;
 use crate::tables::agent_timers::{
     environment_effect_loop_timer, npc_ai_loop_timer, player_regen_loop_timer,
     resource_regen_loop_timer, session_cleanup_loop_timer,
@@ -18,8 +19,11 @@ use crate::tables::combat::{attack_outcome, attack_schedule_state, combat_state}
 use crate::tables::environment_effect::{
     environment_effect_desc, environment_effect_exposure, environment_effect_state,
 };
-use crate::tables::live_ops::balance_params;
-use crate::tables::npc_quest::{npc_anchor_state, npc_population_def, npc_state};
+use crate::tables::item_def::item_def;
+use crate::tables::live_ops::{balance_params, feature_flags};
+use crate::tables::npc_quest::{
+    npc_anchor_state, npc_population_def, npc_state, npc_trade_order_def, npc_trade_order_state,
+};
 use crate::tables::pathfinding::npc_path_state;
 use crate::tables::player_views::player_session_view;
 use crate::tables::player_progression::{
@@ -32,9 +36,10 @@ use crate::tables::world_gen::world_gen_params;
 use crate::tables::world_state::{region_state, resource_node, terrain_chunk};
 use crate::tables::{
     CharacterStats, EnvironmentEffectDesc, EnvironmentEffectExposure, EnvironmentEffectLoopTimer,
-    EnvironmentEffectState, NpcActionSchedule, NpcAiLoopTimer, NpcAnchorState,
-    NpcPopulationDef, NpcState, PlayerRegenLoopTimer, RegionState, ResourceNode,
-    ResourceRegenLoopTimer, ResourceState, SessionCleanupLoopTimer, StatusEffect, TerrainChunk,
+    EnvironmentEffectState, FeatureFlags, NpcActionSchedule, NpcAiLoopTimer, NpcAnchorState,
+    NpcPopulationDef, NpcState, NpcTradeOrderDef, NpcTradeOrderState, PlayerRegenLoopTimer,
+    RegionState, ResourceNode, ResourceRegenLoopTimer, ResourceState, SessionCleanupLoopTimer,
+    StatusEffect, TerrainChunk,
 };
 use crate::utils::identity_to_entity_id;
 
@@ -52,6 +57,12 @@ const NPC_ANCHOR_KIND_GENERIC: u8 = 0;
 const NPC_ANCHOR_KIND_RUIN: u8 = 1;
 const AUTO_ANCHOR_MAX: usize = 32;
 const AUTO_ANCHOR_RADIUS_CHUNKS: i32 = 4;
+const NPC_AI_FEATURE_FLAG_KEY: &str = "npc_ai_enabled";
+const NPC_ORDER_REFRESH_INTERVAL_SECS: u64 = 45;
+const NPC_ORDER_RANDOM_TRAVELING: usize = 2;
+const NPC_ORDER_RANDOM_STATIONARY: usize = 1;
+const NPC_TRAVEL_TARGET_TOP_K: usize = 3;
+const NPC_PREVIOUS_ANCHOR_LIMIT: usize = 3;
 
 const DEFAULT_NPC_POPULATION_DEFS: [(u8, u16, u16, u16, u8, u8, bool); 8] = [
     // npc_type, population_permille, min_action_seconds, max_action_seconds,
@@ -70,7 +81,47 @@ fn to_micros_u64(ctx: &ReducerContext) -> u64 {
     u64::try_from(ctx.timestamp.to_micros_since_unix_epoch()).unwrap_or_default()
 }
 
+fn upsert_feature_flag(ctx: &ReducerContext, flag_key: &str, enabled: bool) {
+    let key = flag_key.trim().to_string();
+    if key.is_empty() {
+        return;
+    }
+    let row = FeatureFlags {
+        flag_key: key.clone(),
+        enabled,
+        updated_at: ctx.timestamp,
+    };
+    if ctx.db.feature_flags().flag_key().find(key).is_some() {
+        ctx.db.feature_flags().flag_key().update(row);
+    } else {
+        ctx.db.feature_flags().insert(row);
+    }
+}
+
+fn ensure_default_npc_ai_feature_flag(ctx: &ReducerContext) {
+    if ctx
+        .db
+        .feature_flags()
+        .flag_key()
+        .find(NPC_AI_FEATURE_FLAG_KEY.to_string())
+        .is_none()
+    {
+        upsert_feature_flag(ctx, NPC_AI_FEATURE_FLAG_KEY, true);
+    }
+}
+
+fn is_npc_ai_enabled(ctx: &ReducerContext) -> bool {
+    ctx.db
+        .feature_flags()
+        .flag_key()
+        .find(NPC_AI_FEATURE_FLAG_KEY.to_string())
+        .map(|row| row.enabled)
+        .unwrap_or(true)
+}
+
 pub(crate) fn ensure_default_agent_timers(ctx: &ReducerContext) {
+    ensure_default_npc_ai_feature_flag(ctx);
+
     if ctx
         .db
         .player_regen_loop_timer()
@@ -419,6 +470,7 @@ fn seed_world_if_empty(ctx: &ReducerContext) -> Result<(), String> {
 
     let now_us = to_micros_u64(ctx);
     ensure_default_npc_population_defs(ctx);
+    ensure_default_npc_trade_order_defs(ctx);
     refresh_default_npc_anchors(ctx);
     reconcile_npc_population(ctx, now_us);
     sync_npc_anchor_occupancy(ctx);
@@ -451,6 +503,405 @@ fn ensure_default_npc_population_defs(ctx: &ReducerContext) {
             enabled: true,
             updated_at: ctx.timestamp,
         });
+    }
+}
+
+fn ensure_default_npc_trade_order_defs(ctx: &ReducerContext) {
+    if ctx.db.npc_trade_order_def().iter().next().is_some() {
+        return;
+    }
+
+    let mut item_ids: Vec<u64> = ctx.db.item_def().iter().map(|row| row.item_def_id).collect();
+    item_ids.sort_unstable();
+    if item_ids.is_empty() {
+        return;
+    }
+
+    let primary_item = item_ids[0];
+    let secondary_item = item_ids.get(1).copied().unwrap_or(primary_item);
+    let tertiary_item = item_ids.get(2).copied().unwrap_or(secondary_item);
+    let mut order_def_id = 1u64;
+
+    for npc_type in 1..=8u8 {
+        ctx.db.npc_trade_order_def().insert(NpcTradeOrderDef {
+            order_def_id,
+            npc_type,
+            item_def_id: primary_item,
+            side: 1,
+            min_quantity: 2,
+            max_quantity: 8,
+            base_unit_price: 8,
+            weight: 100,
+            always_offered: true,
+            enabled: true,
+            updated_at: ctx.timestamp,
+        });
+        order_def_id = order_def_id.saturating_add(1);
+
+        ctx.db.npc_trade_order_def().insert(NpcTradeOrderDef {
+            order_def_id,
+            npc_type,
+            item_def_id: secondary_item,
+            side: 0,
+            min_quantity: 1,
+            max_quantity: 4,
+            base_unit_price: 6,
+            weight: 100,
+            always_offered: true,
+            enabled: true,
+            updated_at: ctx.timestamp,
+        });
+        order_def_id = order_def_id.saturating_add(1);
+
+        ctx.db.npc_trade_order_def().insert(NpcTradeOrderDef {
+            order_def_id,
+            npc_type,
+            item_def_id: tertiary_item,
+            side: if npc_type % 2 == 0 { 1 } else { 0 },
+            min_quantity: 1,
+            max_quantity: 3,
+            base_unit_price: 10,
+            weight: 80,
+            always_offered: false,
+            enabled: true,
+            updated_at: ctx.timestamp,
+        });
+        order_def_id = order_def_id.saturating_add(1);
+    }
+}
+
+fn cleanup_npc_trade_orders_for_npc(ctx: &ReducerContext, npc_id: u64) {
+    let stale_keys: Vec<String> = ctx
+        .db
+        .npc_trade_order_state()
+        .iter()
+        .filter(|row| row.npc_id == npc_id)
+        .map(|row| row.order_key)
+        .collect();
+    for order_key in stale_keys {
+        if ctx
+            .db
+            .npc_trade_order_state()
+            .order_key()
+            .find(order_key.clone())
+            .is_some()
+        {
+            ctx.db.npc_trade_order_state().order_key().delete(order_key);
+        }
+    }
+}
+
+fn choose_npc_trade_optional_order_def_ids(
+    defs: &[NpcTradeOrderDef],
+    npc_id: u64,
+    refresh_bucket: u64,
+    random_count: usize,
+) -> HashSet<u64> {
+    if random_count == 0 || defs.is_empty() {
+        return HashSet::new();
+    }
+
+    let mut scored: Vec<(u64, u64)> = defs
+        .iter()
+        .map(|def| {
+            let seed = npc_id
+                ^ def.order_def_id.wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                ^ refresh_bucket.wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
+                ^ (u64::from(def.weight) << 40);
+            let score = mix_u64(seed);
+            (def.order_def_id, score)
+        })
+        .collect();
+    scored.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+
+    scored
+        .into_iter()
+        .take(random_count)
+        .map(|entry| entry.0)
+        .collect()
+}
+
+fn sync_npc_trade_orders_for_npc(
+    ctx: &ReducerContext,
+    npc_id: u64,
+    npc_type: u8,
+    traveling: bool,
+    now_us: u64,
+) {
+    let defs: Vec<NpcTradeOrderDef> = ctx
+        .db
+        .npc_trade_order_def()
+        .iter()
+        .filter(|row| row.enabled && row.npc_type == npc_type)
+        .collect();
+
+    if defs.is_empty() {
+        cleanup_npc_trade_orders_for_npc(ctx, npc_id);
+        return;
+    }
+
+    let refresh_interval_us = NPC_ORDER_REFRESH_INTERVAL_SECS.saturating_mul(1_000_000);
+    let refresh_bucket = if refresh_interval_us == 0 {
+        0
+    } else {
+        now_us / refresh_interval_us
+    };
+    let random_count = if traveling {
+        NPC_ORDER_RANDOM_TRAVELING
+    } else {
+        NPC_ORDER_RANDOM_STATIONARY
+    };
+    let optional_defs: Vec<NpcTradeOrderDef> = defs
+        .iter()
+        .filter(|row| !row.always_offered)
+        .map(|row| NpcTradeOrderDef {
+            order_def_id: row.order_def_id,
+            npc_type: row.npc_type,
+            item_def_id: row.item_def_id,
+            side: row.side,
+            min_quantity: row.min_quantity,
+            max_quantity: row.max_quantity,
+            base_unit_price: row.base_unit_price,
+            weight: row.weight,
+            always_offered: row.always_offered,
+            enabled: row.enabled,
+            updated_at: row.updated_at,
+        })
+        .collect();
+    let optional_ids =
+        choose_npc_trade_optional_order_def_ids(&optional_defs, npc_id, refresh_bucket, random_count);
+
+    let desired_defs: Vec<NpcTradeOrderDef> = defs
+        .into_iter()
+        .filter(|row| row.always_offered || optional_ids.contains(&row.order_def_id))
+        .collect();
+    let desired_keys: HashSet<String> = desired_defs
+        .iter()
+        .map(|row| format!("{}:{}", npc_id, row.order_def_id))
+        .collect();
+
+    for def in desired_defs {
+        let order_key = format!("{}:{}", npc_id, def.order_def_id);
+        let seed = mix_u64(npc_id ^ def.order_def_id ^ refresh_bucket);
+        let qty_span = def.max_quantity.saturating_sub(def.min_quantity);
+        let quantity = def
+            .min_quantity
+            .saturating_add((seed as u32) % qty_span.saturating_add(1));
+        let price_jitter = (seed >> 8) % 3;
+        let unit_price = def.base_unit_price.saturating_add(price_jitter);
+        let refresh_at = now_us.saturating_add(refresh_interval_us);
+
+        if let Some(mut existing) = ctx.db.npc_trade_order_state().order_key().find(order_key.clone()) {
+            if existing.refresh_at <= now_us
+                || existing.item_def_id != def.item_def_id
+                || existing.side != def.side
+                || existing.quantity != quantity
+                || existing.unit_price != unit_price
+                || existing.status != 0
+                || existing.npc_type != npc_type
+            {
+                existing.npc_type = npc_type;
+                existing.order_def_id = def.order_def_id;
+                existing.item_def_id = def.item_def_id;
+                existing.side = def.side;
+                existing.quantity = quantity;
+                existing.unit_price = unit_price;
+                existing.status = 0;
+                existing.refresh_at = refresh_at;
+                existing.updated_at = ctx.timestamp;
+                ctx.db.npc_trade_order_state().order_key().update(existing);
+            }
+        } else {
+            ctx.db.npc_trade_order_state().insert(NpcTradeOrderState {
+                order_key,
+                npc_id,
+                npc_type,
+                order_def_id: def.order_def_id,
+                item_def_id: def.item_def_id,
+                side: def.side,
+                quantity,
+                unit_price,
+                status: 0,
+                refresh_at,
+                updated_at: ctx.timestamp,
+            });
+        }
+    }
+
+    let stale_keys: Vec<String> = ctx
+        .db
+        .npc_trade_order_state()
+        .iter()
+        .filter(|row| row.npc_id == npc_id)
+        .filter(|row| !desired_keys.contains(&row.order_key))
+        .map(|row| row.order_key)
+        .collect();
+    for order_key in stale_keys {
+        if ctx
+            .db
+            .npc_trade_order_state()
+            .order_key()
+            .find(order_key.clone())
+            .is_some()
+        {
+            ctx.db.npc_trade_order_state().order_key().delete(order_key);
+        }
+    }
+}
+
+fn mix_u64(seed: u64) -> u64 {
+    let mut x = seed ^ 0x9E37_79B9_7F4A_7C15;
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x ^= x >> 27;
+    x = x.wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^ (x >> 31)
+}
+
+fn push_recent_anchor(npc: &mut NpcState, anchor_id: u64) {
+    if anchor_id == 0 {
+        return;
+    }
+    if npc.previous_anchors.last().copied() == Some(anchor_id) {
+        return;
+    }
+    npc.previous_anchors.push(anchor_id);
+    if npc.previous_anchors.len() > NPC_PREVIOUS_ANCHOR_LIMIT {
+        let drain_len = npc.previous_anchors.len() - NPC_PREVIOUS_ANCHOR_LIMIT;
+        npc.previous_anchors.drain(0..drain_len);
+    }
+}
+
+fn choose_travel_anchor_destination(
+    ctx: &ReducerContext,
+    npc: &NpcState,
+    now_us: u64,
+) -> Option<(u64, i32, i32)> {
+    let mut candidates: Vec<NpcAnchorState> = ctx
+        .db
+        .npc_anchor_state()
+        .iter()
+        .filter(|row| row.region_id == npc.region_id && row.is_active)
+        .filter(|row| row.anchor_id != npc.anchor_entity_id)
+        .collect();
+    if candidates.is_empty() {
+        return None;
+    }
+
+    let recent: HashSet<u64> = npc
+        .previous_anchors
+        .iter()
+        .rev()
+        .take(NPC_PREVIOUS_ANCHOR_LIMIT)
+        .copied()
+        .collect();
+
+    candidates.sort_by_key(|row| {
+        let dx = i64::from(npc.hex_x) - i64::from(row.hex_x);
+        let dz = i64::from(npc.hex_z) - i64::from(row.hex_z);
+        let dist_sq = dx.saturating_mul(dx).saturating_add(dz.saturating_mul(dz));
+        let penalty = if recent.contains(&row.anchor_id) { 1_000_000_000_i64 } else { 0 };
+        dist_sq.saturating_add(penalty)
+    });
+
+    let top_k = candidates
+        .into_iter()
+        .take(NPC_TRAVEL_TARGET_TOP_K.max(1))
+        .collect::<Vec<_>>();
+    if top_k.is_empty() {
+        return None;
+    }
+    let seed = mix_u64(
+        npc.npc_id
+            ^ now_us.rotate_left(13)
+            ^ (u64::from(npc.mood) << 32)
+            ^ (u64::from(npc.schedule_kind) << 40),
+    );
+    let idx = (seed as usize) % top_k.len();
+    let chosen = &top_k[idx];
+    Some((chosen.anchor_id, chosen.hex_x, chosen.hex_z))
+}
+
+fn cleanup_orphan_npc_records(ctx: &ReducerContext) {
+    let anchor_active_map: HashMap<u64, bool> = ctx
+        .db
+        .npc_anchor_state()
+        .iter()
+        .map(|row| (row.anchor_id, row.is_active))
+        .collect();
+
+    let orphan_npc_ids: Vec<u64> = ctx
+        .db
+        .npc_state()
+        .iter()
+        .filter(|row| row.anchor_entity_id != 0)
+        .filter(|row| {
+            anchor_active_map
+                .get(&row.anchor_entity_id)
+                .map(|is_active| !*is_active)
+                .unwrap_or(true)
+        })
+        .map(|row| row.npc_id)
+        .collect();
+
+    for npc_id in orphan_npc_ids {
+        if ctx.db.npc_state().npc_id().find(npc_id).is_some() {
+            ctx.db.npc_state().npc_id().delete(npc_id);
+        }
+        if ctx.db.npc_action_schedule().npc_id().find(npc_id).is_some() {
+            ctx.db.npc_action_schedule().npc_id().delete(npc_id);
+        }
+        if ctx.db.npc_path_state().npc_id().find(npc_id).is_some() {
+            ctx.db.npc_path_state().npc_id().delete(npc_id);
+        }
+        cleanup_npc_trade_orders_for_npc(ctx, npc_id);
+    }
+
+    let valid_npc_ids: HashSet<u64> = ctx.db.npc_state().iter().map(|row| row.npc_id).collect();
+
+    let stale_schedule_ids: Vec<u64> = ctx
+        .db
+        .npc_action_schedule()
+        .iter()
+        .filter(|row| !valid_npc_ids.contains(&row.npc_id))
+        .map(|row| row.npc_id)
+        .collect();
+    for npc_id in stale_schedule_ids {
+        if ctx.db.npc_action_schedule().npc_id().find(npc_id).is_some() {
+            ctx.db.npc_action_schedule().npc_id().delete(npc_id);
+        }
+    }
+
+    let stale_path_ids: Vec<u64> = ctx
+        .db
+        .npc_path_state()
+        .iter()
+        .filter(|row| !valid_npc_ids.contains(&row.npc_id))
+        .map(|row| row.npc_id)
+        .collect();
+    for npc_id in stale_path_ids {
+        if ctx.db.npc_path_state().npc_id().find(npc_id).is_some() {
+            ctx.db.npc_path_state().npc_id().delete(npc_id);
+        }
+    }
+
+    let stale_order_keys: Vec<String> = ctx
+        .db
+        .npc_trade_order_state()
+        .iter()
+        .filter(|row| !valid_npc_ids.contains(&row.npc_id))
+        .map(|row| row.order_key)
+        .collect();
+    for order_key in stale_order_keys {
+        if ctx
+            .db
+            .npc_trade_order_state()
+            .order_key()
+            .find(order_key.clone())
+            .is_some()
+        {
+            ctx.db.npc_trade_order_state().order_key().delete(order_key);
+        }
     }
 }
 
@@ -588,6 +1039,7 @@ fn reconcile_npc_population(ctx: &ReducerContext, now_us: u64) {
     defs.sort_by_key(|row| row.npc_type);
 
     if active_anchors.is_empty() || defs.is_empty() {
+        cleanup_orphan_npc_records(ctx);
         return;
     }
 
@@ -632,11 +1084,7 @@ fn reconcile_npc_population(ctx: &ReducerContext, now_us: u64) {
                 || previous_anchor != anchor.anchor_id;
 
             if previous_anchor != 0 && previous_anchor != anchor.anchor_id {
-                npc.previous_anchors.push(previous_anchor);
-                if npc.previous_anchors.len() > 3 {
-                    let drain_len = npc.previous_anchors.len() - 3;
-                    npc.previous_anchors.drain(0..drain_len);
-                }
+                push_recent_anchor(&mut npc, previous_anchor);
             }
 
             npc.npc_type = npc_type;
@@ -699,6 +1147,8 @@ fn reconcile_npc_population(ctx: &ReducerContext, now_us: u64) {
                 target_region_id: Some(anchor.region_id),
             });
         }
+
+        sync_npc_trade_orders_for_npc(ctx, npc_id, npc_type, traveling, now_us);
     }
 
     let stale_npc_ids: Vec<u64> = ctx
@@ -719,7 +1169,10 @@ fn reconcile_npc_population(ctx: &ReducerContext, now_us: u64) {
         if ctx.db.npc_path_state().npc_id().find(npc_id).is_some() {
             ctx.db.npc_path_state().npc_id().delete(npc_id);
         }
+        cleanup_npc_trade_orders_for_npc(ctx, npc_id);
     }
+
+    cleanup_orphan_npc_records(ctx);
 }
 
 fn compute_target_by_type(anchor_count: usize, defs: &[NpcPopulationDef]) -> HashMap<u8, usize> {
@@ -775,8 +1228,32 @@ fn synthetic_anchor_id(region_id: u64, chunk_x: i32, chunk_y: i32) -> u64 {
 
 #[spacetimedb::reducer]
 pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
+    let sender_has_session = ctx.db.session_state().identity().find(ctx.sender).is_some();
+    if sender_has_session
+        && ctx.sender != Identity::ZERO
+        && !permissions::has_permission(ctx, 0, 0, permissions::PERM_ADMIN)
+    {
+        log::warn!("npc_ai_agent_loop rejected: server/admin authorization required");
+        return;
+    }
+
+    ensure_default_npc_ai_feature_flag(ctx);
+    if !is_npc_ai_enabled(ctx) {
+        if let Some(mut timer) = ctx
+            .db
+            .npc_ai_loop_timer()
+            .scheduled_id()
+            .find(arg.scheduled_id)
+        {
+            timer.last_run_at = ctx.timestamp;
+            ctx.db.npc_ai_loop_timer().scheduled_id().update(timer);
+        }
+        return;
+    }
+
     let now_us = to_micros_u64(ctx);
     ensure_default_npc_population_defs(ctx);
+    ensure_default_npc_trade_order_defs(ctx);
     refresh_default_npc_anchors(ctx);
     reconcile_npc_population(ctx, now_us);
 
@@ -832,8 +1309,33 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
                 now_us + npc_next_delay(ctx, npc.npc_id, npc.npc_type, action_type);
             npc_updates.push(npc);
         } else {
-            let (target_hex_x, target_hex_z) =
-                compute_npc_destination(npc.npc_id, npc.hex_x, npc.hex_z, action_type, npc.mood);
+            let mut target_hex_x = npc.dest_hex_x;
+            let mut target_hex_z = npc.dest_hex_z;
+            let reached_target = npc.hex_x == npc.dest_hex_x && npc.hex_z == npc.dest_hex_z;
+
+            if reached_target || (target_hex_x == npc.hex_x && target_hex_z == npc.hex_z) {
+                if let Some((dest_anchor_id, anchor_hex_x, anchor_hex_z)) =
+                    choose_travel_anchor_destination(ctx, &npc, now_us)
+                {
+                    target_hex_x = anchor_hex_x;
+                    target_hex_z = anchor_hex_z;
+                    push_recent_anchor(&mut npc, dest_anchor_id);
+                } else {
+                    (target_hex_x, target_hex_z) = compute_npc_destination(
+                        npc.npc_id,
+                        npc.hex_x,
+                        npc.hex_z,
+                        action_type,
+                        npc.mood,
+                    );
+                }
+            }
+
+            if target_hex_x == npc.hex_x && target_hex_z == npc.hex_z {
+                (target_hex_x, target_hex_z) =
+                    compute_npc_destination(npc.npc_id, npc.hex_x, npc.hex_z, action_type, npc.mood);
+            }
+
             let current = HexCoord::new(npc.hex_x, npc.hex_z, 1);
             let target = HexCoord::new(target_hex_x, target_hex_z, 1);
             let next_step = match pathfinding::request_npc_step(
@@ -930,10 +1432,16 @@ fn npc_next_delay(ctx: &ReducerContext, npc_id: u64, npc_type: u8, schedule_kind
             let min_secs = u64::from(def.min_action_seconds);
             let max_secs = u64::from(def.max_action_seconds);
             let span = max_secs.saturating_sub(min_secs).saturating_add(1);
-            let mut seed =
-                npc_id ^ (u64::from(npc_type) << 32) ^ to_micros_u64(ctx);
-            seed = seed.rotate_left(17) ^ (seed << 11);
-            let jitter = if span == 0 { 0 } else { seed % span };
+            let now_us = to_micros_u64(ctx);
+            let cycle_bucket = now_us / (NPC_AI_INTERVAL_SECS.max(1) * 1_000_000);
+            let seed = mix_u64(
+                npc_id
+                    ^ (u64::from(npc_type) << 32)
+                    ^ (u64::from(normalize_schedule_kind(schedule_kind)) << 40)
+                    ^ cycle_bucket.rotate_left(11),
+            );
+            let phase = if span == 0 { 0 } else { (npc_id ^ u64::from(npc_type)) % span };
+            let jitter = if span == 0 { 0 } else { (seed % span + phase) % span };
             return min_secs.saturating_add(jitter).saturating_mul(1_000_000);
         }
     }

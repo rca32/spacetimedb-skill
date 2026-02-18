@@ -382,14 +382,37 @@ agent-browser screenshot --full /tmp/npc-ai-llm-smoke.png
   - `stitch-server/scripts/npc_ai_smoke_gate.sh`
   - population/anchor/schedule/movement signal 검증
 
-### 9.4 파일 기준 구현 스냅샷
+### 9.4 미완료 WP 완료 반영 (2026-02-18 추가)
+- 완료: `WP-04` NPC 주문 라이프사이클 구현
+  - 신규 테이블:
+    - `npc_trade_order_def`
+    - `npc_trade_order_state`
+  - 루프 반영:
+    - population reconcile 시 NPC별 주문 생성/갱신/삭제
+    - traveling/stationary 별 랜덤 주문 수 차등 적용
+- 완료: `WP-05` 권한/운영 게이트 강화
+  - `live_ops.feature_flags`의 `npc_ai_enabled` 플래그 도입
+  - `npc_ai_agent_loop`에서 플래그 기반 실행 게이트 적용
+  - admin reducer:
+    - `set_npc_ai_enabled`
+- 완료: LLM 최소 경로 구현
+  - 신규 reducer:
+    - `npc_dialogue_request`
+    - `npc_action_resolve`
+  - 세션/턴/요청/결과/캐시/비용/정책위반 테이블 경로 실제 사용
+
+### 9.5 파일 기준 구현 스냅샷
 - 서버:
   - `stitch-server/crates/game_server/src/agents/mod.rs`
   - `stitch-server/crates/game_server/src/tables/npc_quest.rs`
   - `stitch-server/crates/game_server/src/reducers/npc_quest/npc_ai_admin.rs`
+  - `stitch-server/crates/game_server/src/reducers/npc_quest/npc_llm.rs`
+  - `stitch-server/crates/game_server/src/subscriptions/world_stream.rs`
+  - `stitch-server/crates/game_server/src/subscriptions/mod.rs`
   - `stitch-server/crates/game_server/src/lib.rs`
   - `stitch-server/assets/static_data/npc/npc_population_def.csv`
 - 웹:
+  - `web-client/src/net/aoi.ts`
   - `web-client/src/runtime/social-npc-quest.ts`
   - `web-client/src/runtime/types.ts`
   - `web-client/src/runtime/world-systems/common.ts`
@@ -398,7 +421,21 @@ agent-browser screenshot --full /tmp/npc-ai-llm-smoke.png
 - 스크립트:
   - `stitch-server/scripts/npc_ai_smoke_gate.sh`
 
-### 9.5 다음 우선순위 (미완료 WP)
-1. `WP-04` NPC 주문 라이프사이클 구현(항시/랜덤 주문)
-2. `WP-05` 권한/feature flag 게이트 강화
-3. LLM 최소 경로 구현: `npc_dialogue_request` + `npc_action_resolve`
+### 9.6 잔여 WP 완료 반영 (2026-02-18 2차)
+- 완료: `WP-06` 이동 목적지 선택 고도화
+  - 최근 방문 앵커 회피(`previous_anchors`) + 거리 기반 `top-k` 랜덤 선택 반영
+  - 목적지 후보 부재 시 기존 `compute_npc_destination` fallback 유지
+- 완료: `WP-07` 시간 분포 개선
+  - `npc_next_delay`가 `min_action_seconds~max_action_seconds` 범위 난수로 동작
+  - `npc_id`, `npc_type`, `schedule_kind`, `cycle_bucket` 기반 분산으로 동시 몰림 완화
+- 완료: `WP-08` AOI 기반 NPC 구독 축소
+  - 서버: `subscriptions/world_stream.rs`에 `npc_state_stream_query` 추가
+  - 클라: `web-client/src/net/aoi.ts`에서 `npc_state`도 hex bounds 조건으로 구독
+- 완료: `WP-09` 고아/깨진 앵커 정리 루프 고도화
+  - `cleanup_orphan_npc_records`로 무효 앵커 NPC 및 stale schedule/path/order 정리
+  - `reconcile_npc_population` 전후 정리 pass 적용
+
+### 9.7 현재 상태 요약
+- `WP-01` ~ `WP-10` 구현 및 스모크 검증 완료.
+- 본 문서 기준 잔여 WP는 없음.
+- 다음 단계는 4장 LLM 고도화 항목(`npc_perception_agent_loop`, `npc_cognition_agent_loop`, `npc_execution_agent_loop`)의 본 구현이다.

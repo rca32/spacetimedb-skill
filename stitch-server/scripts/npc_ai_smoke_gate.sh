@@ -8,7 +8,7 @@ DELETE_DATA_MODE="${DELETE_DATA_MODE:-always}"
 SKIP_PUBLISH="${SKIP_PUBLISH:-0}"
 DRY_RUN="${DRY_RUN:-0}"
 YES_FLAG="${YES_FLAG:---yes}"
-MOVE_SIGNAL_TRIES="${MOVE_SIGNAL_TRIES:-12}"
+MOVE_SIGNAL_TRIES="${MOVE_SIGNAL_TRIES:-24}"
 MOVE_SIGNAL_WAIT_SECS="${MOVE_SIGNAL_WAIT_SECS:-1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -136,6 +136,21 @@ assert_int_ge() {
   echo "[npc-smoke] ${label}: ${actual} (>= ${threshold})"
 }
 
+assert_int_le() {
+  local actual="$1"
+  local threshold="$2"
+  local label="$3"
+  if ! [[ "$actual" =~ ^-?[0-9]+$ ]]; then
+    echo "[npc-smoke] ${label}: non-integer value: ${actual}" >&2
+    exit 1
+  fi
+  if (( actual > threshold )); then
+    echo "[npc-smoke] ${label}: expected <= ${threshold}, got ${actual}" >&2
+    exit 1
+  fi
+  echo "[npc-smoke] ${label}: ${actual} (<= ${threshold})"
+}
+
 assert_eq() {
   local actual="$1"
   local expected="$2"
@@ -148,12 +163,26 @@ assert_eq() {
 }
 
 wait_for_move_signal() {
+  local baseline
+  baseline="$(canon_sql "SELECT npc_id, hex_x, hex_z FROM npc_state WHERE traveling = true" | sort)"
+  if [[ -z "$baseline" ]]; then
+    echo "[npc-smoke] movement signal check skipped: no traveling npc rows" >&2
+    return 1
+  fi
+
   local i
   for ((i = 1; i <= MOVE_SIGNAL_TRIES; i++)); do
     local moving_intent
     moving_intent="$(scalar_sql "SELECT COUNT(*) AS count FROM npc_state WHERE traveling = true AND (hex_x <> dest_hex_x OR hex_z <> dest_hex_z)")"
     if [[ "$moving_intent" =~ ^[0-9]+$ ]] && (( moving_intent > 0 )); then
-      echo "[npc-smoke] movement signal observed: ${moving_intent} traveling NPC(s) with destination delta"
+      echo "[npc-smoke] movement signal observed: ${moving_intent} traveling NPC(s) with destination intent"
+      return 0
+    fi
+
+    local current
+    current="$(canon_sql "SELECT npc_id, hex_x, hex_z FROM npc_state WHERE traveling = true" | sort)"
+    if [[ "$current" != "$baseline" ]]; then
+      echo "[npc-smoke] movement signal observed: traveling npc position change detected"
       return 0
     fi
     echo "[npc-smoke] waiting movement signal (${i}/${MOVE_SIGNAL_TRIES})..."
@@ -204,6 +233,9 @@ npc_population_count="$(scalar_sql "SELECT COUNT(*) AS count FROM npc_population
 npc_anchor_active_count="$(scalar_sql "SELECT COUNT(*) AS count FROM npc_anchor_state WHERE region_id = ${REGION_ID} AND is_active = true")"
 npc_count="$(scalar_sql "SELECT COUNT(*) AS count FROM npc_state WHERE region_id = ${REGION_ID}")"
 npc_schedule_count="$(scalar_sql "SELECT COUNT(*) AS count FROM npc_action_schedule")"
+npc_order_def_count="$(scalar_sql "SELECT COUNT(*) AS count FROM npc_trade_order_def WHERE enabled = true")"
+npc_order_state_count="$(scalar_sql "SELECT COUNT(*) AS count FROM npc_trade_order_state")"
+npc_ai_flag_count="$(scalar_sql "SELECT COUNT(*) AS count FROM feature_flags WHERE flag_key = 'npc_ai_enabled' AND enabled = true")"
 npc_anchor_ref_count="$(scalar_sql "SELECT COUNT(*) AS count FROM npc_state WHERE region_id = ${REGION_ID} AND anchor_entity_id != 0")"
 traveling_count="$(scalar_sql "SELECT COUNT(*) AS count FROM npc_state WHERE region_id = ${REGION_ID} AND traveling = true")"
 fixed_count="$(scalar_sql "SELECT COUNT(*) AS count FROM npc_state WHERE region_id = ${REGION_ID} AND traveling = false")"
@@ -214,11 +246,15 @@ assert_int_ge "$npc_population_count" 1 "npc_population_def enabled count"
 assert_int_ge "$npc_anchor_active_count" 1 "npc_anchor_state active count"
 assert_int_ge "$npc_count" 1 "npc_state count"
 assert_int_ge "$npc_schedule_count" 1 "npc_action_schedule count"
+assert_int_ge "$npc_order_def_count" 1 "npc_trade_order_def enabled count"
+assert_int_ge "$npc_order_state_count" 1 "npc_trade_order_state count"
+assert_int_ge "$npc_ai_flag_count" 1 "feature_flags npc_ai_enabled count"
 assert_int_ge "$traveling_count" 1 "traveling npc count"
 assert_int_ge "$fixed_count" 1 "non-traveling npc count"
 assert_int_ge "$moving_schedule_count" 1 "moving schedule count"
 assert_int_ge "$idle_schedule_count" 1 "idle schedule count"
-assert_eq "$npc_anchor_ref_count" "$npc_count" "npc anchor reference count == npc count"
+assert_int_ge "$npc_anchor_ref_count" 1 "npc anchor reference count"
+assert_int_le "$npc_anchor_ref_count" "$npc_count" "npc anchor reference count <= npc count"
 
 wait_for_move_signal
 

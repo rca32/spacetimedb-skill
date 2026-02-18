@@ -47,6 +47,38 @@ pub struct NpcAnchorState {
     pub updated_at: Timestamp,
 }
 
+#[spacetimedb::table(name = npc_trade_order_def, public)]
+pub struct NpcTradeOrderDef {
+    #[primary_key]
+    pub order_def_id: u64,
+    pub npc_type: u8,
+    pub item_def_id: u64,
+    pub side: u8, // 0=buy,1=sell
+    pub min_quantity: u32,
+    pub max_quantity: u32,
+    pub base_unit_price: u64,
+    pub weight: u16,
+    pub always_offered: bool,
+    pub enabled: bool,
+    pub updated_at: Timestamp,
+}
+
+#[spacetimedb::table(name = npc_trade_order_state, public)]
+pub struct NpcTradeOrderState {
+    #[primary_key]
+    pub order_key: String,
+    pub npc_id: u64,
+    pub npc_type: u8,
+    pub order_def_id: u64,
+    pub item_def_id: u64,
+    pub side: u8, // 0=buy,1=sell
+    pub quantity: u32,
+    pub unit_price: u64,
+    pub status: u8, // 0=open,1=fulfilled,2=cancelled
+    pub refresh_at: u64,
+    pub updated_at: Timestamp,
+}
+
 #[spacetimedb::table(name = npc_interaction_log, public)]
 pub struct NpcInteractionLog {
     #[primary_key]
