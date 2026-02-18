@@ -4,12 +4,16 @@ import { CoreWorld } from '../core/world'
 import {
   BuildingData,
   ChunkPayloadData,
+  PathResultData,
+  PathStepData,
   ClaimData,
   ChunkData,
   IsBuilding,
   IsClaim,
   IsLocalPlayer,
   IsNpc,
+  IsPathResult,
+  IsPathStep,
   IsRemotePlayer,
   IsResourceNode,
   IsTerrainChunk,
@@ -183,10 +187,21 @@ const TMP_YAW_OFFSET_QUAT = new THREE.Quaternion()
 const TMP_INVERSE_MODEL_QUAT = new THREE.Quaternion()
 const TMP_WORLD_MOVE = new THREE.Vector3()
 const TMP_LOCAL_MOVE = new THREE.Vector3()
+const ENABLE_PATH_DEBUG_OVERLAY = (import.meta.env.VITE_DEBUG_PATH_OVERLAY ?? '0') === '1'
+const PATH_OVERLAY_Y = 0.24
+const PATH_STATUS_SUCCESS = 1
+const PATH_STATUS_UNREACHABLE = 2
+const PATH_STATUS_NODE_LIMIT = 3
+const PATH_STATUS_INVALID = 4
 
 type ExternalClipSpec = {
   path: string
   clipName?: string
+}
+
+type PathDebugLineRenderable = {
+  line: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>
+  signature: string
 }
 
 class InstancedPool {
@@ -270,6 +285,7 @@ class InstancedPool {
 export class WorldStreamingRenderer {
   private readonly root = new THREE.Group()
   private readonly gltfRoot = new THREE.Group()
+  private readonly pathDebugRoot = new THREE.Group()
   private readonly terrainPool: InstancedPool
   private readonly terrainRoot = new THREE.Group()
   private readonly terrainChunkRenderables = new Map<string, TerrainChunkRenderable>()
@@ -287,6 +303,7 @@ export class WorldStreamingRenderer {
   private readonly failedModelPaths = new Set<string>()
   private readonly retargetedClipCache = new Map<string, THREE.AnimationClip>()
   private readonly failedExternalActionBindings = new Set<string>()
+  private readonly pathDebugLines = new Map<string, PathDebugLineRenderable>()
 
   constructor(scene: THREE.Scene, materials: MaterialPalette) {
     const terrainGeometry = new THREE.PlaneGeometry(16, 16)
@@ -331,6 +348,8 @@ export class WorldStreamingRenderer {
     this.terrainRoot.name = 'world-terrain-layer'
     this.terrainRoot.userData.cameraObstacle = true
     this.gltfRoot.name = 'world-gltf-layer'
+    this.pathDebugRoot.name = 'world-path-debug-layer'
+    this.pathDebugRoot.userData.cameraObstacle = false
     this.root.add(this.terrainPool.mesh)
     this.root.add(this.terrainRoot)
     this.root.add(this.buildingPool.mesh)
@@ -338,6 +357,7 @@ export class WorldStreamingRenderer {
     this.root.add(this.resourcePool.mesh)
     this.root.add(this.actorPool.mesh)
     this.root.add(this.npcPool.mesh)
+    this.root.add(this.pathDebugRoot)
     scene.add(this.gltfRoot)
     scene.add(this.root)
   }
@@ -541,6 +561,12 @@ export class WorldStreamingRenderer {
 
     this.updateCharacterAnimators(dtSeconds)
 
+    if (ENABLE_PATH_DEBUG_OVERLAY) {
+      this.syncPathDebugOverlay(world, localIdentityHex)
+    } else {
+      this.clearPathDebugOverlay()
+    }
+
     this.terrainPool.removeMissing(seenTerrain)
     this.pruneTerrainChunkMeshes(seenTerrain)
     this.buildingPool.removeMissing(seenBuildings)
@@ -729,6 +755,111 @@ export class WorldStreamingRenderer {
     )
   }
 
+  private syncPathDebugOverlay(world: CoreWorld, localIdentityHex: string): void {
+    const statusByPathId = new Map<string, { status: number; ownedByLocal: boolean }>()
+    const pointsByPathId = new Map<string, Array<{ x: number; y: number; z: number; stepIndex: number }>>()
+
+    world.ecs.query(IsPathResult, PathResultData).readEach(([result]) => {
+      const requester = normalizeIdentityHex(result.requesterIdentityHex)
+      const local = normalizeIdentityHex(localIdentityHex)
+      statusByPathId.set(result.pathId, {
+        status: result.status,
+        ownedByLocal: requester.length > 0 && local.length > 0 && requester === local,
+      })
+    })
+
+    world.ecs.query(IsPathStep, PathStepData).readEach(([step]) => {
+      let points = pointsByPathId.get(step.pathId)
+      if (!points) {
+        points = []
+        pointsByPathId.set(step.pathId, points)
+      }
+      points.push({
+        x: step.hexX + 0.5,
+        y: PATH_OVERLAY_Y,
+        z: step.hexZ + 0.5,
+        stepIndex: step.stepIndex,
+      })
+    })
+
+    for (const points of pointsByPathId.values()) {
+      points.sort((a, b) => a.stepIndex - b.stepIndex)
+    }
+
+    const seenPathIds = new Set<string>()
+    for (const [pathId, points] of pointsByPathId) {
+      if (points.length < 2) {
+        continue
+      }
+      const status = statusByPathId.get(pathId)?.status ?? PATH_STATUS_SUCCESS
+      const ownedByLocal = statusByPathId.get(pathId)?.ownedByLocal ?? false
+      const color = pathOverlayColor(status, ownedByLocal)
+      this.upsertPathDebugLine(pathId, points, color, status, ownedByLocal)
+      seenPathIds.add(pathId)
+    }
+
+    for (const pathId of [...this.pathDebugLines.keys()]) {
+      if (!seenPathIds.has(pathId)) {
+        this.removePathDebugLine(pathId)
+      }
+    }
+  }
+
+  private upsertPathDebugLine(
+    pathId: string,
+    points: Array<{ x: number; y: number; z: number; stepIndex: number }>,
+    color: number,
+    status: number,
+    ownedByLocal: boolean,
+  ): void {
+    const signature = hashPathOverlay(points, color, status, ownedByLocal)
+    const existing = this.pathDebugLines.get(pathId)
+    if (existing && existing.signature === signature) {
+      return
+    }
+    if (existing) {
+      this.removePathDebugLine(pathId)
+    }
+
+    const positions = new Float32Array(points.length * 3)
+    for (let i = 0; i < points.length; i += 1) {
+      const p = points[i]
+      positions[i * 3] = p.x
+      positions[i * 3 + 1] = p.y
+      positions[i * 3 + 2] = p.z
+    }
+
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    const material = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: ownedByLocal ? 0.92 : 0.68,
+      depthWrite: false,
+    })
+    const line = new THREE.Line(geometry, material)
+    line.userData.cameraObstacle = false
+    this.pathDebugRoot.add(line)
+    this.pathDebugLines.set(pathId, { line, signature })
+  }
+
+  private removePathDebugLine(pathId: string): void {
+    const existing = this.pathDebugLines.get(pathId)
+    if (!existing) {
+      return
+    }
+    this.pathDebugRoot.remove(existing.line)
+    existing.line.geometry.dispose()
+    existing.line.material.dispose()
+    this.pathDebugLines.delete(pathId)
+  }
+
+  private clearPathDebugOverlay(): void {
+    for (const pathId of [...this.pathDebugLines.keys()]) {
+      this.removePathDebugLine(pathId)
+    }
+  }
+
   clear(): void {
     this.terrainPool.removeMissing(new Set())
     this.pruneTerrainChunkMeshes(new Set())
@@ -738,6 +869,7 @@ export class WorldStreamingRenderer {
     this.actorPool.removeMissing(new Set())
     this.npcPool.removeMissing(new Set())
     this.clearCharacterAnimators()
+    this.clearPathDebugOverlay()
     this.pruneGltfRenderables(new Set())
   }
 
@@ -1568,6 +1700,50 @@ function resolveLocalIdentityHex(world: CoreWorld): string {
   const localPlayer = world.ecs.queryFirst(IsLocalPlayer, NetEntity)
   const localNet = localPlayer?.get(NetEntity)
   return localNet?.serverId ?? ''
+}
+
+function normalizeIdentityHex(value: string): string {
+  return value.trim().toLowerCase().replace(/^0x/, '')
+}
+
+function pathOverlayColor(status: number, ownedByLocal: boolean): number {
+  switch (status) {
+    case PATH_STATUS_SUCCESS:
+      return ownedByLocal ? 0x69d2ff : 0xaad7ff
+    case PATH_STATUS_UNREACHABLE:
+      return 0xff8f7f
+    case PATH_STATUS_NODE_LIMIT:
+      return 0xffcf66
+    case PATH_STATUS_INVALID:
+      return 0xff6b6b
+    default:
+      return ownedByLocal ? 0x69d2ff : 0xaad7ff
+  }
+}
+
+function hashPathOverlay(
+  points: Array<{ x: number; y: number; z: number; stepIndex: number }>,
+  color: number,
+  status: number,
+  ownedByLocal: boolean,
+): string {
+  let h = 2166136261 >>> 0
+  h ^= color & 0xff_ff_ff
+  h = Math.imul(h, 0x01000193)
+  h ^= status & 0xff
+  h = Math.imul(h, 0x01000193)
+  h ^= ownedByLocal ? 1 : 0
+  h = Math.imul(h, 0x01000193)
+  for (let i = 0; i < points.length; i += 1) {
+    const p = points[i]
+    h ^= (p.stepIndex | 0) & 0xffff
+    h = Math.imul(h, 0x01000193)
+    h ^= Math.round(p.x * 100) & 0xffff
+    h = Math.imul(h, 0x01000193)
+    h ^= Math.round(p.z * 100) & 0xffff
+    h = Math.imul(h, 0x01000193)
+  }
+  return `${(h >>> 0).toString(16)}:${points.length}`
 }
 
 function biomeColor(biomeId: number): THREE.Color {
