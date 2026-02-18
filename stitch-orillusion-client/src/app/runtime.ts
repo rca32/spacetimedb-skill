@@ -212,6 +212,7 @@ export class OrillusionClientRuntime {
         [
           `SELECT * FROM physics_state_v2 WHERE entity_id = 0x${identityHex}`,
           `SELECT * FROM server_correction_v2 WHERE identity = 0x${identityHex}`,
+          `SELECT * FROM player_session_view WHERE identity = 0x${identityHex}`,
         ],
         this.logger,
       )
