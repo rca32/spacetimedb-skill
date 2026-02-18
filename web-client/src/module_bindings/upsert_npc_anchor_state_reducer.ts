@@ -10,22 +10,11 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.object("NpcState", {
-  npcId: __t.u64(),
-  npcType: __t.u8(),
+export default {
+  anchorId: __t.u64(),
   regionId: __t.u64(),
-  dimensionId: __t.u32(),
   hexX: __t.i32(),
   hexZ: __t.i32(),
-  destHexX: __t.i32(),
-  destHexZ: __t.i32(),
-  role: __t.u8(),
-  mood: __t.u8(),
-  traveling: __t.bool(),
-  scheduleKind: __t.u8(),
-  nextActionTs: __t.u64(),
-  anchorEntityId: __t.u64(),
-  previousAnchors: __t.array(__t.u64()),
-});
-
-
+  anchorKind: __t.u8(),
+  isActive: __t.bool(),
+};

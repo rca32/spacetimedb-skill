@@ -10,22 +10,18 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.object("NpcState", {
+export default __t.object("NpcTradeOrderState", {
+  orderKey: __t.string(),
   npcId: __t.u64(),
   npcType: __t.u8(),
-  regionId: __t.u64(),
-  dimensionId: __t.u32(),
-  hexX: __t.i32(),
-  hexZ: __t.i32(),
-  destHexX: __t.i32(),
-  destHexZ: __t.i32(),
-  role: __t.u8(),
-  mood: __t.u8(),
-  traveling: __t.bool(),
-  scheduleKind: __t.u8(),
-  nextActionTs: __t.u64(),
-  anchorEntityId: __t.u64(),
-  previousAnchors: __t.array(__t.u64()),
+  orderDefId: __t.u64(),
+  itemDefId: __t.u64(),
+  side: __t.u8(),
+  quantity: __t.u32(),
+  unitPrice: __t.u64(),
+  status: __t.u8(),
+  refreshAt: __t.u64(),
+  updatedAt: __t.timestamp(),
 });
 
 

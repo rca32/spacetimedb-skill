@@ -4,6 +4,7 @@ use spacetimedb::{Identity, Timestamp};
 pub struct NpcState {
     #[primary_key]
     pub npc_id: u64,
+    pub npc_type: u8,
     pub region_id: u64,
     pub dimension_id: u32,
     pub hex_x: i32,
@@ -12,8 +13,70 @@ pub struct NpcState {
     pub dest_hex_z: i32,
     pub role: u8,
     pub mood: u8,
+    pub traveling: bool,
     pub schedule_kind: u8,
     pub next_action_ts: u64,
+    pub anchor_entity_id: u64,
+    pub previous_anchors: Vec<u64>,
+}
+
+#[spacetimedb::table(name = npc_population_def, public)]
+pub struct NpcPopulationDef {
+    #[primary_key]
+    pub npc_type: u8,
+    pub population_permille: u16,
+    pub min_action_seconds: u16,
+    pub max_action_seconds: u16,
+    pub default_schedule_kind: u8,
+    pub default_role: u8,
+    pub traveling_enabled: bool,
+    pub enabled: bool,
+    pub updated_at: Timestamp,
+}
+
+#[spacetimedb::table(name = npc_anchor_state, public)]
+pub struct NpcAnchorState {
+    #[primary_key]
+    pub anchor_id: u64,
+    pub region_id: u64,
+    pub hex_x: i32,
+    pub hex_z: i32,
+    pub anchor_kind: u8, // 0=generic,1=ruin,2=camp
+    pub is_active: bool,
+    pub occupied_by_npc_id: Option<u64>,
+    pub updated_at: Timestamp,
+}
+
+#[spacetimedb::table(name = npc_trade_order_def, public)]
+pub struct NpcTradeOrderDef {
+    #[primary_key]
+    pub order_def_id: u64,
+    pub npc_type: u8,
+    pub item_def_id: u64,
+    pub side: u8, // 0=buy,1=sell
+    pub min_quantity: u32,
+    pub max_quantity: u32,
+    pub base_unit_price: u64,
+    pub weight: u16,
+    pub always_offered: bool,
+    pub enabled: bool,
+    pub updated_at: Timestamp,
+}
+
+#[spacetimedb::table(name = npc_trade_order_state, public)]
+pub struct NpcTradeOrderState {
+    #[primary_key]
+    pub order_key: String,
+    pub npc_id: u64,
+    pub npc_type: u8,
+    pub order_def_id: u64,
+    pub item_def_id: u64,
+    pub side: u8, // 0=buy,1=sell
+    pub quantity: u32,
+    pub unit_price: u64,
+    pub status: u8, // 0=open,1=fulfilled,2=cancelled
+    pub refresh_at: u64,
+    pub updated_at: Timestamp,
 }
 
 #[spacetimedb::table(name = npc_interaction_log, public)]

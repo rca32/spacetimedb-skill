@@ -92,6 +92,7 @@ pub(crate) fn ensure_npc(
 
     ctx.db.npc_state().insert(NpcState {
         npc_id,
+        npc_type: 1,
         region_id,
         dimension_id,
         hex_x,
@@ -100,11 +101,15 @@ pub(crate) fn ensure_npc(
         dest_hex_z: hex_z,
         role: 0,
         mood: 0,
+        traveling: false,
         schedule_kind: 1,
         next_action_ts: now,
+        anchor_entity_id: 0,
+        previous_anchors: Vec::new(),
     });
     Ok(NpcState {
         npc_id,
+        npc_type: 1,
         region_id,
         dimension_id,
         hex_x,
@@ -113,7 +118,10 @@ pub(crate) fn ensure_npc(
         dest_hex_z: hex_z,
         role: 0,
         mood: 0,
+        traveling: false,
         schedule_kind: 1,
         next_action_ts: now,
-    })
+        anchor_entity_id: 0,
+        previous_anchors: Vec::new(),
+    }
 }

@@ -19,5 +19,6 @@ pub use social_stream::{
     party_state_stream_query, social_feed_stream_query,
 };
 pub use world_stream::{
-    resource_node_stream_query, terrain_chunk_payload_stream_query, terrain_chunk_stream_query,
+    npc_state_stream_query, resource_node_stream_query, terrain_chunk_payload_stream_query,
+    terrain_chunk_stream_query,
 };

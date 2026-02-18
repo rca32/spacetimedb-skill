@@ -124,8 +124,12 @@ import MovementFeedbackCleanupReducer from "./movement_feedback_cleanup_reducer"
 export { MovementFeedbackCleanupReducer };
 import MovementFeedbackCleanupGlobalReducer from "./movement_feedback_cleanup_global_reducer";
 export { MovementFeedbackCleanupGlobalReducer };
+import NpcActionResolveReducer from "./npc_action_resolve_reducer";
+export { NpcActionResolveReducer };
 import NpcAiAgentLoopReducer from "./npc_ai_agent_loop_reducer";
 export { NpcAiAgentLoopReducer };
+import NpcDialogueRequestReducer from "./npc_dialogue_request_reducer";
+export { NpcDialogueRequestReducer };
 import NpcQuestReducer from "./npc_quest_reducer";
 export { NpcQuestReducer };
 import NpcTalkReducer from "./npc_talk_reducer";
@@ -174,6 +178,8 @@ import SessionCleanupAgentLoopReducer from "./session_cleanup_agent_loop_reducer
 export { SessionCleanupAgentLoopReducer };
 import SetActiveDimensionReducer from "./set_active_dimension_reducer";
 export { SetActiveDimensionReducer };
+import SetNpcAiEnabledReducer from "./set_npc_ai_enabled_reducer";
+export { SetNpcAiEnabledReducer };
 import SetWorldgenParamsReducer from "./set_worldgen_params_reducer";
 export { SetWorldgenParamsReducer };
 import SignInReducer from "./sign_in_reducer";
@@ -192,6 +198,12 @@ import TradeSessionOpenReducer from "./trade_session_open_reducer";
 export { TradeSessionOpenReducer };
 import UnlockInventoryContainerReducer from "./unlock_inventory_container_reducer";
 export { UnlockInventoryContainerReducer };
+import UpsertNpcAnchorStateReducer from "./upsert_npc_anchor_state_reducer";
+export { UpsertNpcAnchorStateReducer };
+import UpsertNpcPopulationDefReducer from "./upsert_npc_population_def_reducer";
+export { UpsertNpcPopulationDefReducer };
+import UpsertNpcTradeOrderDefReducer from "./upsert_npc_trade_order_def_reducer";
+export { UpsertNpcTradeOrderDefReducer };
 
 // Import and reexport all procedure arg types
 
@@ -326,6 +338,8 @@ import NpcActionScheduleRow from "./npc_action_schedule_table";
 export { NpcActionScheduleRow };
 import NpcAiLoopTimerRow from "./npc_ai_loop_timer_table";
 export { NpcAiLoopTimerRow };
+import NpcAnchorStateRow from "./npc_anchor_state_table";
+export { NpcAnchorStateRow };
 import NpcConversationSessionRow from "./npc_conversation_session_table";
 export { NpcConversationSessionRow };
 import NpcConversationTurnRow from "./npc_conversation_turn_table";
@@ -342,12 +356,18 @@ import NpcPathStateRow from "./npc_path_state_table";
 export { NpcPathStateRow };
 import NpcPolicyViolationRow from "./npc_policy_violation_table";
 export { NpcPolicyViolationRow };
+import NpcPopulationDefRow from "./npc_population_def_table";
+export { NpcPopulationDefRow };
 import NpcRelationRow from "./npc_relation_table";
 export { NpcRelationRow };
 import NpcResponseCacheRow from "./npc_response_cache_table";
 export { NpcResponseCacheRow };
 import NpcStateRow from "./npc_state_table";
 export { NpcStateRow };
+import NpcTradeOrderDefRow from "./npc_trade_order_def_table";
+export { NpcTradeOrderDefRow };
+import NpcTradeOrderStateRow from "./npc_trade_order_state_table";
+export { NpcTradeOrderStateRow };
 import OrderFillRow from "./order_fill_table";
 export { OrderFillRow };
 import ParamChangeLogRow from "./param_change_log_table";
@@ -576,6 +596,8 @@ import NpcActionSchedule from "./npc_action_schedule_type";
 export { NpcActionSchedule };
 import NpcAiLoopTimer from "./npc_ai_loop_timer_type";
 export { NpcAiLoopTimer };
+import NpcAnchorState from "./npc_anchor_state_type";
+export { NpcAnchorState };
 import NpcConversationSession from "./npc_conversation_session_type";
 export { NpcConversationSession };
 import NpcConversationTurn from "./npc_conversation_turn_type";
@@ -592,12 +614,18 @@ import NpcPathState from "./npc_path_state_type";
 export { NpcPathState };
 import NpcPolicyViolation from "./npc_policy_violation_type";
 export { NpcPolicyViolation };
+import NpcPopulationDef from "./npc_population_def_type";
+export { NpcPopulationDef };
 import NpcRelation from "./npc_relation_type";
 export { NpcRelation };
 import NpcResponseCache from "./npc_response_cache_type";
 export { NpcResponseCache };
 import NpcState from "./npc_state_type";
 export { NpcState };
+import NpcTradeOrderDef from "./npc_trade_order_def_type";
+export { NpcTradeOrderDef };
+import NpcTradeOrderState from "./npc_trade_order_state_type";
+export { NpcTradeOrderState };
 import OrderFill from "./order_fill_type";
 export { OrderFill };
 import ParamChangeLog from "./param_change_log_type";
@@ -1413,6 +1441,17 @@ const tablesSchema = __schema(
     ],
   }, NpcAiLoopTimerRow),
   __table({
+    name: 'npc_anchor_state',
+    indexes: [
+      { name: 'anchor_id', algorithm: 'btree', columns: [
+        'anchorId',
+      ] },
+    ],
+    constraints: [
+      { name: 'npc_anchor_state_anchor_id_key', constraint: 'unique', columns: ['anchorId'] },
+    ],
+  }, NpcAnchorStateRow),
+  __table({
     name: 'npc_conversation_session',
     indexes: [
       { name: 'session_id', algorithm: 'btree', columns: [
@@ -1501,6 +1540,17 @@ const tablesSchema = __schema(
     ],
   }, NpcPolicyViolationRow),
   __table({
+    name: 'npc_population_def',
+    indexes: [
+      { name: 'npc_type', algorithm: 'btree', columns: [
+        'npcType',
+      ] },
+    ],
+    constraints: [
+      { name: 'npc_population_def_npc_type_key', constraint: 'unique', columns: ['npcType'] },
+    ],
+  }, NpcPopulationDefRow),
+  __table({
     name: 'npc_relation',
     indexes: [
       { name: 'relation_key', algorithm: 'btree', columns: [
@@ -1533,6 +1583,28 @@ const tablesSchema = __schema(
       { name: 'npc_state_npc_id_key', constraint: 'unique', columns: ['npcId'] },
     ],
   }, NpcStateRow),
+  __table({
+    name: 'npc_trade_order_def',
+    indexes: [
+      { name: 'order_def_id', algorithm: 'btree', columns: [
+        'orderDefId',
+      ] },
+    ],
+    constraints: [
+      { name: 'npc_trade_order_def_order_def_id_key', constraint: 'unique', columns: ['orderDefId'] },
+    ],
+  }, NpcTradeOrderDefRow),
+  __table({
+    name: 'npc_trade_order_state',
+    indexes: [
+      { name: 'order_key', algorithm: 'btree', columns: [
+        'orderKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'npc_trade_order_state_order_key_key', constraint: 'unique', columns: ['orderKey'] },
+    ],
+  }, NpcTradeOrderStateRow),
   __table({
     name: 'order_fill',
     indexes: [
@@ -2110,7 +2182,9 @@ const reducersSchema = __reducers(
   __reducerSchema("move_to", MoveToReducer),
   __reducerSchema("movement_feedback_cleanup", MovementFeedbackCleanupReducer),
   __reducerSchema("movement_feedback_cleanup_global", MovementFeedbackCleanupGlobalReducer),
+  __reducerSchema("npc_action_resolve", NpcActionResolveReducer),
   __reducerSchema("npc_ai_agent_loop", NpcAiAgentLoopReducer),
+  __reducerSchema("npc_dialogue_request", NpcDialogueRequestReducer),
   __reducerSchema("npc_quest", NpcQuestReducer),
   __reducerSchema("npc_talk", NpcTalkReducer),
   __reducerSchema("npc_trade", NpcTradeReducer),
@@ -2135,6 +2209,7 @@ const reducersSchema = __reducers(
   __reducerSchema("seed_data", SeedDataReducer),
   __reducerSchema("session_cleanup_agent_loop", SessionCleanupAgentLoopReducer),
   __reducerSchema("set_active_dimension", SetActiveDimensionReducer),
+  __reducerSchema("set_npc_ai_enabled", SetNpcAiEnabledReducer),
   __reducerSchema("set_worldgen_params", SetWorldgenParamsReducer),
   __reducerSchema("sign_in", SignInReducer),
   __reducerSchema("sign_out", SignOutReducer),
@@ -2144,6 +2219,9 @@ const reducersSchema = __reducers(
   __reducerSchema("trade_item_add", TradeItemAddReducer),
   __reducerSchema("trade_session_open", TradeSessionOpenReducer),
   __reducerSchema("unlock_inventory_container", UnlockInventoryContainerReducer),
+  __reducerSchema("upsert_npc_anchor_state", UpsertNpcAnchorStateReducer),
+  __reducerSchema("upsert_npc_population_def", UpsertNpcPopulationDefReducer),
+  __reducerSchema("upsert_npc_trade_order_def", UpsertNpcTradeOrderDefReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
@@ -2199,4 +2277,3 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
-

@@ -37,6 +37,18 @@ pub struct QuestChainDefRecord {
     pub reward_item_qty: u32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NpcPopulationDefRecord {
+    pub npc_type: u8,
+    pub population_permille: u16,
+    pub min_action_seconds: u16,
+    pub max_action_seconds: u16,
+    pub default_schedule_kind: u8,
+    pub default_role: u8,
+    pub traveling_enabled: bool,
+    pub enabled: bool,
+}
+
 #[derive(Debug, Deserialize)]
 struct ItemDefCsvRow {
     item_def_id: u64,
@@ -70,6 +82,18 @@ struct QuestChainDefCsvRow {
     stage_count: u32,
     reward_item_def_id: u64,
     reward_item_qty: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct NpcPopulationDefCsvRow {
+    npc_type: u8,
+    population_permille: u16,
+    min_action_seconds: u16,
+    max_action_seconds: u16,
+    default_schedule_kind: u8,
+    default_role: u8,
+    traveling_enabled: bool,
+    enabled: bool,
 }
 
 pub fn parse_item_defs(csv_data: &str) -> Result<Vec<ItemDefRecord>, String> {
@@ -237,6 +261,52 @@ pub fn parse_quest_chain_defs(csv_data: &str) -> Result<Vec<QuestChainDefRecord>
     Ok(out)
 }
 
+pub fn parse_npc_population_defs(csv_data: &str) -> Result<Vec<NpcPopulationDefRecord>, String> {
+    let rows = parse_csv::<NpcPopulationDefCsvRow>(csv_data)?;
+    let mut ids = HashSet::new();
+    let mut out = Vec::with_capacity(rows.len());
+
+    for row in rows {
+        if row.npc_type == 0 {
+            return Err("npc_type must be > 0".to_string());
+        }
+        if row.population_permille > 1_000 {
+            return Err(format!(
+                "npc_type {} has population_permille > 1000",
+                row.npc_type
+            ));
+        }
+        if row.min_action_seconds == 0 {
+            return Err(format!(
+                "npc_type {} has min_action_seconds == 0",
+                row.npc_type
+            ));
+        }
+        if row.max_action_seconds < row.min_action_seconds {
+            return Err(format!(
+                "npc_type {} has max_action_seconds < min_action_seconds",
+                row.npc_type
+            ));
+        }
+        if !ids.insert(row.npc_type) {
+            return Err(format!("duplicate npc_type: {}", row.npc_type));
+        }
+
+        out.push(NpcPopulationDefRecord {
+            npc_type: row.npc_type,
+            population_permille: row.population_permille,
+            min_action_seconds: row.min_action_seconds,
+            max_action_seconds: row.max_action_seconds,
+            default_schedule_kind: row.default_schedule_kind,
+            default_role: row.default_role,
+            traveling_enabled: row.traveling_enabled,
+            enabled: row.enabled,
+        });
+    }
+
+    Ok(out)
+}
+
 fn parse_csv<T: DeserializeOwned>(csv_data: &str) -> Result<Vec<T>, String> {
     let mut reader = csv::ReaderBuilder::new()
         .trim(csv::Trim::All)
@@ -280,5 +350,13 @@ mod tests {
         let csv = "action_def_id,base_damage,cooldown_ms,range_meters\n1,0,1000,2\n";
         let err = parse_combat_action_defs(csv).expect_err("zero damage should fail");
         assert!(err.contains("base_damage <= 0"));
+    }
+
+    #[test]
+    fn test_parse_npc_population_defs_success() {
+        let csv = "npc_type,population_permille,min_action_seconds,max_action_seconds,default_schedule_kind,default_role,traveling_enabled,enabled\n1,200,2,6,1,1,true,true\n";
+        let rows = parse_npc_population_defs(csv).expect("parse should succeed");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].npc_type, 1);
     }
 }

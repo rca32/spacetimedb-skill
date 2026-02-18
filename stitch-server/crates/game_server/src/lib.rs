@@ -1,5 +1,6 @@
 use data_loader::{
-    parse_building_defs, parse_combat_action_defs, parse_item_defs, parse_quest_chain_defs,
+    parse_building_defs, parse_combat_action_defs, parse_item_defs, parse_npc_population_defs,
+    parse_quest_chain_defs,
 };
 use spacetimedb::{ReducerContext, Table};
 
@@ -18,8 +19,9 @@ pub mod validation;
 pub mod worldgen;
 
 use tables::item_def::item_def;
+use tables::npc_quest::npc_population_def;
 use tables::static_data::{building_def, combat_action_def, quest_chain_def};
-use tables::{BuildingDef, CombatActionDef, ItemDef, QuestChainDef};
+use tables::{BuildingDef, CombatActionDef, ItemDef, NpcPopulationDef, QuestChainDef};
 
 const ITEM_DEF_CSV: &str = include_str!("../../../assets/static_data/items/item_def.csv");
 const BUILDING_DEF_CSV: &str =
@@ -28,6 +30,8 @@ const COMBAT_ACTION_DEF_CSV: &str =
     include_str!("../../../assets/static_data/combat/combat_action_def.csv");
 const QUEST_CHAIN_DEF_CSV: &str =
     include_str!("../../../assets/static_data/quests/quest_chain_def.csv");
+const NPC_POPULATION_DEF_CSV: &str =
+    include_str!("../../../assets/static_data/npc/npc_population_def.csv");
 
 #[spacetimedb::reducer]
 pub fn seed_data(ctx: &ReducerContext) {
@@ -50,6 +54,7 @@ pub fn import_csv_by_type(ctx: &ReducerContext, data_type: String) -> Result<(),
         "buildings" => import_building_defs(ctx).map(|_| ()),
         "combat" => import_combat_action_defs(ctx).map(|_| ()),
         "quests" => import_quest_chain_defs(ctx).map(|_| ()),
+        "npc" => import_npc_population_defs(ctx).map(|_| ()),
         "all" => import_all_csv_types(ctx),
         _ => Err(format!("unsupported import type: {data_type}")),
     }
@@ -60,13 +65,15 @@ fn import_all_csv_types(ctx: &ReducerContext) -> Result<(), String> {
     let buildings = import_building_defs(ctx)?;
     let combat = import_combat_action_defs(ctx)?;
     let quests = import_quest_chain_defs(ctx)?;
+    let npc = import_npc_population_defs(ctx)?;
 
     log::info!(
-        "import_csv_data complete: items={}, buildings={}, combat={}, quests={}",
+        "import_csv_data complete: items={}, buildings={}, combat={}, quests={}, npc={}",
         items,
         buildings,
         combat,
-        quests
+        quests,
+        npc
     );
     Ok(())
 }
@@ -189,6 +196,33 @@ fn import_quest_chain_defs(ctx: &ReducerContext) -> Result<usize, String> {
             stage_count: row.stage_count,
             reward_item_def_id: row.reward_item_def_id,
             reward_item_qty: row.reward_item_qty,
+        });
+    }
+    Ok(rows.len())
+}
+
+fn import_npc_population_defs(ctx: &ReducerContext) -> Result<usize, String> {
+    let rows = parse_npc_population_defs(NPC_POPULATION_DEF_CSV)?;
+    for row in &rows {
+        if ctx
+            .db
+            .npc_population_def()
+            .npc_type()
+            .find(row.npc_type)
+            .is_some()
+        {
+            ctx.db.npc_population_def().npc_type().delete(row.npc_type);
+        }
+        ctx.db.npc_population_def().insert(NpcPopulationDef {
+            npc_type: row.npc_type,
+            population_permille: row.population_permille,
+            min_action_seconds: row.min_action_seconds,
+            max_action_seconds: row.max_action_seconds,
+            default_schedule_kind: row.default_schedule_kind,
+            default_role: row.default_role,
+            traveling_enabled: row.traveling_enabled,
+            enabled: row.enabled,
+            updated_at: ctx.timestamp,
         });
     }
     Ok(rows.len())
