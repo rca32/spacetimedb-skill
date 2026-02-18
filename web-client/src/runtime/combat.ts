@@ -30,6 +30,8 @@ type PlayerSessionViewRow = {
   dimensionId: number
 }
 
+type CharacterActionEventName = 'jump' | 'wave' | 'attack'
+
 export function createCombatRuntime(): RuntimeModule {
   const pressed = new Set<string>()
   const scheduledSeen = new Set<string>()
@@ -48,11 +50,19 @@ export function createCombatRuntime(): RuntimeModule {
         }
         if (event.code === 'Space') {
           pressed.add('Space')
+        } else if (event.code === 'KeyQ') {
+          pressed.add('KeyQ')
+        } else if (event.code === 'KeyE') {
+          pressed.add('KeyE')
         }
       }
       onKeyUp = (event) => {
         if (event.code === 'Space') {
           pressed.delete('Space')
+        } else if (event.code === 'KeyQ') {
+          pressed.delete('KeyQ')
+        } else if (event.code === 'KeyE') {
+          pressed.delete('KeyE')
         }
       }
       window.addEventListener('keydown', onKeyDown)
@@ -66,8 +76,16 @@ export function createCombatRuntime(): RuntimeModule {
         return
       }
 
+      if (pressed.delete('KeyQ')) {
+        emitCharacterAction(localIdentityHex, 'jump')
+      }
+      if (pressed.delete('KeyE')) {
+        emitCharacterAction(localIdentityHex, 'wave')
+      }
+
       const nowMs = Date.now()
-      if (pressed.has('Space') && nowMs - lastAttackMs >= ATTACK_COOLDOWN_MS) {
+      if (pressed.delete('Space') && nowMs - lastAttackMs >= ATTACK_COOLDOWN_MS) {
+        emitCharacterAction(localIdentityHex, 'attack')
         const targetIdentity = pickAttackTargetIdentity(connection, localIdentityHex)
         if (targetIdentity) {
           const requestId = `atk-${nowMs}-${requestSequence}`
@@ -77,8 +95,8 @@ export function createCombatRuntime(): RuntimeModule {
             targetIdentity,
             clientTsMs: BigInt(nowMs),
           })
-          lastAttackMs = nowMs
         }
+        lastAttackMs = nowMs
       }
 
       for (const state of connection.db.attackScheduleState.iter() as Iterable<AttackScheduleStateRow>) {
@@ -203,4 +221,8 @@ function identityHex(value: unknown): string {
     return candidate.toHexString()
   }
   return String(value)
+}
+
+function emitCharacterAction(identityHex: string, action: CharacterActionEventName): void {
+  window.dispatchEvent(new CustomEvent('stitch:character-action', { detail: { identityHex, action } }))
 }

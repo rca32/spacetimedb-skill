@@ -142,6 +142,7 @@ type CharacterAnimator = {
   nextIdleVariantAtSeconds: number
   footstepDistanceAccum: number
   footstepVariant: number
+  scriptedAction: ScriptedCharacterAction | null
 }
 
 type TerrainChunkRenderable = {
@@ -171,6 +172,7 @@ const FOOTSTEP_DISTANCE_RUN = 0.7
 const FOOTSTEP_VOLUME_WALK = 0.22
 const FOOTSTEP_VOLUME_RUN = 0.3
 const FOOTSTEP_SFX_NAMES = ['footstep_01', 'footstep_02'] as const
+const MAX_QUEUED_ACTIONS_PER_CHARACTER = 6
 const MIXAMO_HIP_BONE = 'mixamorig:Hips'
 const CHARACTER_GAMER_TO_MIXAMO_BONE_MAP: Record<string, string> = {
   root: MIXAMO_HIP_BONE,
@@ -197,6 +199,23 @@ const PATH_STATUS_INVALID = 4
 type ExternalClipSpec = {
   path: string
   clipName?: string
+}
+
+export type CharacterActionSlot =
+  | 'jump_external'
+  | 'hit_reaction_external'
+  | 'death_external'
+  | 'emote_wave_external'
+  | 'attack_primary_external'
+
+type ScriptedCharacterAction = {
+  slot: CharacterActionSlot
+  action: THREE.AnimationAction
+  remainingSeconds: number
+}
+
+type QueuedCharacterAction = {
+  slot: CharacterActionSlot
 }
 
 type PathDebugLineRenderable = {
@@ -304,6 +323,7 @@ export class WorldStreamingRenderer {
   private readonly retargetedClipCache = new Map<string, THREE.AnimationClip>()
   private readonly failedExternalActionBindings = new Set<string>()
   private readonly pathDebugLines = new Map<string, PathDebugLineRenderable>()
+  private readonly queuedCharacterActions = new Map<string, QueuedCharacterAction[]>()
 
   constructor(scene: THREE.Scene, materials: MaterialPalette) {
     const terrainGeometry = new THREE.PlaneGeometry(16, 16)
@@ -360,6 +380,49 @@ export class WorldStreamingRenderer {
     this.root.add(this.pathDebugRoot)
     scene.add(this.gltfRoot)
     scene.add(this.root)
+  }
+
+  queueCharacterAction(worldKey: string, slot: CharacterActionSlot): void {
+    const queue = this.queuedCharacterActions.get(worldKey) ?? []
+    const last = queue[queue.length - 1]
+    if (last && last.slot === slot) {
+      return
+    }
+    if (queue.length >= MAX_QUEUED_ACTIONS_PER_CHARACTER) {
+      queue.shift()
+    }
+    queue.push({ slot })
+    this.queuedCharacterActions.set(worldKey, queue)
+  }
+
+  queueCharacterActionByIdentity(identityHex: string, slot: CharacterActionSlot): void {
+    const wanted = normalizeIdentityHex(identityHex)
+    let matched = false
+    for (const key of this.characterAnimators.keys()) {
+      if (tableFromWorldKey(key) !== 'transform_state') {
+        continue
+      }
+      const rawIdentity = keyEntityIdFromWorldKey(key)
+      if (normalizeIdentityHex(rawIdentity) !== wanted) {
+        continue
+      }
+      this.queueCharacterAction(key, slot)
+      matched = true
+    }
+    if (matched) {
+      return
+    }
+    const raw = identityHex.trim()
+    const withoutPrefix = raw.replace(/^0x/i, '')
+    const lowerRaw = raw.toLowerCase()
+    const lowerNoPrefix = withoutPrefix.toLowerCase()
+    const candidates = new Set<string>([raw, withoutPrefix, lowerRaw, lowerNoPrefix])
+    for (const candidate of candidates) {
+      if (candidate.length === 0) {
+        continue
+      }
+      this.queueCharacterAction(`transform_state:${candidate}`, slot)
+    }
   }
 
   sync(world: CoreWorld, dtSeconds: number): void {
@@ -869,6 +932,7 @@ export class WorldStreamingRenderer {
     this.actorPool.removeMissing(new Set())
     this.npcPool.removeMissing(new Set())
     this.clearCharacterAnimators()
+    this.queuedCharacterActions.clear()
     this.clearPathDebugOverlay()
     this.pruneGltfRenderables(new Set())
   }
@@ -944,6 +1008,19 @@ export class WorldStreamingRenderer {
   private updateCharacterAnimators(dtSeconds: number): void {
     for (const animator of this.characterAnimators.values()) {
       animator.mixer.update(dtSeconds)
+      const scripted = animator.scriptedAction
+      if (!scripted) {
+        continue
+      }
+      scripted.remainingSeconds -= dtSeconds
+      if (scripted.remainingSeconds > 0) {
+        continue
+      }
+      scripted.action.setEffectiveWeight(0)
+      scripted.action.stop()
+      scripted.action.clampWhenFinished = false
+      scripted.action.setLoop(THREE.LoopRepeat, Number.POSITIVE_INFINITY)
+      animator.scriptedAction = null
     }
   }
 
@@ -970,6 +1047,7 @@ export class WorldStreamingRenderer {
       existing.nextIdleVariantAtSeconds = randomIdleVariantSeconds()
       existing.footstepDistanceAccum = 0
       existing.footstepVariant = 0
+      existing.scriptedAction = null
       for (const animation of model.animations) {
         const action = existing.mixer.clipAction(animation)
         action.clampWhenFinished = false
@@ -1004,6 +1082,7 @@ export class WorldStreamingRenderer {
       nextIdleVariantAtSeconds: randomIdleVariantSeconds(),
       footstepDistanceAccum: 0,
       footstepVariant: 0,
+      scriptedAction: null,
     })
   }
 
@@ -1024,6 +1103,16 @@ export class WorldStreamingRenderer {
     }
 
     this.trySetupDirectionalActions(animator, animationAliases)
+    if (animationAliases) {
+      this.tryBindAuxExternalActions(animator, animationAliases)
+    }
+    this.tryPlayQueuedCharacterAction(key, animator, animationAliases)
+
+    if (animator.scriptedAction) {
+      this.syncAnimatorMotionTracking(animator, transform, dtSeconds)
+      return
+    }
+
     if (animator.directionalActions) {
       this.updateDirectionalAnimationState(animator, transform, dtSeconds, emitFootsteps)
       return
@@ -1078,27 +1167,165 @@ export class WorldStreamingRenderer {
     animator.lastPosition.set(transform.x, transform.y, transform.z)
   }
 
+  private syncAnimatorMotionTracking(animator: CharacterAnimator, transform: ModelTransform, dtSeconds: number): void {
+    const dx = transform.x - animator.lastPosition.x
+    const dz = transform.z - animator.lastPosition.z
+    const distance = Math.sqrt(dx * dx + dz * dz)
+    const speed = distance / dtSeconds
+    animator.motion = this.resolveCharacterMotion(animator.motion, speed)
+    animator.idleElapsedSeconds = 0
+    animator.lastPosition.set(transform.x, transform.y, transform.z)
+    animator.lastYawRad = yawFromModelTransform(transform)
+  }
+
+  private tryPlayQueuedCharacterAction(
+    key: string,
+    animator: CharacterAnimator,
+    aliases: CharacterAnimationAliases | null,
+  ): void {
+    if (animator.scriptedAction) {
+      return
+    }
+    const queue = this.queuedCharacterActions.get(key)
+    if (!queue || queue.length === 0) {
+      return
+    }
+    if (!aliases) {
+      return
+    }
+
+    const next = queue[0]
+    const alias = externalAliasForActionSlot(aliases, next.slot)
+    if (!alias) {
+      queue.shift()
+      if (queue.length === 0) {
+        this.queuedCharacterActions.delete(key)
+      }
+      return
+    }
+
+    const action = this.resolveExternalActionByAlias(animator, alias, next.slot)
+    if (!action) {
+      return
+    }
+
+    queue.shift()
+    if (queue.length === 0) {
+      this.queuedCharacterActions.delete(key)
+    }
+    this.playScriptedAction(animator, action, next.slot)
+  }
+
+  private playScriptedAction(
+    animator: CharacterAnimator,
+    action: THREE.AnimationAction,
+    slot: CharacterActionSlot,
+  ): void {
+    if (slot === 'attack_primary_external') {
+      AssetLoader.playSfx('attack_swing', 0.28)
+    } else if (slot === 'hit_reaction_external' || slot === 'death_external') {
+      AssetLoader.playSfx('attack_hit', 0.3)
+    }
+
+    action.enabled = true
+    action.clampWhenFinished = true
+    action.setLoop(THREE.LoopOnce, 1)
+    action.reset()
+    action.setEffectiveWeight(1)
+    if (animator.directionalActions) {
+      const uniqueActions = new Set<THREE.AnimationAction>(Object.values(animator.directionalActions))
+      if (animator.turnActions?.turnLeft) {
+        uniqueActions.add(animator.turnActions.turnLeft)
+      }
+      if (animator.turnActions?.turnRight) {
+        uniqueActions.add(animator.turnActions.turnRight)
+      }
+      if (animator.turnActions?.turnBack) {
+        uniqueActions.add(animator.turnActions.turnBack)
+      }
+      for (const directionalAction of uniqueActions) {
+        directionalAction.setEffectiveWeight(0)
+      }
+    }
+    action.play()
+
+    animator.scriptedAction = {
+      slot,
+      action,
+      remainingSeconds: Math.max(0.35, action.getClip().duration + 0.2),
+    }
+    animator.activeAction = action
+  }
+
   private trySetupDirectionalActions(animator: CharacterAnimator, aliases: CharacterAnimationAliases | null): void {
     if (animator.directionalActions || !aliases) {
       return
     }
 
-    const idle = this.resolveActionByAlias(animator, aliases.idle) ?? this.findAnimationAction(animator, 'idle')
-    const walkForward =
-      this.resolveActionByAlias(animator, aliases.walk_forward) ?? this.findAnimationAction(animator, 'walk')
-    const runForward =
-      this.resolveActionByAlias(animator, aliases.run_forward) ?? this.findAnimationAction(animator, 'run')
+    const idle = this.resolveDirectionalAction(
+      animator,
+      aliases.idle_external,
+      aliases.idle,
+      'idle_external',
+      'idle',
+    )
+    const walkForward = this.resolveDirectionalAction(
+      animator,
+      aliases.walk_forward_external,
+      aliases.walk_forward,
+      'walk_forward_external',
+      'walk',
+    )
+    const runForward = this.resolveDirectionalAction(
+      animator,
+      aliases.run_forward_external,
+      aliases.run_forward,
+      'run_forward_external',
+      'run',
+    )
 
     if (!idle || !walkForward || !runForward) {
       return
     }
 
-    const walkBackward = this.resolveActionByAlias(animator, aliases.walk_backward) ?? walkForward
-    const walkLeft = this.resolveActionByAlias(animator, aliases.walk_left) ?? walkForward
-    const walkRight = this.resolveActionByAlias(animator, aliases.walk_right) ?? walkForward
-    const runBackward = this.resolveActionByAlias(animator, aliases.run_backward) ?? runForward
-    const runLeft = this.resolveActionByAlias(animator, aliases.run_left) ?? runForward
-    const runRight = this.resolveActionByAlias(animator, aliases.run_right) ?? runForward
+    const walkBackward =
+      this.resolveDirectionalAction(
+        animator,
+        aliases.walk_backward_external,
+        aliases.walk_backward,
+        'walk_backward_external',
+        'walk',
+      ) ?? walkForward
+    const walkLeft =
+      this.resolveDirectionalAction(animator, aliases.walk_left_external, aliases.walk_left, 'walk_left_external', 'walk') ??
+      walkForward
+    const walkRight =
+      this.resolveDirectionalAction(
+        animator,
+        aliases.walk_right_external,
+        aliases.walk_right,
+        'walk_right_external',
+        'walk',
+      ) ?? walkForward
+    const runBackward =
+      this.resolveDirectionalAction(
+        animator,
+        aliases.run_backward_external,
+        aliases.run_backward,
+        'run_backward_external',
+        'run',
+      ) ?? runForward
+    const runLeft =
+      this.resolveDirectionalAction(animator, aliases.run_left_external, aliases.run_left, 'run_left_external', 'run') ??
+      runForward
+    const runRight =
+      this.resolveDirectionalAction(
+        animator,
+        aliases.run_right_external,
+        aliases.run_right,
+        'run_right_external',
+        'run',
+      ) ?? runForward
     const turnLeft =
       this.resolveExternalActionByAlias(animator, aliases.turn_left_external, 'turn_left_external') ??
       this.resolveActionByAlias(animator, aliases.turn_left)
@@ -1108,6 +1335,7 @@ export class WorldStreamingRenderer {
     const turnBack =
       this.resolveExternalActionByAlias(animator, aliases.turn_back_external, 'turn_back_external') ??
       this.resolveActionByAlias(animator, aliases.turn_back)
+    this.tryBindAuxExternalActions(animator, aliases)
 
     const directionalActions: DirectionalActionSet = {
       idle,
@@ -1153,6 +1381,32 @@ export class WorldStreamingRenderer {
     animator.idleElapsedSeconds = 0
     animator.nextIdleVariantAtSeconds = randomIdleVariantSeconds()
     animator.footstepDistanceAccum = 0
+  }
+
+  private resolveDirectionalAction(
+    animator: CharacterAnimator,
+    externalAlias: string | undefined,
+    alias: string | undefined,
+    actionSlot: string,
+    fallbackHint: string,
+  ): THREE.AnimationAction | undefined {
+    const internal = this.resolveActionByAlias(animator, alias) ?? this.findAnimationAction(animator, fallbackHint)
+    if (internal) {
+      return internal
+    }
+    const hasExternal = Boolean(parseExternalClipSpec(externalAlias))
+    if (!hasExternal) {
+      return undefined
+    }
+    return this.resolveExternalActionByAlias(animator, externalAlias, actionSlot)
+  }
+
+  private tryBindAuxExternalActions(animator: CharacterAnimator, aliases: CharacterAnimationAliases): void {
+    this.resolveExternalActionByAlias(animator, aliases.jump_external, 'jump_external')
+    this.resolveExternalActionByAlias(animator, aliases.hit_reaction_external, 'hit_reaction_external')
+    this.resolveExternalActionByAlias(animator, aliases.death_external, 'death_external')
+    this.resolveExternalActionByAlias(animator, aliases.emote_wave_external, 'emote_wave_external')
+    this.resolveExternalActionByAlias(animator, aliases.attack_primary_external, 'attack_primary_external')
   }
 
   private resolveActionByAlias(animator: CharacterAnimator, alias: string | undefined): THREE.AnimationAction | undefined {
@@ -1468,6 +1722,7 @@ export class WorldStreamingRenderer {
       animator.actions.clear()
     }
     this.characterAnimators.clear()
+    this.queuedCharacterActions.clear()
   }
 
   private queueModelLoad(path: string): void {
@@ -1510,6 +1765,7 @@ export class WorldStreamingRenderer {
     }
     this.gltfObjects.delete(key)
     this.gltfPathByKey.delete(key)
+    this.queuedCharacterActions.delete(key)
   }
 
   private applyModelTransform(object: THREE.Object3D, transform: ModelTransform): void {
@@ -1856,6 +2112,32 @@ function tableFromWorldKey(key: string): string {
     return key
   }
   return key.slice(0, separator)
+}
+
+function keyEntityIdFromWorldKey(key: string): string {
+  const separator = key.indexOf(':')
+  if (separator < 0) {
+    return key
+  }
+  return key.slice(separator + 1)
+}
+
+function externalAliasForActionSlot(
+  aliases: CharacterAnimationAliases,
+  slot: CharacterActionSlot,
+): string | undefined {
+  switch (slot) {
+    case 'jump_external':
+      return aliases.jump_external
+    case 'hit_reaction_external':
+      return aliases.hit_reaction_external
+    case 'death_external':
+      return aliases.death_external
+    case 'emote_wave_external':
+      return aliases.emote_wave_external
+    case 'attack_primary_external':
+      return aliases.attack_primary_external
+  }
 }
 
 function parseExternalClipSpec(alias: string | undefined): ExternalClipSpec | null {
