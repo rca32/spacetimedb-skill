@@ -6,7 +6,7 @@ use crate::tables::movement::movement_actor_state;
 use crate::tables::movement::movement_request_log;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
-use crate::tables::{MovementActorState, MovementRequestLog, TransformState};
+use crate::tables::{MovementActorState, MovementRequestLog, SessionState, TransformState};
 use crate::validation::anti_cheat;
 
 #[spacetimedb::reducer]
@@ -97,6 +97,13 @@ pub fn move_to(
         );
         return Ok(());
     }
+
+    // Treat validated movement requests as session activity so active players are not expired.
+    ctx.db.session_state().identity().update(SessionState {
+        identity: session.identity,
+        region_id: session.region_id,
+        last_active_at: ctx.timestamp,
+    });
 
     let actor_state = ctx.db.movement_actor_state().identity().find(ctx.sender);
     if let Err(reason) =

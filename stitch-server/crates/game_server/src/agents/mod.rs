@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table};
 
+use crate::services::projection_views;
 use crate::services::hex_coords::HexCoord;
 use crate::services::pathfinding;
 use crate::tables::agent_timers::{
@@ -16,6 +17,7 @@ use crate::tables::environment_effect::{
 };
 use crate::tables::live_ops::balance_params;
 use crate::tables::npc_quest::npc_state;
+use crate::tables::player_views::player_session_view;
 use crate::tables::player_progression::{
     character_stats, npc_action_schedule, resource_state, status_effect,
 };
@@ -774,6 +776,16 @@ pub fn session_cleanup_agent_loop(ctx: &ReducerContext, arg: SessionCleanupLoopT
 
     for identity in stale_sessions {
         ctx.db.session_state().identity().delete(identity);
+    }
+
+    let projected_identities: Vec<_> = ctx
+        .db
+        .player_session_view()
+        .iter()
+        .map(|row| row.identity)
+        .collect();
+    for identity in projected_identities {
+        projection_views::sync_player_session_view(ctx, identity);
     }
 
     if let Some(mut timer) = ctx
