@@ -6,7 +6,7 @@ use std::time::Duration;
 use spacetimedb::{Identity, ReducerContext, ScheduleAt, Table};
 
 use crate::services::projection_views;
-use crate::services::hex_coords::HexCoord;
+use crate::services::hex_coords::{HexCoord, DEFAULT_WORLD_DIMENSION_ID};
 use crate::services::pathfinding;
 use crate::services::permissions;
 use crate::tables::agent_timers::{
@@ -1109,6 +1109,7 @@ fn reconcile_npc_population(ctx: &ReducerContext, now_us: u64) {
                 npc_id,
                 npc_type,
                 region_id: anchor.region_id,
+                dimension_id: DEFAULT_WORLD_DIMENSION_ID,
                 hex_x: anchor.hex_x,
                 hex_z: anchor.hex_z,
                 dest_hex_x: anchor.hex_x,

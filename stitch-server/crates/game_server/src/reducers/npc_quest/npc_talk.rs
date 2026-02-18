@@ -123,5 +123,5 @@ pub(crate) fn ensure_npc(
         next_action_ts: now,
         anchor_entity_id: 0,
         previous_anchors: Vec::new(),
-    }
+    })
 }

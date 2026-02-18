@@ -59,7 +59,7 @@ pub fn resource_node_stream_query(filter: &AoiFilter) -> String {
 pub fn npc_state_stream_query(filter: &AoiFilter) -> String {
     format!(
         "SELECT * FROM npc_state ns WHERE {} AND {}",
-        filter.region_clause("ns"),
+        filter.region_dimension_clause("ns"),
         filter.hex_bounds_clause("ns")
     )
 }
@@ -105,10 +105,11 @@ mod tests {
 
     #[test]
     fn test_npc_state_stream_query_uses_region_and_bounds() {
-        let filter = AoiFilter::new(3, -20, 20, -22, 22).expect("valid filter should construct");
+        let filter = AoiFilter::new(3, 2, -20, 20, -22, 22).expect("valid filter should construct");
         let query = npc_state_stream_query(&filter);
         assert!(query.contains("FROM npc_state"));
         assert!(query.contains("ns.region_id = 3"));
+        assert!(query.contains("ns.dimension_id = 2"));
         assert!(query.contains("ns.hex_x BETWEEN -20 AND 20"));
         assert!(query.contains("ns.hex_z BETWEEN -22 AND 22"));
     }
