@@ -1,0 +1,5 @@
+사용스킬[$koota,$three-best-practices,$spacetimedb-korean,$agent-browser]
+[필수 읽기]
+WORLDGENERATORDESIGN/00-master.md
+rompts/20260217_worklog.md
+2026-02-17 작업 이후 client 에서 조금 움직이다가 멈추면 감자기 이전 으로 jump해서 돌아가는 증상이 생겼음

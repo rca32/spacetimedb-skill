@@ -13,6 +13,9 @@ WARMUP="${WARMUP:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 YES_FLAG="${YES_FLAG:---yes}"
 OUT_CSV="${OUT_CSV:-/tmp/worldgen-perf-${DB_NAME}-$(date +%Y%m%d-%H%M%S).csv}"
+MAX_AVG_MS="${MAX_AVG_MS:-}"
+MAX_P95_MS="${MAX_P95_MS:-}"
+MAX_PAYLOAD_BYTES="${MAX_PAYLOAD_BYTES:-}"
 
 usage() {
   cat <<USAGE
@@ -32,6 +35,10 @@ Options:
   --overwrite <bool>    generate_world overwrite flag (default: ${OVERWRITE})
   --no-warmup           Skip warmup generate_world call
   --out <path>          CSV output path (default: ${OUT_CSV})
+  --max-avg-ms <ms>     Fail if avg generate_ms exceeds this threshold (optional)
+  --max-p95-ms <ms>     Fail if p95 generate_ms exceeds this threshold (optional)
+  --max-payload-bytes <bytes>
+                        Fail if max payload_bytes_estimate exceeds this threshold (optional)
   --dry-run             Print commands only
   -h, --help            Show this help
 USAGE
@@ -59,6 +66,12 @@ while [[ $# -gt 0 ]]; do
       WARMUP=0; shift ;;
     --out)
       OUT_CSV="$2"; shift 2 ;;
+    --max-avg-ms)
+      MAX_AVG_MS="$2"; shift 2 ;;
+    --max-p95-ms)
+      MAX_P95_MS="$2"; shift 2 ;;
+    --max-payload-bytes)
+      MAX_PAYLOAD_BYTES="$2"; shift 2 ;;
     --dry-run)
       DRY_RUN=1; shift ;;
     -h|--help)
@@ -77,6 +90,14 @@ run_cmd() {
     return 0
   fi
   "$@"
+}
+
+monotonic_ms() {
+  if command -v perl >/dev/null 2>&1; then
+    perl -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC -e 'print int(clock_gettime(CLOCK_MONOTONIC)*1000), "\n"'
+    return 0
+  fi
+  date +%s%3N
 }
 
 sql_output() {
@@ -152,6 +173,18 @@ if ! [[ "$ITERATIONS" =~ ^[0-9]+$ ]] || [[ "$ITERATIONS" -lt 1 ]]; then
   echo "iterations must be positive integer" >&2
   exit 2
 fi
+if [[ -n "$MAX_AVG_MS" ]] && ! [[ "$MAX_AVG_MS" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  echo "max-avg-ms must be numeric" >&2
+  exit 2
+fi
+if [[ -n "$MAX_P95_MS" ]] && ! [[ "$MAX_P95_MS" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  echo "max-p95-ms must be numeric" >&2
+  exit 2
+fi
+if [[ -n "$MAX_PAYLOAD_BYTES" ]] && ! [[ "$MAX_PAYLOAD_BYTES" =~ ^[0-9]+$ ]]; then
+  echo "max-payload-bytes must be an unsigned integer" >&2
+  exit 2
+fi
 
 mkdir -p "$(dirname "$OUT_CSV")"
 
@@ -165,9 +198,9 @@ if [[ "$WARMUP" == "1" ]]; then
 fi
 
 for ((i=1; i<=ITERATIONS; i++)); do
-  start_ms="$(date +%s%3N)"
+  start_ms="$(monotonic_ms)"
   run_cmd spacetime call --server "$SERVER" $YES_FLAG "$DB_NAME" generate_world "$REGION_ID" "$SEED" "$SIZE_X_CHUNKS" "$SIZE_Y_CHUNKS" "$OVERWRITE"
-  end_ms="$(date +%s%3N)"
+  end_ms="$(monotonic_ms)"
 
   if [[ "$DRY_RUN" == "1" ]]; then
     generate_ms=0
@@ -178,6 +211,10 @@ for ((i=1; i<=ITERATIONS; i++)); do
     payload_bytes_estimate=0
   else
     generate_ms=$((end_ms - start_ms))
+    if (( generate_ms < 0 )); then
+      echo "[bench] warn: negative generate_ms observed (${generate_ms}); clamping to 0" >&2
+      generate_ms=0
+    fi
     chunk_count="$(scalar_sql "SELECT COUNT(*) AS count FROM terrain_chunk WHERE region_id = ${REGION_ID}")"
     resource_count="$(scalar_sql "SELECT COUNT(*) AS count FROM resource_node WHERE region_id = ${REGION_ID}")"
     payload_chunk_count="$(scalar_sql "SELECT COUNT(*) AS count FROM terrain_chunk_payload WHERE region_id = ${REGION_ID}")"
@@ -190,23 +227,91 @@ for ((i=1; i<=ITERATIONS; i++)); do
   echo "[bench] iter=${i} generate_ms=${generate_ms} chunks=${chunk_count} resources=${resource_count} payload_bytes_est=${payload_bytes_estimate}"
 done
 
-summary="$(awk -F',' '
+runs="$(awk -F',' 'NR > 1 { n += 1 } END { print n + 0 }' "$OUT_CSV")"
+avg_ms="$(awk -F',' '
   NR == 1 { next }
-  {
-    n += 1
-    sum += $2
-    if (n == 1 || $2 < min) min = $2
-    if (n == 1 || $2 > max) max = $2
-  }
+  { n += 1; sum += $2 }
   END {
     if (n == 0) {
-      print "runs=0 avg_ms=0 min_ms=0 max_ms=0"
+      print "0.00"
       exit
     }
-    avg = sum / n
-    printf "runs=%d avg_ms=%.2f min_ms=%d max_ms=%d", n, avg, min, max
+    printf "%.2f", sum / n
   }
 ' "$OUT_CSV")"
+min_ms="$(awk -F',' '
+  NR == 1 { next }
+  {
+    if (!seen || $2 < min) min = $2
+    seen = 1
+  }
+  END { print seen ? min : 0 }
+' "$OUT_CSV")"
+max_ms="$(awk -F',' '
+  NR == 1 { next }
+  {
+    if (!seen || $2 > max) max = $2
+    seen = 1
+  }
+  END { print seen ? max : 0 }
+' "$OUT_CSV")"
+max_payload_bytes_estimate="$(awk -F',' '
+  NR == 1 { next }
+  {
+    if (!seen || $7 > max) max = $7
+    seen = 1
+  }
+  END { print seen ? max : 0 }
+' "$OUT_CSV")"
+
+p95_ms=0
+if (( runs > 0 )); then
+  mapfile -t generate_ms_sorted < <(awk -F',' 'NR > 1 { print $2 }' "$OUT_CSV" | LC_ALL=C sort -n)
+  p95_rank=$(( (95 * runs + 99) / 100 ))
+  if (( p95_rank < 1 )); then
+    p95_rank=1
+  fi
+  if (( p95_rank > runs )); then
+    p95_rank="$runs"
+  fi
+  p95_index=$((p95_rank - 1))
+  p95_ms="${generate_ms_sorted[$p95_index]}"
+fi
+
+summary="runs=${runs} avg_ms=${avg_ms} p95_ms=${p95_ms} min_ms=${min_ms} max_ms=${max_ms} max_payload_bytes_estimate=${max_payload_bytes_estimate}"
 
 echo "[bench] csv: ${OUT_CSV}"
 echo "[bench] ${summary}"
+
+threshold_failed=0
+
+if [[ -n "$MAX_AVG_MS" ]]; then
+  if awk -v value="$avg_ms" -v limit="$MAX_AVG_MS" 'BEGIN { exit !(value <= limit) }'; then
+    echo "[bench] threshold ok: avg_ms=${avg_ms} <= ${MAX_AVG_MS}"
+  else
+    echo "[bench] threshold failed: avg_ms=${avg_ms} > ${MAX_AVG_MS}" >&2
+    threshold_failed=1
+  fi
+fi
+
+if [[ -n "$MAX_P95_MS" ]]; then
+  if awk -v value="$p95_ms" -v limit="$MAX_P95_MS" 'BEGIN { exit !(value <= limit) }'; then
+    echo "[bench] threshold ok: p95_ms=${p95_ms} <= ${MAX_P95_MS}"
+  else
+    echo "[bench] threshold failed: p95_ms=${p95_ms} > ${MAX_P95_MS}" >&2
+    threshold_failed=1
+  fi
+fi
+
+if [[ -n "$MAX_PAYLOAD_BYTES" ]]; then
+  if (( max_payload_bytes_estimate <= MAX_PAYLOAD_BYTES )); then
+    echo "[bench] threshold ok: max_payload_bytes_estimate=${max_payload_bytes_estimate} <= ${MAX_PAYLOAD_BYTES}"
+  else
+    echo "[bench] threshold failed: max_payload_bytes_estimate=${max_payload_bytes_estimate} > ${MAX_PAYLOAD_BYTES}" >&2
+    threshold_failed=1
+  fi
+fi
+
+if (( threshold_failed != 0 )); then
+  exit 1
+fi

@@ -293,6 +293,7 @@ stitch-server/scripts/worldgen_determinism_compare.sh /tmp/snap-a.snapshot /tmp/
 
 # 2) 서버 worldgen 성능 벤치
 stitch-server/scripts/worldgen_perf_benchmark.sh --iterations 3 --out /tmp/worldgen-perf.csv
+stitch-server/scripts/worldgen_perf_gate.sh --iterations 5 --out /tmp/worldgen-perf-gate.csv
 
 # 3) 운영 스모크 게이트
 stitch-server/scripts/full_smoke_gate.sh
@@ -304,6 +305,9 @@ bun run visual:capture -- --url http://127.0.0.1:5173 --out-dir /tmp/stitch-visu
 bun run visual:capture -- --url http://127.0.0.1:5173 --out-dir /tmp/stitch-visual --tag candidate
 bun run visual:compare -- --base /tmp/stitch-visual/baseline --candidate /tmp/stitch-visual/candidate --threshold 0
 ```
+- 기준 파일:
+  - 성능 임계치: `stitch-server/scripts/worldgen_perf_thresholds.env`
+  - 시각 baseline: `web-client/visual-baselines/`
 
 ## 9. 단계별 롤아웃 전략
 - Wave 1: 스키마 확장 + 좌표/노이즈 코어 + terrain 1차
@@ -328,6 +332,6 @@ bun run visual:compare -- --base /tmp/stitch-visual/baseline --candidate /tmp/st
 - [x] `resource_node` 좌표 authoritative 반영 완료
 - [x] AOI selective subscription 전환 완료
 - [~] web-client chunk mesh 파이프 전환 완료 (`terrain_chunk_stream` 기반 안정화 완료, `cell_payload` 실지형 메시 파이프 미완료)
-- [~] 성능/메모리 기준 통과 (벤치/프로브 자동화 추가, 기준 임계치 튜닝 미완료)
-- [~] agent-browser 시각 회귀 기준샷 확보 (캡처/비교 자동화 추가, baseline 확정 미완료)
+- [~] 성능/메모리 기준 통과 (worldgen 성능 게이트 임계치 확정 완료, 메모리 기준선은 추가 튜닝 필요)
+- [x] agent-browser 시각 회귀 기준샷 확보 (overlay off/on baseline 세트 확정)
 - [x] 운영 기본 명령(`publish -> seed -> import -> generate -> start_world_agents`) 문서화 완료
