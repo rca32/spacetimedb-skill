@@ -3,15 +3,16 @@ use super::aoi::AoiFilter;
 pub fn combat_state_stream_query(filter: &AoiFilter) -> String {
     format!(
         "SELECT * FROM combat_state cs WHERE {}",
-        filter.region_clause("cs")
+        filter.region_dimension_clause("cs")
     )
 }
 
 pub fn attack_outcome_stream_query(filter: &AoiFilter, limit: u32) -> String {
     let bounded_limit = if limit == 0 { 1 } else { limit.min(500) };
     format!(
-        "SELECT * FROM attack_outcome ao WHERE ao.region_id = {} ORDER BY ao.resolved_at DESC LIMIT {}",
-        filter.region_id, bounded_limit
+        "SELECT * FROM attack_outcome ao WHERE {} ORDER BY ao.resolved_at DESC LIMIT {}",
+        filter.region_dimension_clause("ao"),
+        bounded_limit
     )
 }
 
@@ -25,6 +26,7 @@ mod tests {
         let query = combat_state_stream_query(&filter);
         assert!(query.contains("FROM combat_state"));
         assert!(query.contains("cs.region_id = 55"));
+        assert!(query.contains("cs.dimension_id = 1"));
     }
 
     #[test]
@@ -32,6 +34,7 @@ mod tests {
         let filter = AoiFilter::new(4, 1, 0, 1, 0, 1).expect("valid filter should construct");
         let query = attack_outcome_stream_query(&filter, 0);
         assert!(query.contains("ao.region_id = 4"));
+        assert!(query.contains("ao.dimension_id = 1"));
         assert!(query.contains("LIMIT 1"));
     }
 }

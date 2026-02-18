@@ -1,5 +1,6 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
+use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
 use crate::tables::session_state::session_state;
 use crate::tables::trade_market::trade_session;
 use crate::tables::transform_state::transform_state;
@@ -43,11 +44,21 @@ pub fn trade_session_open(
         .identity()
         .find(partner_identity)
         .ok_or("active partner session required".to_string())?;
+    let my_dimension = if my_session.dimension_id == 0 {
+        DEFAULT_WORLD_DIMENSION_ID
+    } else {
+        my_session.dimension_id
+    };
+    let partner_dimension = if partner_session.dimension_id == 0 {
+        DEFAULT_WORLD_DIMENSION_ID
+    } else {
+        partner_session.dimension_id
+    };
 
     if my_session.region_id != partner_session.region_id {
         return Err("partner is in different region".to_string());
     }
-    if my_session.dimension_id != partner_session.dimension_id {
+    if my_dimension != partner_dimension {
         return Err("partner is in different dimension".to_string());
     }
 
@@ -63,11 +74,10 @@ pub fn trade_session_open(
         .entity_id()
         .find(partner_identity)
         .ok_or("partner transform missing".to_string())?;
-    if my_tf.region_id != my_session.region_id || my_tf.dimension_id != my_session.dimension_id {
+    if my_tf.region_id != my_session.region_id || my_tf.dimension_id != my_dimension {
         return Err("initiator transform/session mismatch".to_string());
     }
-    if partner_tf.region_id != partner_session.region_id
-        || partner_tf.dimension_id != partner_session.dimension_id
+    if partner_tf.region_id != partner_session.region_id || partner_tf.dimension_id != partner_dimension
     {
         return Err("partner transform/session mismatch".to_string());
     }
@@ -86,6 +96,7 @@ pub fn trade_session_open(
         initiator_identity: ctx.sender,
         partner_identity,
         region_id: my_session.region_id,
+        dimension_id: my_dimension,
         phase: 0,
         initiator_accepted: false,
         partner_accepted: false,

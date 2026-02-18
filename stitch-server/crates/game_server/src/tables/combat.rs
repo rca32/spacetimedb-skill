@@ -5,6 +5,7 @@ pub struct CombatState {
     #[primary_key]
     pub identity: Identity,
     pub region_id: u64,
+    pub dimension_id: u32,
     pub in_combat: bool,
     pub current_hp: i32,
     pub last_attack_client_ts_ms: u64,
@@ -28,6 +29,7 @@ pub struct AttackScheduled {
     pub attacker_identity: Identity,
     pub target_identity: Identity,
     pub region_id: u64,
+    pub dimension_id: u32,
     pub client_ts_ms: u64,
     pub impact_damage: i32,
     pub phase: u8, // 0=start, 1=scheduled, 2=resolved
@@ -43,6 +45,7 @@ pub struct AttackOutcome {
     pub attacker_identity: Identity,
     pub target_identity: Identity,
     pub region_id: u64,
+    pub dimension_id: u32,
     pub damage: i32,
     pub target_hp_after: i32,
     pub hit: bool,

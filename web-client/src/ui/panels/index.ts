@@ -120,6 +120,7 @@ export class PanelLayer {
   private readonly housingNetworkIdInput: HTMLInputElement
   private readonly housingDimensionEntityIdInput: HTMLInputElement
   private readonly housingDimensionIdInput: HTMLInputElement
+  private readonly housingSetActiveDimensionButton: HTMLButtonElement
   private readonly housingInteriorInstanceIdInput: HTMLInputElement
   private readonly housingCreateButton: HTMLButtonElement
   private readonly housingSelect: HTMLSelectElement
@@ -336,6 +337,7 @@ export class PanelLayer {
     this.housingNetworkIdInput = housingUi.networkEntityIdInput
     this.housingDimensionEntityIdInput = housingUi.dimensionEntityIdInput
     this.housingDimensionIdInput = housingUi.dimensionIdInput
+    this.housingSetActiveDimensionButton = housingUi.setActiveDimensionButton
     this.housingInteriorInstanceIdInput = housingUi.interiorInstanceIdInput
     this.housingCreateButton = housingUi.createHousingButton
     this.housingSelect = housingUi.housingSelect
@@ -762,6 +764,15 @@ export class PanelLayer {
       )
     })
 
+    this.housingSetActiveDimensionButton.addEventListener('click', () => {
+      const dimensionId = Number.parseInt(this.housingDimensionIdInput.value, 10)
+      this.dispatchAction('set_active_dimension', () =>
+        this.buildClaimHousingActions?.setActiveDimension({
+          dimensionId: Number.isFinite(dimensionId) ? dimensionId : 0,
+        }),
+      )
+    })
+
     this.housingEnterButton.addEventListener('click', () => {
       const housingEntityId = this.resolveHousingTargetId()
       const portalX = Number.parseFloat(this.housingPortalXInput.value)
@@ -1121,7 +1132,7 @@ export class PanelLayer {
 
     const claimOptions = snapshot.claims.map((row) => ({
       value: row.claimId,
-      label: `id=${row.claimId} tier=${row.tier} r=${row.radius} (${row.centerX},${row.centerZ})`,
+      label: `id=${row.claimId} tier=${row.tier} r=${row.radius} d=${row.dimensionId} (${row.centerX},${row.centerZ})`,
     }))
     syncSelect(this.claimTargetSelect, claimOptions)
 
@@ -1588,6 +1599,7 @@ export class PanelLayer {
     networkEntityIdInput: HTMLInputElement
     dimensionEntityIdInput: HTMLInputElement
     dimensionIdInput: HTMLInputElement
+    setActiveDimensionButton: HTMLButtonElement
     interiorInstanceIdInput: HTMLInputElement
     createHousingButton: HTMLButtonElement
     housingSelect: HTMLSelectElement
@@ -1616,6 +1628,7 @@ export class PanelLayer {
     const networkEntityIdInput = createTextInput('network id (optional)')
     const dimensionEntityIdInput = createTextInput('dimension entity id (optional)')
     const dimensionIdInput = createNumberInput('1')
+    const setActiveDimensionButton = createButton('Set Active Dimension')
     const interiorInstanceIdInput = createTextInput('interior instance id')
     const createHousingButton = createButton('Create Housing')
     const housingSelect = createSelect()
@@ -1648,6 +1661,7 @@ export class PanelLayer {
       createLabeled('Network Id', networkEntityIdInput),
       createLabeled('Dimension Entity Id', dimensionEntityIdInput),
       createLabeled('Dimension Id', dimensionIdInput),
+      setActiveDimensionButton,
       createLabeled('Interior Instance Id', interiorInstanceIdInput),
       createHousingButton,
       createLabeled('Housing Target', housingSelect),
@@ -1678,6 +1692,7 @@ export class PanelLayer {
       networkEntityIdInput,
       dimensionEntityIdInput,
       dimensionIdInput,
+      setActiveDimensionButton,
       interiorInstanceIdInput,
       createHousingButton,
       housingSelect,

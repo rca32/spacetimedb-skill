@@ -7,6 +7,7 @@ pub struct TradeSession {
     pub initiator_identity: Identity,
     pub partner_identity: Identity,
     pub region_id: u64,
+    pub dimension_id: u32,
     pub phase: u8, // 0=open,1=both_accepted,2=completed,3=cancelled
     pub initiator_accepted: bool,
     pub partner_accepted: bool,

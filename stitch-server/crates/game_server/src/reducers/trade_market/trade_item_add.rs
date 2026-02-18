@@ -1,9 +1,11 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::reducers::inventory::inventory_lock::ensure_not_locked;
+use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
 use crate::tables::inventory_container::inventory_container;
 use crate::tables::inventory_slot::inventory_slot;
 use crate::tables::item_stack::item_stack;
+use crate::tables::session_state::session_state;
 use crate::tables::trade_market::trade_offer;
 use crate::tables::trade_market::trade_session;
 use crate::tables::TradeOffer;
@@ -33,6 +35,25 @@ pub fn trade_item_add(
     }
     if session.phase != 0 {
         return Err("trade session is not open".to_string());
+    }
+    let caller_session = ctx
+        .db
+        .session_state()
+        .identity()
+        .find(ctx.sender)
+        .ok_or("active session required".to_string())?;
+    let caller_dimension = if caller_session.dimension_id == 0 {
+        DEFAULT_WORLD_DIMENSION_ID
+    } else {
+        caller_session.dimension_id
+    };
+    if caller_session.region_id != session.region_id {
+        return Err("trade session region mismatch".to_string());
+    }
+    if session.dimension_id == 0 {
+        session.dimension_id = caller_dimension;
+    } else if session.dimension_id != caller_dimension {
+        return Err("trade session dimension mismatch".to_string());
     }
 
     let owner_container = main_container_id(ctx, ctx.sender)

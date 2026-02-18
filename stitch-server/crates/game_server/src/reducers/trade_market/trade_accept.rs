@@ -1,5 +1,7 @@
 use spacetimedb::{ReducerContext, Table};
 
+use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
+use crate::tables::session_state::session_state;
 use crate::tables::trade_market::trade_offer;
 use crate::tables::trade_market::trade_session;
 
@@ -26,6 +28,40 @@ pub fn trade_accept(
         session.partner_accepted = accepted;
     } else {
         return Err("only session participants can accept".to_string());
+    }
+    let initiator_session = ctx
+        .db
+        .session_state()
+        .identity()
+        .find(session.initiator_identity)
+        .ok_or("initiator session missing".to_string())?;
+    let partner_session = ctx
+        .db
+        .session_state()
+        .identity()
+        .find(session.partner_identity)
+        .ok_or("partner session missing".to_string())?;
+    let initiator_dimension = if initiator_session.dimension_id == 0 {
+        DEFAULT_WORLD_DIMENSION_ID
+    } else {
+        initiator_session.dimension_id
+    };
+    let partner_dimension = if partner_session.dimension_id == 0 {
+        DEFAULT_WORLD_DIMENSION_ID
+    } else {
+        partner_session.dimension_id
+    };
+    if initiator_session.region_id != partner_session.region_id {
+        return Err("trade participants are in different regions".to_string());
+    }
+    if initiator_dimension != partner_dimension {
+        return Err("trade participants are in different dimensions".to_string());
+    }
+    session.region_id = initiator_session.region_id;
+    if session.dimension_id == 0 {
+        session.dimension_id = initiator_dimension;
+    } else if session.dimension_id != initiator_dimension {
+        return Err("trade session dimension mismatch".to_string());
     }
 
     let has_offer_from_initiator = ctx

@@ -10,18 +10,6 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.object("ClaimState", {
-  claimId: __t.u64(),
-  ownerIdentity: __t.identity(),
-  totemBuildingId: __t.u64(),
-  regionId: __t.u64(),
+export default {
   dimensionId: __t.u32(),
-  centerX: __t.i32(),
-  centerZ: __t.i32(),
-  radius: __t.u32(),
-  tier: __t.u32(),
-  createdAt: __t.timestamp(),
-  updatedAt: __t.timestamp(),
-});
-
-
+};

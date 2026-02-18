@@ -71,6 +71,7 @@ type ClaimStateRow = {
   ownerIdentity: unknown
   totemBuildingId: unknown
   regionId: unknown
+  dimensionId: number
   centerX: number
   centerZ: number
   radius: number
@@ -238,9 +239,10 @@ function createActions(
       }
 
       const dispatchPlace = (buildingId: bigint): BuildClaimHousingActionResult => {
+        const activeSessionDimensionId = resolveActiveSessionDimensionId(ctx)
         const requestedDimensionId = Number.isFinite(input.dimensionId)
           ? (input.dimensionId as number)
-          : DEFAULT_WORLD_DIMENSION_ID
+          : activeSessionDimensionId
         const dimensionId =
           Number.isFinite(requestedDimensionId) && requestedDimensionId > 0
             ? requestedDimensionId
@@ -621,6 +623,16 @@ function createActions(
       }
       return result
     },
+    setActiveDimension: (input) => {
+      const dimensionId = Number.isFinite(input.dimensionId) ? input.dimensionId : 0
+      const result = dispatchReducer(ctx, 'set_active_dimension', {
+        dimensionId: toU32(dimensionId),
+      })
+      if (result.ok) {
+        setStatus(`set_active_dimension dispatched (dimension=${toU32(dimensionId)})`)
+      }
+      return result
+    },
   }
 }
 
@@ -756,6 +768,7 @@ function collectClaimStates(rows: Iterable<ClaimStateRow>): BuildClaimHousingSna
       ownerIdentityHex: identityHex(row.ownerIdentity),
       totemBuildingId: toBigIntString(row.totemBuildingId),
       regionId: toBigIntString(row.regionId),
+      dimensionId: row.dimensionId,
       centerX: row.centerX,
       centerZ: row.centerZ,
       radius: row.radius,
@@ -877,6 +890,29 @@ function dispatchReducer(
 ): BuildClaimHousingActionResult {
   const dispatched = ctx.net?.dispatchReducer(reducerName, payload) ?? false
   return dispatched ? { ok: true } : failResult(`failed to dispatch ${reducerName}`)
+}
+
+function resolveActiveSessionDimensionId(ctx: RuntimeContext): number {
+  const fallback = Number.isFinite(DEFAULT_WORLD_DIMENSION_ID) && DEFAULT_WORLD_DIMENSION_ID > 0
+    ? DEFAULT_WORLD_DIMENSION_ID
+    : 1
+  const connection = ctx.net?.getConnection() ?? null
+  const localIdentityHex = normalizeIdentityHex(ctx.net?.getIdentityHex() ?? null)
+  if (!connection || !connection.isActive || !localIdentityHex) {
+    return fallback
+  }
+
+  for (const row of connection.db.playerSessionView.iter() as Iterable<{ identity: unknown; dimensionId: number }>) {
+    if (identityHex(row.identity) !== localIdentityHex) {
+      continue
+    }
+    if (Number.isFinite(row.dimensionId) && row.dimensionId > 0) {
+      return Math.floor(row.dimensionId)
+    }
+    break
+  }
+
+  return fallback
 }
 
 function parseIdentity(value: string): Identity | Error {

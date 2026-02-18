@@ -13,5 +13,6 @@ import {
 export default __t.row({
   identity: __t.identity().primaryKey(),
   regionId: __t.u64().name("region_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   lastActiveAt: __t.timestamp().name("last_active_at"),
 });

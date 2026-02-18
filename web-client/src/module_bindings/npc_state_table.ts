@@ -13,6 +13,7 @@ import {
 export default __t.row({
   npcId: __t.u64().primaryKey().name("npc_id"),
   regionId: __t.u64().name("region_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   hexX: __t.i32().name("hex_x"),
   hexZ: __t.i32().name("hex_z"),
   destHexX: __t.i32().name("dest_hex_x"),

@@ -6,6 +6,7 @@ export type KnownKeyMap = Map<string, Set<string>>
 export type TransformStateRow = {
   entityId: unknown
   regionId: bigint
+  dimensionId: number
   position: number[]
   rotation: number[]
 }
@@ -13,6 +14,7 @@ export type TransformStateRow = {
 export type PlayerSessionViewRow = {
   identity: unknown
   regionId: bigint
+  dimensionId: number
 }
 
 export type WorldGenParamsRow = {
@@ -21,6 +23,8 @@ export type WorldGenParamsRow = {
 
 export type NpcStateRow = {
   npcId: bigint
+  regionId: bigint
+  dimensionId: number
   hexX: number
   hexZ: number
   destHexX: number
@@ -88,7 +92,8 @@ export type ClaimStateRow = {
   claimId: bigint
   ownerIdentity: unknown
   totemBuildingId: unknown
-  regionId: unknown
+  regionId: bigint
+  dimensionId: number
   centerX: number
   centerZ: number
   radius: number

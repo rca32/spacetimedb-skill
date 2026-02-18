@@ -39,6 +39,7 @@ export function syncClaims(
         ownerIdentityHex: toKeyString(row.ownerIdentity),
         totemBuildingId: toKeyString(row.totemBuildingId),
         regionId: toKeyString(row.regionId),
+        dimensionId: row.dimensionId,
       })
       entity.add(IsClaim)
     })

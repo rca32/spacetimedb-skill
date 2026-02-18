@@ -13,6 +13,7 @@ import {
 export default __t.object("TransformState", {
   entityId: __t.identity(),
   regionId: __t.u64(),
+  dimensionId: __t.u32(),
   position: __t.array(__t.f32()),
   rotation: __t.array(__t.f32()),
   updatedAt: __t.timestamp(),

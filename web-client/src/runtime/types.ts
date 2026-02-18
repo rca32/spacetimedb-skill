@@ -75,6 +75,7 @@ export interface TradeSessionSnapshot {
   initiatorIdentityHex: string
   partnerIdentityHex: string
   regionId: string
+  dimensionId: number
   phase: number
   initiatorAccepted: boolean
   partnerAccepted: boolean
@@ -228,6 +229,7 @@ export interface ClaimStateSnapshot {
   ownerIdentityHex: string
   totemBuildingId: string
   regionId: string
+  dimensionId: number
   centerX: number
   centerZ: number
   radius: number
@@ -363,6 +365,9 @@ export interface BuildClaimHousingActions {
     housingEntityId: string
     whiteListIdentityHexes: string[]
   }) => BuildClaimHousingActionResult
+  setActiveDimension: (input: {
+    dimensionId: number
+  }) => BuildClaimHousingActionResult
 }
 
 export interface BuildClaimHousingRuntimeBridge {
@@ -434,6 +439,7 @@ export interface SocialFeedSnapshot {
 export interface NpcSnapshot {
   npcId: string
   regionId: string
+  dimensionId: number
   hexX: number
   hexZ: number
   destHexX: number

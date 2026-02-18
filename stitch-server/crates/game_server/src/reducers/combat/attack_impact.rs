@@ -1,5 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
+use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
 use crate::tables::combat::attack_outcome;
 use crate::tables::combat::attack_schedule_state;
 use crate::tables::combat::combat_state;
@@ -45,14 +46,27 @@ pub fn attack_impact(
         .identity()
         .find(scheduled.target_identity)
         .ok_or("target session missing".to_string())?;
+    let attacker_dimension = if attacker_session.dimension_id == 0 {
+        DEFAULT_WORLD_DIMENSION_ID
+    } else {
+        attacker_session.dimension_id
+    };
+    let target_dimension = if target_session.dimension_id == 0 {
+        DEFAULT_WORLD_DIMENSION_ID
+    } else {
+        target_session.dimension_id
+    };
 
     if attacker_session.region_id != target_session.region_id
         || attacker_session.region_id != scheduled.region_id
     {
         return Err("region mismatch on impact".to_string());
     }
-    if attacker_session.dimension_id != target_session.dimension_id {
+    if attacker_dimension != target_dimension {
         return Err("dimension mismatch on impact".to_string());
+    }
+    if scheduled.dimension_id != 0 && scheduled.dimension_id != attacker_dimension {
+        return Err("scheduled attack dimension mismatch".to_string());
     }
 
     let attacker_tf = ctx
@@ -68,12 +82,11 @@ pub fn attack_impact(
         .find(scheduled.target_identity)
         .ok_or("target transform missing".to_string())?;
     if attacker_tf.region_id != attacker_session.region_id
-        || attacker_tf.dimension_id != attacker_session.dimension_id
+        || attacker_tf.dimension_id != attacker_dimension
     {
         return Err("attacker transform/session mismatch".to_string());
     }
-    if target_tf.region_id != target_session.region_id
-        || target_tf.dimension_id != target_session.dimension_id
+    if target_tf.region_id != target_session.region_id || target_tf.dimension_id != target_dimension
     {
         return Err("target transform/session mismatch".to_string());
     }
@@ -99,6 +112,9 @@ pub fn attack_impact(
 
     target_combat.current_hp = (target_combat.current_hp - scheduled.impact_damage).max(0);
     target_combat.in_combat = target_combat.current_hp > 0;
+    if target_combat.dimension_id == 0 {
+        target_combat.dimension_id = attacker_dimension;
+    }
     target_combat.updated_at = ctx.timestamp;
     let target_hp_after = target_combat.current_hp;
     ctx.db.combat_state().identity().update(target_combat);
@@ -122,11 +138,15 @@ pub fn attack_impact(
     }
 
     scheduled.phase = 2;
+    if scheduled.dimension_id == 0 {
+        scheduled.dimension_id = attacker_dimension;
+    }
     scheduled.updated_at = ctx.timestamp;
     let scheduled_request_key = scheduled.request_key.clone();
     let scheduled_attacker = scheduled.attacker_identity;
     let scheduled_target = scheduled.target_identity;
     let scheduled_region = scheduled.region_id;
+    let scheduled_dimension = scheduled.dimension_id;
     let scheduled_damage = scheduled.impact_damage;
     ctx.db
         .attack_schedule_state()
@@ -147,6 +167,7 @@ pub fn attack_impact(
             attacker_identity: scheduled_attacker,
             target_identity: scheduled_target,
             region_id: scheduled_region,
+            dimension_id: scheduled_dimension,
             damage: scheduled_damage,
             target_hp_after,
             hit: true,

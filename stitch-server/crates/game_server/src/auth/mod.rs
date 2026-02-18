@@ -8,6 +8,7 @@ use crate::tables::player_progression::{character_stats, resource_state};
 use crate::tables::player_state::player_state;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
+use crate::tables::world_state::terrain_chunk;
 use crate::tables::{Account, CharacterStats, PlayerState, ResourceState, SessionState, TransformState};
 use crate::utils::identity_to_entity_id;
 
@@ -94,22 +95,27 @@ pub fn set_active_dimension(ctx: &ReducerContext, dimension_id: u32) -> Result<(
         return Err("dimension_id must be > 0".to_string());
     }
 
-    if dimension_id != DEFAULT_WORLD_DIMENSION_ID
-        && !ctx
-            .db
-            .dimension_desc()
-            .iter()
-            .any(|row| row.dimension_id == dimension_id)
-    {
-        return Err("target dimension does not exist".to_string());
-    }
-
     let session = ctx
         .db
         .session_state()
         .identity()
         .find(ctx.sender)
         .ok_or("active session required".to_string())?;
+    if dimension_id != DEFAULT_WORLD_DIMENSION_ID {
+        let exists_in_housing = ctx
+            .db
+            .dimension_desc()
+            .iter()
+            .any(|row| row.dimension_id == dimension_id);
+        let exists_in_worldgen = ctx
+            .db
+            .terrain_chunk()
+            .iter()
+            .any(|row| row.region_id == session.region_id && row.dimension_id == dimension_id);
+        if !exists_in_housing && !exists_in_worldgen {
+            return Err("target dimension does not exist".to_string());
+        }
+    }
 
     if session.dimension_id != dimension_id {
         ctx.db.session_state().identity().update(SessionState {

@@ -13,6 +13,7 @@ import {
 export default __t.object("NpcState", {
   npcId: __t.u64(),
   regionId: __t.u64(),
+  dimensionId: __t.u32(),
   hexX: __t.i32(),
   hexZ: __t.i32(),
   destHexX: __t.i32(),

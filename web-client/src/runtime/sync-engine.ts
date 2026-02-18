@@ -47,6 +47,7 @@ type PlayerMovementFeedbackRow = {
 type PlayerSessionViewRow = {
   identity: unknown
   regionId: bigint
+  dimensionId: number
 }
 
 interface SyncTickInput {

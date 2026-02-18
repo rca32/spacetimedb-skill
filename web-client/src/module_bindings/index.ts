@@ -72,6 +72,10 @@ import GenerateWorldReducer from "./generate_world_reducer";
 export { GenerateWorldReducer };
 import GenerateWorldFromParamsReducer from "./generate_world_from_params_reducer";
 export { GenerateWorldFromParamsReducer };
+import GenerateWorldFromParamsInDimensionReducer from "./generate_world_from_params_in_dimension_reducer";
+export { GenerateWorldFromParamsInDimensionReducer };
+import GenerateWorldInDimensionReducer from "./generate_world_in_dimension_reducer";
+export { GenerateWorldInDimensionReducer };
 import GuildCreateReducer from "./guild_create_reducer";
 export { GuildCreateReducer };
 import GuildJoinReducer from "./guild_join_reducer";
@@ -146,6 +150,8 @@ import QuestStageCompleteReducer from "./quest_stage_complete_reducer";
 export { QuestStageCompleteReducer };
 import RegenerateChunksReducer from "./regenerate_chunks_reducer";
 export { RegenerateChunksReducer };
+import RegenerateChunksInDimensionReducer from "./regenerate_chunks_in_dimension_reducer";
+export { RegenerateChunksInDimensionReducer };
 import RentSetWhitelistReducer from "./rent_set_whitelist_reducer";
 export { RentSetWhitelistReducer };
 import ReportReviewReducer from "./report_review_reducer";
@@ -166,6 +172,8 @@ import SeedDataReducer from "./seed_data_reducer";
 export { SeedDataReducer };
 import SessionCleanupAgentLoopReducer from "./session_cleanup_agent_loop_reducer";
 export { SessionCleanupAgentLoopReducer };
+import SetActiveDimensionReducer from "./set_active_dimension_reducer";
+export { SetActiveDimensionReducer };
 import SetWorldgenParamsReducer from "./set_worldgen_params_reducer";
 export { SetWorldgenParamsReducer };
 import SignInReducer from "./sign_in_reducer";
@@ -2077,6 +2085,8 @@ const reducersSchema = __reducers(
   __reducerSchema("environment_effect_agent_loop", EnvironmentEffectAgentLoopReducer),
   __reducerSchema("generate_world", GenerateWorldReducer),
   __reducerSchema("generate_world_from_params", GenerateWorldFromParamsReducer),
+  __reducerSchema("generate_world_from_params_in_dimension", GenerateWorldFromParamsInDimensionReducer),
+  __reducerSchema("generate_world_in_dimension", GenerateWorldInDimensionReducer),
   __reducerSchema("guild_create", GuildCreateReducer),
   __reducerSchema("guild_join", GuildJoinReducer),
   __reducerSchema("guild_project_update", GuildProjectUpdateReducer),
@@ -2113,6 +2123,7 @@ const reducersSchema = __reducers(
   __reducerSchema("quest_chain_start", QuestChainStartReducer),
   __reducerSchema("quest_stage_complete", QuestStageCompleteReducer),
   __reducerSchema("regenerate_chunks", RegenerateChunksReducer),
+  __reducerSchema("regenerate_chunks_in_dimension", RegenerateChunksInDimensionReducer),
   __reducerSchema("rent_set_whitelist", RentSetWhitelistReducer),
   __reducerSchema("report_review", ReportReviewReducer),
   __reducerSchema("report_submit", ReportSubmitReducer),
@@ -2123,6 +2134,7 @@ const reducersSchema = __reducers(
   __reducerSchema("role_revoke", RoleRevokeReducer),
   __reducerSchema("seed_data", SeedDataReducer),
   __reducerSchema("session_cleanup_agent_loop", SessionCleanupAgentLoopReducer),
+  __reducerSchema("set_active_dimension", SetActiveDimensionReducer),
   __reducerSchema("set_worldgen_params", SetWorldgenParamsReducer),
   __reducerSchema("sign_in", SignInReducer),
   __reducerSchema("sign_out", SignOutReducer),

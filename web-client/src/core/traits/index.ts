@@ -59,6 +59,7 @@ export const ClaimData = trait({
   ownerIdentityHex: '',
   totemBuildingId: '',
   regionId: '',
+  dimensionId: 1,
 })
 export const ResourceData = trait({
   dimensionId: 1,
@@ -126,6 +127,7 @@ export const TradeSessionData = trait({
   initiatorIdentityHex: '',
   partnerIdentityHex: '',
   regionId: '',
+  dimensionId: 1,
   phase: 0,
   initiatorAccepted: false,
   partnerAccepted: false,

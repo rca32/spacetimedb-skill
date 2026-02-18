@@ -68,6 +68,7 @@ type TradeSessionRow = {
   initiatorIdentity: unknown
   partnerIdentity: unknown
   regionId: unknown
+  dimensionId: number
   phase: number
   initiatorAccepted: boolean
   partnerAccepted: boolean
@@ -125,10 +126,14 @@ type ItemDefRow = {
 
 type PlayerSessionViewRow = {
   identity: unknown
+  regionId: bigint
+  dimensionId: number
 }
 
 type TransformStateRow = {
   entityId: unknown
+  regionId: bigint
+  dimensionId: number
 }
 
 export function createInventoryTradeRuntime(): RuntimeModule {
@@ -568,6 +573,9 @@ function syncTradeSessions(
     const initiatorIdentityHex = identityHex(row.initiatorIdentity)
     const partnerIdentityHex = identityHex(row.partnerIdentity)
     const regionId = toBigIntString(row.regionId)
+    const dimensionId = Number.isFinite(row.dimensionId) && row.dimensionId > 0
+      ? Math.floor(row.dimensionId)
+      : 1
     const updatedAt = timestampText(row.updatedAt)
     seen.add(key)
 
@@ -578,6 +586,7 @@ function syncTradeSessions(
         initiatorIdentityHex,
         partnerIdentityHex,
         regionId,
+        dimensionId,
         phase: row.phase,
         initiatorAccepted: row.initiatorAccepted,
         partnerAccepted: row.partnerAccepted,
@@ -590,6 +599,7 @@ function syncTradeSessions(
       initiatorIdentityHex,
       partnerIdentityHex,
       regionId,
+      dimensionId,
       phase: row.phase,
       initiatorAccepted: row.initiatorAccepted,
       partnerAccepted: row.partnerAccepted,

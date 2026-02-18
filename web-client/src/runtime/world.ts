@@ -99,6 +99,15 @@ export function createWorldRuntime(): RuntimeModule {
         const session = findLocalSession(connection.db.playerSessionView.iter(), localIdentityHex)
         if (session) {
           localRegionId = session.regionId
+          const nextDimension = Number.isFinite(session.dimensionId) && session.dimensionId > 0
+            ? Math.floor(session.dimensionId)
+            : 1
+          localDimensionId = nextDimension
+        } else {
+          localRegionId = null
+          localDimensionId = Number.isFinite(DEFAULT_WORLD_DIMENSION_ID) && DEFAULT_WORLD_DIMENSION_ID > 0
+            ? DEFAULT_WORLD_DIMENSION_ID
+            : 1
         }
       }
 

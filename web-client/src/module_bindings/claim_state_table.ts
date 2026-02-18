@@ -15,6 +15,7 @@ export default __t.row({
   ownerIdentity: __t.identity().name("owner_identity"),
   totemBuildingId: __t.u64().name("totem_building_id"),
   regionId: __t.u64().name("region_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   centerX: __t.i32().name("center_x"),
   centerZ: __t.i32().name("center_z"),
   radius: __t.u32(),

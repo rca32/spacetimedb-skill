@@ -13,6 +13,7 @@ import {
 export default __t.row({
   entityId: __t.identity().primaryKey().name("entity_id"),
   regionId: __t.u64().name("region_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   position: __t.array(__t.f32()),
   rotation: __t.array(__t.f32()),
   updatedAt: __t.timestamp().name("updated_at"),

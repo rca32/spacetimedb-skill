@@ -37,6 +37,7 @@ type AttackOutcomeRow = {
 type PlayerSessionViewRow = {
   identity: unknown
   regionId: bigint
+  dimensionId: number
 }
 
 interface MovementSummary {
@@ -362,10 +363,13 @@ function formatAttackOutcome(rows: Iterable<AttackOutcomeRow>, localIdentityHex:
 function resolveRegion(rows: Iterable<PlayerSessionViewRow>, localIdentityHex: string): string {
   for (const row of rows) {
     if (identityHex(row.identity) === localIdentityHex) {
-      return `region=${row.regionId.toString()}`
+      const dimension = Number.isFinite(row.dimensionId) && row.dimensionId > 0
+        ? Math.floor(row.dimensionId)
+        : 1
+      return `region=${row.regionId.toString()} dim=${dimension}`
     }
   }
-  return 'region=unknown'
+  return 'region=unknown dim=unknown'
 }
 
 function resolveOverlay(state: RuntimeContext['appState']['value']): string | null {

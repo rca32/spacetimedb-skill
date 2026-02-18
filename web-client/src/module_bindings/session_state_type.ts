@@ -13,6 +13,7 @@ import {
 export default __t.object("SessionState", {
   identity: __t.identity(),
   regionId: __t.u64(),
+  dimensionId: __t.u32(),
   lastActiveAt: __t.timestamp(),
 });
 

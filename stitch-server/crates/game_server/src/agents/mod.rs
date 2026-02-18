@@ -1,5 +1,6 @@
 //! Scheduled reducers and background agents live here.
 
+use std::collections::HashSet;
 use std::time::Duration;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table};
@@ -11,7 +12,9 @@ use crate::tables::agent_timers::{
     environment_effect_loop_timer, npc_ai_loop_timer, player_regen_loop_timer,
     resource_regen_loop_timer, session_cleanup_loop_timer,
 };
-use crate::tables::combat::combat_state;
+use crate::tables::building_state::building_state;
+use crate::tables::claim_state::claim_state;
+use crate::tables::combat::{attack_outcome, attack_schedule_state, combat_state};
 use crate::tables::environment_effect::{
     environment_effect_desc, environment_effect_exposure, environment_effect_state,
 };
@@ -22,6 +25,7 @@ use crate::tables::player_progression::{
 };
 use crate::tables::player_views::player_session_view;
 use crate::tables::session_state::session_state;
+use crate::tables::trade_market::trade_session;
 use crate::tables::transform_state::transform_state;
 use crate::tables::world_gen::world_gen_params;
 use crate::tables::world_state::{region_state, resource_node, terrain_chunk};
@@ -352,8 +356,211 @@ pub(crate) fn ensure_default_agent_timers(ctx: &ReducerContext) {
 pub fn start_world_agents(ctx: &ReducerContext) -> Result<(), String> {
     crate::worldgen::ensure_default_worldgen_config(ctx);
     ensure_default_agent_timers(ctx);
+    backfill_legacy_dimension_columns(ctx);
     seed_world_if_empty(ctx)?;
     Ok(())
+}
+
+fn backfill_legacy_dimension_columns(ctx: &ReducerContext) {
+    let mut session_updates = 0_u32;
+    let mut transform_updates = 0_u32;
+    let mut building_updates = 0_u32;
+    let mut claim_updates = 0_u32;
+    let mut npc_updates = 0_u32;
+    let mut combat_updates = 0_u32;
+    let mut attack_schedule_updates = 0_u32;
+    let mut attack_outcome_updates = 0_u32;
+    let mut trade_session_updates = 0_u32;
+
+    let session_rows: Vec<_> = ctx.db.session_state().iter().collect();
+    for mut row in session_rows {
+        if row.dimension_id == 0 {
+            row.dimension_id = DEFAULT_WORLD_DIMENSION_ID;
+            ctx.db.session_state().identity().update(row);
+            session_updates = session_updates.saturating_add(1);
+        }
+    }
+
+    let transform_rows: Vec<_> = ctx.db.transform_state().iter().collect();
+    for mut row in transform_rows {
+        if row.dimension_id != 0 {
+            continue;
+        }
+        row.dimension_id = ctx
+            .db
+            .session_state()
+            .identity()
+            .find(row.entity_id)
+            .map(|session| {
+                if session.dimension_id == 0 {
+                    DEFAULT_WORLD_DIMENSION_ID
+                } else {
+                    session.dimension_id
+                }
+            })
+            .unwrap_or(DEFAULT_WORLD_DIMENSION_ID);
+        ctx.db.transform_state().entity_id().update(row);
+        transform_updates = transform_updates.saturating_add(1);
+    }
+
+    let building_rows: Vec<_> = ctx.db.building_state().iter().collect();
+    for mut row in building_rows {
+        if row.dimension_id != 0 {
+            continue;
+        }
+        row.dimension_id = DEFAULT_WORLD_DIMENSION_ID;
+        ctx.db.building_state().entity_id().update(row);
+        building_updates = building_updates.saturating_add(1);
+    }
+
+    let claim_rows: Vec<_> = ctx.db.claim_state().iter().collect();
+    for mut row in claim_rows {
+        if row.dimension_id != 0 {
+            continue;
+        }
+        row.dimension_id = DEFAULT_WORLD_DIMENSION_ID;
+        ctx.db.claim_state().claim_id().update(row);
+        claim_updates = claim_updates.saturating_add(1);
+    }
+
+    let npc_rows: Vec<_> = ctx.db.npc_state().iter().collect();
+    for mut row in npc_rows {
+        if row.dimension_id != 0 {
+            continue;
+        }
+        row.dimension_id = DEFAULT_WORLD_DIMENSION_ID;
+        ctx.db.npc_state().npc_id().update(row);
+        npc_updates = npc_updates.saturating_add(1);
+    }
+
+    let combat_rows: Vec<_> = ctx.db.combat_state().iter().collect();
+    for mut row in combat_rows {
+        if row.dimension_id != 0 {
+            continue;
+        }
+        row.dimension_id = ctx
+            .db
+            .session_state()
+            .identity()
+            .find(row.identity)
+            .map(|session| {
+                if session.dimension_id == 0 {
+                    DEFAULT_WORLD_DIMENSION_ID
+                } else {
+                    session.dimension_id
+                }
+            })
+            .unwrap_or(DEFAULT_WORLD_DIMENSION_ID);
+        ctx.db.combat_state().identity().update(row);
+        combat_updates = combat_updates.saturating_add(1);
+    }
+
+    let attack_schedule_rows: Vec<_> = ctx.db.attack_schedule_state().iter().collect();
+    for mut row in attack_schedule_rows {
+        if row.dimension_id != 0 {
+            continue;
+        }
+        let inferred_dimension = ctx
+            .db
+            .session_state()
+            .identity()
+            .find(row.attacker_identity)
+            .or_else(|| ctx.db.session_state().identity().find(row.target_identity))
+            .map(|session| {
+                if session.dimension_id == 0 {
+                    DEFAULT_WORLD_DIMENSION_ID
+                } else {
+                    session.dimension_id
+                }
+            })
+            .unwrap_or(DEFAULT_WORLD_DIMENSION_ID);
+        row.dimension_id = inferred_dimension;
+        ctx.db.attack_schedule_state().request_key().update(row);
+        attack_schedule_updates = attack_schedule_updates.saturating_add(1);
+    }
+
+    let attack_outcome_rows: Vec<_> = ctx.db.attack_outcome().iter().collect();
+    for mut row in attack_outcome_rows {
+        if row.dimension_id != 0 {
+            continue;
+        }
+        let inferred_dimension = ctx
+            .db
+            .session_state()
+            .identity()
+            .find(row.attacker_identity)
+            .or_else(|| ctx.db.session_state().identity().find(row.target_identity))
+            .map(|session| {
+                if session.dimension_id == 0 {
+                    DEFAULT_WORLD_DIMENSION_ID
+                } else {
+                    session.dimension_id
+                }
+            })
+            .unwrap_or(DEFAULT_WORLD_DIMENSION_ID);
+        row.dimension_id = inferred_dimension;
+        ctx.db.attack_outcome().outcome_id().update(row);
+        attack_outcome_updates = attack_outcome_updates.saturating_add(1);
+    }
+
+    let trade_session_rows: Vec<_> = ctx.db.trade_session().iter().collect();
+    for mut row in trade_session_rows {
+        if row.dimension_id != 0 {
+            continue;
+        }
+        let inferred_dimension = ctx
+            .db
+            .session_state()
+            .identity()
+            .find(row.initiator_identity)
+            .or_else(|| ctx.db.session_state().identity().find(row.partner_identity))
+            .map(|session| {
+                if session.dimension_id == 0 {
+                    DEFAULT_WORLD_DIMENSION_ID
+                } else {
+                    session.dimension_id
+                }
+            })
+            .unwrap_or(DEFAULT_WORLD_DIMENSION_ID);
+        row.dimension_id = inferred_dimension;
+        ctx.db.trade_session().session_id().update(row);
+        trade_session_updates = trade_session_updates.saturating_add(1);
+    }
+
+    let mut identities = HashSet::new();
+    for row in ctx.db.session_state().iter() {
+        identities.insert(row.identity);
+    }
+    for row in ctx.db.player_session_view().iter() {
+        identities.insert(row.identity);
+    }
+    for identity in identities {
+        projection_views::sync_player_session_view(ctx, identity);
+    }
+
+    let total_updates = session_updates
+        .saturating_add(transform_updates)
+        .saturating_add(building_updates)
+        .saturating_add(claim_updates)
+        .saturating_add(npc_updates)
+        .saturating_add(combat_updates)
+        .saturating_add(attack_schedule_updates)
+        .saturating_add(attack_outcome_updates)
+        .saturating_add(trade_session_updates);
+    if total_updates > 0 {
+        log::info!(
+            "legacy dimension backfill complete: session={} transform={} building={} claim={} npc={} combat={} attack_schedule={} attack_outcome={} trade_session={}",
+            session_updates,
+            transform_updates,
+            building_updates,
+            claim_updates,
+            npc_updates,
+            combat_updates,
+            attack_schedule_updates,
+            attack_outcome_updates,
+            trade_session_updates
+        );
+    }
 }
 
 fn seed_world_if_empty(ctx: &ReducerContext) -> Result<(), String> {

@@ -20,9 +20,14 @@ type CombatStateRow = {
   currentHp: number
 }
 
+type TransformStateRow = {
+  entityId: IdentityLike
+}
+
 type PlayerSessionViewRow = {
   identity: IdentityLike
   regionId: bigint
+  dimensionId: number
 }
 
 export function createCombatRuntime(): RuntimeModule {
@@ -114,9 +119,17 @@ export function createCombatRuntime(): RuntimeModule {
 
 function pickAttackTargetIdentity(connection: DbConnection, localIdentityHex: string): IdentityLike | null {
   const localRegionId = resolveLocalRegionId(connection, localIdentityHex)
+  const visibleInWorld = new Set<string>()
+  for (const row of connection.db.transformState.iter() as Iterable<TransformStateRow>) {
+    visibleInWorld.add(identityHex(row.entityId))
+  }
 
   for (const row of connection.db.combatState.iter() as Iterable<CombatStateRow & { regionId?: bigint }>) {
-    if (identityHex(row.identity) === localIdentityHex) {
+    const candidateIdentity = identityHex(row.identity)
+    if (candidateIdentity === localIdentityHex) {
+      continue
+    }
+    if (!visibleInWorld.has(candidateIdentity)) {
       continue
     }
     if (localRegionId !== null && row.regionId !== undefined && row.regionId !== localRegionId) {

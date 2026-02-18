@@ -19,7 +19,7 @@ const SOCIAL_NPC_QUEST_SUBSCRIPTIONS: Array<{
   { key: 'snq-guild-member', query: () => 'SELECT * FROM guild_member' },
   { key: 'snq-guild-project', query: () => 'SELECT * FROM guild_project' },
   { key: 'snq-social-feed', query: () => 'SELECT * FROM social_feed' },
-  { key: 'snq-npc-state', query: () => 'SELECT * FROM npc_state' },
+  { key: 'snq-npc-state', query: () => 'SELECT * FROM npc_state WHERE region_id = 0' },
   {
     key: 'snq-npc-interaction',
     query: (identityHex) => `SELECT * FROM npc_interaction_log WHERE caller_identity = ${toIdentityLiteral(identityHex)}`,
@@ -98,6 +98,7 @@ type SocialFeedRow = {
 type NpcStateRow = {
   npcId: unknown
   regionId: unknown
+  dimensionId: number
   hexX: number
   hexZ: number
   destHexX: number
@@ -163,6 +164,7 @@ type AgentResultRow = {
 type PlayerSessionViewRow = {
   identity: unknown
   regionId: unknown
+  dimensionId: number
 }
 
 export function createSocialNpcQuestRuntime(): RuntimeModule {
@@ -189,11 +191,18 @@ export function createSocialNpcQuestRuntime(): RuntimeModule {
         return
       }
 
-      for (const spec of SOCIAL_NPC_QUEST_SUBSCRIPTIONS) {
-        ctx.net?.setSubscription(spec.key, [spec.query(localIdentityHex)])
-      }
-
       const regionId = resolveRegionId(connection.db.playerSessionView.iter() as Iterable<PlayerSessionViewRow>, localIdentityHex)
+      const dimensionId = resolveDimensionId(
+        connection.db.playerSessionView.iter() as Iterable<PlayerSessionViewRow>,
+        localIdentityHex,
+      )
+      for (const spec of SOCIAL_NPC_QUEST_SUBSCRIPTIONS) {
+        const query =
+          spec.key === 'snq-npc-state'
+            ? npcStateSubscriptionQuery(regionId, dimensionId)
+            : spec.query(localIdentityHex)
+        ctx.net?.setSubscription(spec.key, [query])
+      }
 
       const partyStates = collectPartyStates(connection.db.partyState.iter() as Iterable<PartyStateRow>)
       const partyMembers = collectPartyMembers(connection.db.partyMember.iter() as Iterable<PartyMemberRow>)
@@ -242,7 +251,11 @@ export function createSocialNpcQuestRuntime(): RuntimeModule {
         guildMembers,
         guildProjects: collectGuildProjects(connection.db.guildProject.iter() as Iterable<GuildProjectRow>),
         socialFeeds,
-        npcs: collectNpcs(connection.db.npcState.iter() as Iterable<NpcStateRow>),
+        npcs: collectNpcs(
+          connection.db.npcState.iter() as Iterable<NpcStateRow>,
+          regionId,
+          dimensionId,
+        ),
         npcInteractions: collectNpcInteractions(
           connection.db.npcInteractionLog.iter() as Iterable<NpcInteractionLogRow>,
           localIdentityHex,
@@ -621,12 +634,23 @@ function collectSocialFeeds(
   return list.slice(0, 50)
 }
 
-function collectNpcs(rows: Iterable<NpcStateRow>): SocialNpcQuestSnapshot['npcs'] {
+function collectNpcs(
+  rows: Iterable<NpcStateRow>,
+  regionId: string | null,
+  dimensionId: number | null,
+): SocialNpcQuestSnapshot['npcs'] {
   const list: SocialNpcQuestSnapshot['npcs'] = []
   for (const row of rows) {
-  list.push({
+    if (regionId !== null && toBigIntString(row.regionId) !== regionId) {
+      continue
+    }
+    if (dimensionId !== null && row.dimensionId !== dimensionId) {
+      continue
+    }
+    list.push({
       npcId: toBigIntString(row.npcId),
       regionId: toBigIntString(row.regionId),
+      dimensionId: row.dimensionId,
       hexX: row.hexX,
       hexZ: row.hexZ,
       destHexX: row.destHexX,
@@ -782,6 +806,28 @@ function resolveRegionId(rows: Iterable<PlayerSessionViewRow>, localIdentityHex:
     }
   }
   return null
+}
+
+function resolveDimensionId(rows: Iterable<PlayerSessionViewRow>, localIdentityHex: string): number | null {
+  for (const row of rows) {
+    if (normalizeIdentityHex(identityHex(row.identity)) === localIdentityHex) {
+      const dimension = Number.isFinite(row.dimensionId) && row.dimensionId > 0
+        ? Math.floor(row.dimensionId)
+        : 1
+      return dimension
+    }
+  }
+  return null
+}
+
+function npcStateSubscriptionQuery(regionId: string | null, dimensionId: number | null): string {
+  if (regionId === null) {
+    return 'SELECT * FROM npc_state WHERE region_id = 0'
+  }
+  if (dimensionId === null) {
+    return `SELECT * FROM npc_state WHERE region_id = ${regionId}`
+  }
+  return `SELECT * FROM npc_state WHERE region_id = ${regionId} AND dimension_id = ${dimensionId}`
 }
 
 function parseIdentity(value: string): Identity | Error {

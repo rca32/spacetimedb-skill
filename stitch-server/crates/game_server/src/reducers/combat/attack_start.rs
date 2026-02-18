@@ -1,5 +1,6 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
+use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
 use crate::tables::combat::attack_schedule_state;
 use crate::tables::combat::combat_state;
 use crate::tables::session_state::session_state;
@@ -39,11 +40,21 @@ pub fn attack_start(
         .identity()
         .find(target_identity)
         .ok_or("active target session required".to_string())?;
+    let attacker_dimension = if attacker_session.dimension_id == 0 {
+        DEFAULT_WORLD_DIMENSION_ID
+    } else {
+        attacker_session.dimension_id
+    };
+    let target_dimension = if target_session.dimension_id == 0 {
+        DEFAULT_WORLD_DIMENSION_ID
+    } else {
+        target_session.dimension_id
+    };
 
     if attacker_session.region_id != target_session.region_id {
         return Err("target is not in same region".to_string());
     }
-    if attacker_session.dimension_id != target_session.dimension_id {
+    if attacker_dimension != target_dimension {
         return Err("target is not in same dimension".to_string());
     }
 
@@ -60,12 +71,11 @@ pub fn attack_start(
         .find(target_identity)
         .ok_or("target transform missing".to_string())?;
     if attacker_tf.region_id != attacker_session.region_id
-        || attacker_tf.dimension_id != attacker_session.dimension_id
+        || attacker_tf.dimension_id != attacker_dimension
     {
         return Err("attacker transform/session mismatch".to_string());
     }
-    if target_tf.region_id != target_session.region_id
-        || target_tf.dimension_id != target_session.dimension_id
+    if target_tf.region_id != target_session.region_id || target_tf.dimension_id != target_dimension
     {
         return Err("target transform/session mismatch".to_string());
     }
@@ -101,11 +111,15 @@ pub fn attack_start(
             .unwrap_or(CombatState {
                 identity: ctx.sender,
                 region_id: attacker_session.region_id,
+                dimension_id: attacker_dimension,
                 in_combat: false,
                 current_hp: DEFAULT_HP,
                 last_attack_client_ts_ms: 0,
                 updated_at: ctx.timestamp,
             });
+    if attacker_combat.dimension_id == 0 {
+        attacker_combat.dimension_id = attacker_dimension;
+    }
 
     if client_ts_ms <= attacker_combat.last_attack_client_ts_ms {
         return Err("client timestamp must increase".to_string());
@@ -134,6 +148,7 @@ pub fn attack_start(
         .unwrap_or(CombatState {
             identity: target_identity,
             region_id: attacker_session.region_id,
+            dimension_id: attacker_dimension,
             in_combat: false,
             current_hp: DEFAULT_HP,
             last_attack_client_ts_ms: 0,
@@ -141,6 +156,9 @@ pub fn attack_start(
         });
     target_combat.in_combat = true;
     target_combat.region_id = attacker_session.region_id;
+    if target_combat.dimension_id == 0 {
+        target_combat.dimension_id = attacker_dimension;
+    }
     target_combat.updated_at = ctx.timestamp;
 
     if ctx
@@ -160,6 +178,7 @@ pub fn attack_start(
         attacker_identity: ctx.sender,
         target_identity,
         region_id: attacker_session.region_id,
+        dimension_id: attacker_dimension,
         client_ts_ms,
         impact_damage: IMPACT_DAMAGE,
         phase: 0,
