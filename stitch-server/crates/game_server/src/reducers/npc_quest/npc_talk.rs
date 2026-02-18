@@ -1,5 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
+use crate::services::projection_views;
 use crate::tables::npc_quest::npc_interaction_log;
 use crate::tables::npc_quest::npc_state;
 use crate::tables::session_state::session_state;
@@ -107,6 +108,7 @@ pub(crate) fn ensure_npc(
         anchor_entity_id: 0,
         previous_anchors: Vec::new(),
     });
+    projection_views::reconcile_npc_state_stream(ctx);
     Ok(NpcState {
         npc_id,
         npc_type: 1,

@@ -238,6 +238,7 @@ pub fn start_world_agents(ctx: &ReducerContext) -> Result<(), String> {
     ensure_default_agent_timers(ctx);
     backfill_legacy_dimension_columns(ctx);
     seed_world_if_empty(ctx)?;
+    projection_views::reconcile_npc_state_stream(ctx);
     Ok(())
 }
 
@@ -1249,6 +1250,7 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
             timer.last_run_at = ctx.timestamp;
             ctx.db.npc_ai_loop_timer().scheduled_id().update(timer);
         }
+        projection_views::reconcile_npc_state_stream(ctx);
         return;
     }
 
@@ -1415,6 +1417,8 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
             removed_paths
         );
     }
+
+    projection_views::reconcile_npc_state_stream(ctx);
 
     if let Some(mut timer) = ctx
         .db

@@ -20,6 +20,25 @@ pub struct NpcState {
     pub previous_anchors: Vec<u64>,
 }
 
+#[spacetimedb::table(name = npc_state_stream, public)]
+pub struct NpcStateStream {
+    #[primary_key]
+    pub npc_id: u64,
+    pub npc_type: u8,
+    pub region_id: u64,
+    pub dimension_id: u32,
+    pub hex_x: i32,
+    pub hex_z: i32,
+    pub dest_hex_x: i32,
+    pub dest_hex_z: i32,
+    pub role: u8,
+    pub mood: u8,
+    pub traveling: bool,
+    pub schedule_kind: u8,
+    pub next_action_ts: u64,
+    pub anchor_entity_id: u64,
+}
+
 #[spacetimedb::table(name = npc_population_def, public)]
 pub struct NpcPopulationDef {
     #[primary_key]

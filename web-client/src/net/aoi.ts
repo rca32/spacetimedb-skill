@@ -50,12 +50,12 @@ export function buildWorldAoiQueries(anchor: AoiAnchor): string[] {
     return [
       'SELECT * FROM world_gen_params',
       `SELECT * FROM transform_state WHERE region_id = ${region} AND dimension_id = ${dimension}`,
-      `SELECT * FROM npc_state WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
       `SELECT * FROM combat_state WHERE region_id = ${region} AND dimension_id = ${dimension}`,
+      `SELECT * FROM npc_state_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
     ]
   }
 
-  return [
+  const queries = [
     'SELECT * FROM world_gen_params',
     `SELECT * FROM transform_state WHERE region_id = ${region} AND dimension_id = ${dimension}`,
     `SELECT * FROM terrain_chunk_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${terrainBounds.minX} AND chunk_x <= ${terrainBounds.maxX} AND chunk_y >= ${terrainBounds.minY} AND chunk_y <= ${terrainBounds.maxY}`,
@@ -65,9 +65,10 @@ export function buildWorldAoiQueries(anchor: AoiAnchor): string[] {
     // NOTE: Subscription SQL currently does not support ORDER BY/LIMIT in this runtime.
     // Cap logic should be handled client-side until server query support is expanded.
     `SELECT * FROM attack_outcome WHERE region_id = ${region} AND dimension_id = ${dimension}`,
-    `SELECT * FROM npc_state WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
     `SELECT * FROM resource_node WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
+    `SELECT * FROM npc_state_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
   ]
+  return queries
 }
 
 export function buildTerrainPayloadAoiQuery(anchor: AoiAnchor): string {

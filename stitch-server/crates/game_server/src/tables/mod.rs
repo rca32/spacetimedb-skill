@@ -63,7 +63,7 @@ pub use live_ops::{
 pub use movement::{MovementActorState, MovementRequestLog, MovementViolation};
 pub use npc_quest::{
     AgentRequest, AgentResult, NpcAnchorState, NpcInteractionLog, NpcPopulationDef, NpcState,
-    NpcTradeOrderDef, NpcTradeOrderState, QuestChainState, QuestStageState,
+    NpcStateStream, NpcTradeOrderDef, NpcTradeOrderState, QuestChainState, QuestStageState,
 };
 pub use ops_moderation::{
     AuditLog, BanList, ModerationAction, ModerationFlag, RateLimitBucket, ReportQueue,

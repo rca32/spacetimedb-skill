@@ -186,7 +186,7 @@ export function createWorldRuntime(): RuntimeModule {
         localPosition = nextLocalPosition
       }
 
-      syncNpcState(ctx, knownKeys, connection.db.npcState.iter())
+      syncNpcState(ctx, knownKeys, connection.db.npcStateStream.iter())
       syncBuildingState(ctx, knownKeys, connection.db.buildingState.iter())
       syncResourceState(ctx, knownKeys, connection.db.resourceNode.iter())
       syncTerrainChunks(ctx, knownKeys, connection.db.terrainChunkStream.iter(), terrainChunkSize)

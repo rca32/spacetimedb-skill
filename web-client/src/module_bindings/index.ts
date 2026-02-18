@@ -364,6 +364,8 @@ import NpcResponseCacheRow from "./npc_response_cache_table";
 export { NpcResponseCacheRow };
 import NpcStateRow from "./npc_state_table";
 export { NpcStateRow };
+import NpcStateStreamRow from "./npc_state_stream_table";
+export { NpcStateStreamRow };
 import NpcTradeOrderDefRow from "./npc_trade_order_def_table";
 export { NpcTradeOrderDefRow };
 import NpcTradeOrderStateRow from "./npc_trade_order_state_table";
@@ -622,6 +624,8 @@ import NpcResponseCache from "./npc_response_cache_type";
 export { NpcResponseCache };
 import NpcState from "./npc_state_type";
 export { NpcState };
+import NpcStateStream from "./npc_state_stream_type";
+export { NpcStateStream };
 import NpcTradeOrderDef from "./npc_trade_order_def_type";
 export { NpcTradeOrderDef };
 import NpcTradeOrderState from "./npc_trade_order_state_type";
@@ -1584,6 +1588,17 @@ const tablesSchema = __schema(
     ],
   }, NpcStateRow),
   __table({
+    name: 'npc_state_stream',
+    indexes: [
+      { name: 'npc_id', algorithm: 'btree', columns: [
+        'npcId',
+      ] },
+    ],
+    constraints: [
+      { name: 'npc_state_stream_npc_id_key', constraint: 'unique', columns: ['npcId'] },
+    ],
+  }, NpcStateStreamRow),
+  __table({
     name: 'npc_trade_order_def',
     indexes: [
       { name: 'order_def_id', algorithm: 'btree', columns: [
@@ -2277,3 +2292,4 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
+

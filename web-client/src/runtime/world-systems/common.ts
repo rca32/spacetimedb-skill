@@ -36,7 +36,6 @@ export type NpcStateRow = {
   scheduleKind: number
   nextActionTs: bigint
   anchorEntityId: bigint
-  previousAnchors: bigint[]
 }
 
 export type BuildingStateRow = {

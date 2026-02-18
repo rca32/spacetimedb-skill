@@ -19,7 +19,7 @@ const SOCIAL_NPC_QUEST_SUBSCRIPTIONS: Array<{
   { key: 'snq-guild-member', query: () => 'SELECT * FROM guild_member' },
   { key: 'snq-guild-project', query: () => 'SELECT * FROM guild_project' },
   { key: 'snq-social-feed', query: () => 'SELECT * FROM social_feed' },
-  { key: 'snq-npc-state', query: () => 'SELECT * FROM npc_state WHERE region_id = 0' },
+  { key: 'snq-npc-state', query: () => 'SELECT * FROM npc_state_stream WHERE region_id = 0' },
   {
     key: 'snq-npc-interaction',
     query: (identityHex) => `SELECT * FROM npc_interaction_log WHERE caller_identity = ${toIdentityLiteral(identityHex)}`,
@@ -110,7 +110,6 @@ type NpcStateRow = {
   scheduleKind: number
   nextActionTs: bigint
   anchorEntityId: unknown
-  previousAnchors: unknown[]
 }
 
 type NpcInteractionLogRow = {
@@ -256,7 +255,7 @@ export function createSocialNpcQuestRuntime(): RuntimeModule {
         guildProjects: collectGuildProjects(connection.db.guildProject.iter() as Iterable<GuildProjectRow>),
         socialFeeds,
         npcs: collectNpcs(
-          connection.db.npcState.iter() as Iterable<NpcStateRow>,
+          connection.db.npcStateStream.iter() as Iterable<NpcStateRow>,
           regionId,
           dimensionId,
         ),
@@ -666,7 +665,7 @@ function collectNpcs(
       scheduleKind: row.scheduleKind,
       nextActionTs: row.nextActionTs.toString(),
       anchorEntityId: toBigIntString(row.anchorEntityId),
-      previousAnchors: row.previousAnchors.map((value) => toBigIntString(value)),
+      previousAnchors: [],
     })
   }
   list.sort((left, right) => compareBigIntString(left.npcId, right.npcId))
@@ -830,12 +829,12 @@ function resolveDimensionId(rows: Iterable<PlayerSessionViewRow>, localIdentityH
 
 function npcStateSubscriptionQuery(regionId: string | null, dimensionId: number | null): string {
   if (regionId === null) {
-    return 'SELECT * FROM npc_state WHERE region_id = 0'
+    return 'SELECT * FROM npc_state_stream WHERE region_id = 0'
   }
   if (dimensionId === null) {
-    return `SELECT * FROM npc_state WHERE region_id = ${regionId}`
+    return `SELECT * FROM npc_state_stream WHERE region_id = ${regionId}`
   }
-  return `SELECT * FROM npc_state WHERE region_id = ${regionId} AND dimension_id = ${dimensionId}`
+  return `SELECT * FROM npc_state_stream WHERE region_id = ${regionId} AND dimension_id = ${dimensionId}`
 }
 
 function parseIdentity(value: string): Identity | Error {

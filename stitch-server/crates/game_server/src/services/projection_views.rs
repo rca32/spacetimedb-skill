@@ -8,6 +8,7 @@ use crate::tables::inventory_slot::inventory_slot;
 use crate::tables::item_instance::item_instance;
 use crate::tables::item_stack::item_stack;
 use crate::tables::movement::movement_request_log;
+use crate::tables::npc_quest::{npc_state, npc_state_stream};
 use crate::tables::player_views::player_inventory_container_view;
 use crate::tables::player_views::player_inventory_item_view;
 use crate::tables::player_views::player_inventory_slot_view;
@@ -17,6 +18,7 @@ use crate::tables::player_views::player_wallet_view;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
 use crate::tables::{
+    NpcState, NpcStateStream,
     PlayerInventoryContainerView, PlayerInventoryItemView, PlayerInventorySlotView,
     PlayerMovementFeedbackView, PlayerSessionView, PlayerWalletView,
 };
@@ -213,6 +215,32 @@ pub fn sync_player_session_view(ctx: &ReducerContext, identity: Identity) {
     }
 }
 
+pub fn reconcile_npc_state_stream(ctx: &ReducerContext) {
+    let npc_rows: Vec<_> = ctx.db.npc_state().iter().collect();
+    let mut active_npc_ids = HashSet::<u64>::new();
+
+    for row in npc_rows {
+        active_npc_ids.insert(row.npc_id);
+        let projected = project_npc_state_row(&row);
+        if ctx.db.npc_state_stream().npc_id().find(row.npc_id).is_some() {
+            ctx.db.npc_state_stream().npc_id().update(projected);
+        } else {
+            ctx.db.npc_state_stream().insert(projected);
+        }
+    }
+
+    let stale_ids: Vec<u64> = ctx
+        .db
+        .npc_state_stream()
+        .iter()
+        .filter(|row| !active_npc_ids.contains(&row.npc_id))
+        .map(|row| row.npc_id)
+        .collect();
+    for npc_id in stale_ids {
+        ctx.db.npc_state_stream().npc_id().delete(npc_id);
+    }
+}
+
 pub fn upsert_movement_feedback(
     ctx: &ReducerContext,
     identity: Identity,
@@ -271,6 +299,25 @@ pub fn upsert_movement_feedback(
 
 fn inventory_container_view_key(owner_identity: Identity, container_id: u64) -> String {
     format!("{owner_identity}:{container_id}")
+}
+
+fn project_npc_state_row(row: &NpcState) -> NpcStateStream {
+    NpcStateStream {
+        npc_id: row.npc_id,
+        npc_type: row.npc_type,
+        region_id: row.region_id,
+        dimension_id: row.dimension_id,
+        hex_x: row.hex_x,
+        hex_z: row.hex_z,
+        dest_hex_x: row.dest_hex_x,
+        dest_hex_z: row.dest_hex_z,
+        role: row.role,
+        mood: row.mood,
+        traveling: row.traveling,
+        schedule_kind: row.schedule_kind,
+        next_action_ts: row.next_action_ts,
+        anchor_entity_id: row.anchor_entity_id,
+    }
 }
 
 fn sanitize_reason_code(reason_code: &str) -> String {
