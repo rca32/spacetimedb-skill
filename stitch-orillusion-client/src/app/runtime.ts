@@ -32,6 +32,7 @@ export class OrillusionClientRuntime {
   private particles: ParticleSystemController | null = null
   private player: Object3D | null = null
   private motor: CharacterMotorComponent | null = null
+  private cameraFollow: CameraFollowComponent | null = null
   private streamVisualizer: WorldStreamVisualizer | null = null
 
   private frameNo = 0
@@ -42,6 +43,8 @@ export class OrillusionClientRuntime {
   private baselineInstalledForIdentity: string | null = null
   private authBootstrappedForIdentity: string | null = null
   private readonly seenCombatHitIds = new Set<string>()
+  private readonly seenCorrectionIds = new Set<string>()
+  private lastAppliedAuthoritativeFrameNo = 0
   private lastMoveDispatchOk = true
   private lastV2DispatchOk = false
 
@@ -68,6 +71,7 @@ export class OrillusionClientRuntime {
 
     const cameraFollow = this.engine.cameraObject.addComponent(CameraFollowComponent)
     cameraFollow.target = objects.player
+    this.cameraFollow = cameraFollow
 
     const cameraCollision = this.engine.cameraObject.addComponent(CameraCollisionComponent)
     cameraCollision.target = objects.player
@@ -95,6 +99,7 @@ export class OrillusionClientRuntime {
     this.net.poll(this.logger)
     this.maybeDowngradeToLegacy()
     this.ensureIdentityBootstrap()
+    this.syncPlayerFacing()
 
     const now = Date.now()
     if (now - this.lastNetworkTickAtMs >= NETWORK_TICK_MS) {
@@ -117,7 +122,7 @@ export class OrillusionClientRuntime {
     this.frameNo += 1
     const position = motor.readPosition()
 
-    const intent = motor.readIntentSnapshot()
+    const intent = motor.readWorldIntentSnapshot()
 
     const moveOk = this.net.dispatchReducer('move_to', {
       requestId: `${identityHex}:${this.frameNo}`,
@@ -283,7 +288,7 @@ export class OrillusionClientRuntime {
     const connection = this.net.getConnection()
     const motor = this.motor
     const identityHex = this.net.getIdentityHex()
-    if (!connection?.isActive || !motor || !identityHex) {
+    if (!this.useV2Streams || !connection?.isActive || !motor || !identityHex) {
       return
     }
 
@@ -298,6 +303,14 @@ export class OrillusionClientRuntime {
         continue
       }
 
+      const serverFrameNo = toU64Number(row.lastFrameNo)
+      if (serverFrameNo <= this.lastAppliedAuthoritativeFrameNo) {
+        continue
+      }
+      if (this.frameNo > 0 && serverFrameNo + 20 < this.frameNo) {
+        continue
+      }
+
       const position = row.position as number[] | undefined
       if (!position || position.length < 3 || !this.player) {
         continue
@@ -306,6 +319,7 @@ export class OrillusionClientRuntime {
       this.player.x = Number(position[0] ?? this.player.x)
       this.player.y = Number(position[1] ?? this.player.y)
       this.player.z = Number(position[2] ?? this.player.z)
+      this.lastAppliedAuthoritativeFrameNo = serverFrameNo
       break
     }
   }
@@ -324,9 +338,10 @@ export class OrillusionClientRuntime {
 
     for (const row of table.iter()) {
       const correctionId = String(row.correctionId ?? '')
-      if (!correctionId || row.acknowledged === true) {
+      if (!correctionId || row.acknowledged === true || this.seenCorrectionIds.has(correctionId)) {
         continue
       }
+      this.seenCorrectionIds.add(correctionId)
 
       const position = row.authoritativePosition as number[] | undefined
       if (position && this.player && position.length >= 3) {
@@ -351,6 +366,7 @@ export class OrillusionClientRuntime {
     const connection = this.net.getConnection()
     const connected = Boolean(connection?.isActive)
     const position = this.motor?.readPosition()
+    const intent = this.motor?.readIntentSnapshot()
 
     const fps = Time.frame
     const streamStats = this.streamVisualizer?.getStats()
@@ -363,7 +379,11 @@ export class OrillusionClientRuntime {
       `<div>profile: ${this.config.postFxProfile}</div>`,
       `<div>streams: ${this.useV2Streams ? 'v2' : 'legacy'} (pref=${this.config.useV2Streams ? 'v2' : 'legacy'})</div>`,
       `<div>terrain/npc/res/player/v2: ${streamStats ? `${streamStats.terrain}/${streamStats.npc}/${streamStats.resource}/${streamStats.players}/${streamStats.v2}` : '-'}</div>`,
+      `<div>terrain detail/fallback: ${streamStats ? `${streamStats.terrainDetailed}/${streamStats.terrainFallback}` : '-'}</div>`,
       `<div>dispatch move/v2: ${this.lastMoveDispatchOk ? 'ok' : 'fail'}/${this.lastV2DispatchOk ? 'ok' : '-'}</div>`,
+      `<div>authoritative frame: ${this.lastAppliedAuthoritativeFrameNo}</div>`,
+      `<div>pending corrections: ${this.seenCorrectionIds.size}</div>`,
+      `<div>input xz: ${intent ? `${intent.inputX}/${intent.inputZ}` : '-'}</div>`,
       `<div>pos: ${position ? `${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}` : '-'}</div>`,
       '<div>move: WASD / run: Shift / look: LMB,RMB drag / zoom: wheel</div>',
     ].join('')
@@ -389,6 +409,13 @@ export class OrillusionClientRuntime {
     this.resetStreamSubscriptions()
   }
 
+  private syncPlayerFacing(): void {
+    if (!this.motor || !this.cameraFollow) {
+      return
+    }
+    this.motor.setViewYawDegrees(this.cameraFollow.yawDegrees)
+  }
+
   private resetStreamSubscriptions(): void {
     for (let i = 0; i < this.lastAoiQueryCount; i += 1) {
       this.net.removeSubscription(`${AOI_SUBSCRIPTION_KEY}-${i}`)
@@ -398,6 +425,8 @@ export class OrillusionClientRuntime {
     this.lastAoiQueryCount = 0
     this.baselineInstalledForIdentity = null
     this.authBootstrappedForIdentity = null
+    this.lastAppliedAuthoritativeFrameNo = 0
+    this.seenCorrectionIds.clear()
   }
 }
 
@@ -420,4 +449,22 @@ function toIdentityHex(value: unknown): string | null {
   }
 
   return null
+}
+
+function toU64Number(value: unknown): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0
+  }
+  if (typeof value === 'bigint') {
+    return Number(value)
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  if (typeof value === 'object' && value !== null && 'toString' in value) {
+    const parsed = Number.parseInt(String(value), 10)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
 }

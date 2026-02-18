@@ -1,8 +1,26 @@
-import { BoxGeometry, Color, MeshRenderer, Object3D, Scene3D, SphereGeometry, UnLitMaterial } from '@orillusion/core'
+import {
+  BoxGeometry,
+  Color,
+  MeshRenderer,
+  Object3D,
+  PlaneGeometry,
+  Scene3D,
+  SphereGeometry,
+  UnLitMaterial,
+  VertexAttributeName,
+} from '@orillusion/core'
 import type { DbConnection } from '../module_bindings'
+
+const CHUNK_WORLD_SIZE = 32
+const TERRAIN_PAYLOAD_VERSION_V1 = 1
+const TERRAIN_WATER_FLAG = 1
+const TERRAIN_HEIGHT_SCALE = 0.2
+const TERRAIN_SEA_LEVEL_BASE = 12
 
 interface VisualizerStats {
   terrain: number
+  terrainDetailed: number
+  terrainFallback: number
   npc: number
   resource: number
   players: number
@@ -13,6 +31,7 @@ export class WorldStreamVisualizer {
   private readonly root = new Object3D()
 
   private readonly terrainObjects = new Map<string, Object3D>()
+  private readonly terrainStamps = new Map<string, string>()
   private readonly npcObjects = new Map<string, Object3D>()
   private readonly resourceObjects = new Map<string, Object3D>()
   private readonly playerObjects = new Map<string, Object3D>()
@@ -23,6 +42,8 @@ export class WorldStreamVisualizer {
 
   private stats: VisualizerStats = {
     terrain: 0,
+    terrainDetailed: 0,
+    terrainFallback: 0,
     npc: 0,
     resource: 0,
     players: 0,
@@ -57,6 +78,8 @@ export class WorldStreamVisualizer {
 
     this.stats = {
       terrain: this.terrainObjects.size,
+      terrainDetailed: this.stats.terrainDetailed,
+      terrainFallback: this.stats.terrainFallback,
       npc: this.npcObjects.size,
       resource: this.resourceObjects.size,
       players: this.playerObjects.size,
@@ -65,14 +88,29 @@ export class WorldStreamVisualizer {
   }
 
   private syncTerrain(db: Record<string, unknown>): void {
-    const table = getTableRows(db, 'terrainChunkStream')
-    if (!table) {
+    const streamTable = getTableRows(db, 'terrainChunkStream')
+    if (!streamTable) {
       this.prune(this.terrainObjects, new Set())
+      this.terrainStamps.clear()
       return
     }
 
+    const payloadByChunkKey = new Map<string, Record<string, unknown>>()
+    const payloadTable = getTableRows(db, 'terrainChunkPayload')
+    if (payloadTable) {
+      for (const row of payloadTable) {
+        const key = String(row.chunkKey ?? '')
+        if (!key) {
+          continue
+        }
+        payloadByChunkKey.set(key, row)
+      }
+    }
+
     const seen = new Set<string>()
-    for (const row of table) {
+    let detailedCount = 0
+    let fallbackCount = 0
+    for (const row of streamTable) {
       const chunkKey = String(row.chunkKey ?? '')
       if (!chunkKey) {
         continue
@@ -82,30 +120,89 @@ export class WorldStreamVisualizer {
       const chunkX = toNumber(row.chunkX)
       const chunkY = toNumber(row.chunkY)
       const biomeId = toNumber(row.biomeId)
+      const payloadRow = payloadByChunkKey.get(chunkKey) ?? null
+      if (payloadRow) {
+        detailedCount += 1
+      } else {
+        fallbackCount += 1
+      }
+      const stamp = terrainStamp(payloadRow, row)
 
       let object = this.terrainObjects.get(chunkKey)
-      if (!object) {
-        object = new Object3D()
-        const mesh = object.addComponent(MeshRenderer)
-        mesh.geometry = this.cubeGeometry
-        const [r, g, b] = terrainColorByBiome(biomeId)
-        if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
+      const prevStamp = this.terrainStamps.get(chunkKey)
+      if (!object || prevStamp !== stamp) {
+        if (object) {
           object.destroy()
+          this.terrainObjects.delete(chunkKey)
+        }
+
+        object = this.buildTerrainChunkObject(biomeId, payloadRow, row)
+        if (!object) {
           continue
         }
+
         this.root.addChild(object)
         this.terrainObjects.set(chunkKey, object)
+        this.terrainStamps.set(chunkKey, stamp)
       }
 
-      object.x = chunkX * 32 + 16
-      object.y = -0.04
-      object.z = chunkY * 32 + 16
-      object.scaleX = 32
-      object.scaleY = 0.08
-      object.scaleZ = 32
+      object.x = chunkX * CHUNK_WORLD_SIZE
+      object.y = 0
+      object.z = chunkY * CHUNK_WORLD_SIZE
     }
 
     this.prune(this.terrainObjects, seen)
+    for (const key of this.terrainStamps.keys()) {
+      if (!seen.has(key)) {
+        this.terrainStamps.delete(key)
+      }
+    }
+    this.stats.terrainDetailed = detailedCount
+    this.stats.terrainFallback = fallbackCount
+  }
+
+  private buildTerrainChunkObject(
+    biomeId: number,
+    payloadRow: Record<string, unknown> | null,
+    streamRow: Record<string, unknown>,
+  ): Object3D | undefined {
+    const chunk = new Object3D()
+    const [r, g, b] = terrainColorByBiome(biomeId)
+
+    const cells = decodeTerrainPayload(payloadRow)
+    if (!cells) {
+      const mesh = chunk.addComponent(MeshRenderer)
+      mesh.geometry = this.cubeGeometry
+      if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
+        chunk.destroy()
+        return undefined
+      }
+      const heightMin = toNumber(streamRow.heightMin)
+      const heightMax = toNumber(streamRow.heightMax)
+      const slabTopY = elevationToWorldY((heightMin + heightMax) * 0.5)
+      const slabThickness = Math.max((heightMax - heightMin) * TERRAIN_HEIGHT_SCALE, 0.08)
+      chunk.x = CHUNK_WORLD_SIZE * 0.5
+      chunk.y = slabTopY - slabThickness * 0.5
+      chunk.z = CHUNK_WORLD_SIZE * 0.5
+      chunk.scaleX = CHUNK_WORLD_SIZE
+      chunk.scaleY = slabThickness
+      chunk.scaleZ = CHUNK_WORLD_SIZE
+      return chunk
+    }
+
+    const mesh = chunk.addComponent(MeshRenderer)
+    const terrainGeometry = buildTerrainSurfaceGeometry(cells)
+    if (!terrainGeometry) {
+      chunk.destroy()
+      return undefined
+    }
+    mesh.geometry = terrainGeometry
+    if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
+      chunk.destroy()
+      return undefined
+    }
+
+    return chunk
   }
 
   private syncNpcs(db: Record<string, unknown>): void {
@@ -295,6 +392,7 @@ export class WorldStreamVisualizer {
 
   private clearAll(): void {
     this.prune(this.terrainObjects, new Set())
+    this.terrainStamps.clear()
     this.prune(this.npcObjects, new Set())
     this.prune(this.resourceObjects, new Set())
     this.prune(this.playerObjects, new Set())
@@ -302,6 +400,8 @@ export class WorldStreamVisualizer {
 
     this.stats = {
       terrain: 0,
+      terrainDetailed: 0,
+      terrainFallback: 0,
       npc: 0,
       resource: 0,
       players: 0,
@@ -332,6 +432,153 @@ function setMaterialSafe(mesh: MeshRenderer, material: UnLitMaterial): boolean {
     console.warn('[stitch-orillusion-client] material assignment failed in stream visualizer', error)
     return false
   }
+}
+
+interface TerrainCellSample {
+  readonly elevation: number
+  readonly waterLevel: number
+  readonly flags: number
+}
+
+interface DecodedTerrainCells {
+  readonly chunkSize: number
+  readonly read: (x: number, z: number) => TerrainCellSample | null
+}
+
+function terrainStamp(
+  payloadRow: Record<string, unknown> | null,
+  streamRow: Record<string, unknown>,
+): string {
+  const hMin = toNumber(streamRow.heightMin)
+  const hMax = toNumber(streamRow.heightMax)
+
+  if (payloadRow) {
+    const chunkSize = toTerrainChunkSize(payloadRow)
+    const bytes = toByteArray(payloadRow.cellPayloadBytes)
+    const tail = bytes && bytes.length >= 2 ? readU16LE(bytes, bytes.length - 2) : 0
+    return `payload:${chunkSize}:${bytes?.length ?? 0}:${tail}:${hMin}:${hMax}`
+  }
+
+  return `none:${hMin}:${hMax}`
+}
+
+function decodeTerrainPayload(payloadRow: Record<string, unknown> | null): DecodedTerrainCells | null {
+  if (!payloadRow) {
+    return null
+  }
+
+  const version = toNumber(payloadRow.cellPayloadVersion)
+  if (version !== TERRAIN_PAYLOAD_VERSION_V1) {
+    return null
+  }
+
+  const bytes = toByteArray(payloadRow.cellPayloadBytes)
+  if (!bytes || bytes.length < 8) {
+    return null
+  }
+
+  const chunkSize = toTerrainChunkSize(payloadRow, bytes.length)
+  if (chunkSize <= 0) {
+    return null
+  }
+
+  const read = (x: number, z: number): TerrainCellSample | null => {
+    const byteIndex = (z * chunkSize + x) * 8
+    if (byteIndex + 7 >= bytes.length) {
+      return null
+    }
+    return {
+      elevation: readI16LE(bytes, byteIndex),
+      waterLevel: readI16LE(bytes, byteIndex + 2),
+      flags: readU16LE(bytes, byteIndex + 6),
+    }
+  }
+
+  return { chunkSize, read }
+}
+
+function toTerrainChunkSize(payloadRow: Record<string, unknown>, byteLengthHint = 0): number {
+  const fromCellCount = toNumber(payloadRow.cellCount)
+  if (fromCellCount > 0) {
+    const side = Math.floor(Math.sqrt(fromCellCount))
+    if (side > 0 && side * side === fromCellCount) {
+      return side
+    }
+  }
+
+  const bytesLength = byteLengthHint > 0 ? byteLengthHint : toByteArray(payloadRow.cellPayloadBytes)?.length ?? 0
+  if (bytesLength >= 8) {
+    const count = Math.floor(bytesLength / 8)
+    const side = Math.floor(Math.sqrt(count))
+    if (side > 0) {
+      return side
+    }
+  }
+
+  return 0
+}
+
+function chooseTerrainSampleStep(chunkSize: number): number {
+  if (chunkSize <= 16) {
+    return 1
+  }
+  if (chunkSize <= 32) {
+    return TERRAIN_SAMPLE_STEP
+  }
+  return 4
+}
+
+function toByteArray(value: unknown): Uint8Array | null {
+  if (value instanceof Uint8Array) {
+    return value
+  }
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value)
+  }
+  if (ArrayBuffer.isView(value)) {
+    const view = value as ArrayBufferView
+    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength)
+  }
+  if (Array.isArray(value)) {
+    return Uint8Array.from(value.map((item) => toNumber(item) & 0xff))
+  }
+  if (typeof value === 'object' && value !== null) {
+    const candidate = value as { toUint8Array?: () => Uint8Array; value?: unknown; data?: unknown }
+    const byMethod = candidate.toUint8Array?.()
+    if (byMethod instanceof Uint8Array) {
+      return byMethod
+    }
+    const byValue = toByteArray(candidate.value)
+    if (byValue) {
+      return byValue
+    }
+    const byData = toByteArray(candidate.data)
+    if (byData) {
+      return byData
+    }
+  }
+  return null
+}
+
+function readI16LE(bytes: Uint8Array, index: number): number {
+  const low = bytes[index] ?? 0
+  const high = bytes[index + 1] ?? 0
+  const value = low | (high << 8)
+  return value >= 0x8000 ? value - 0x10000 : value
+}
+
+function readU16LE(bytes: Uint8Array, index: number): number {
+  const low = bytes[index] ?? 0
+  const high = bytes[index + 1] ?? 0
+  return low | (high << 8)
+}
+
+function elevationToWorldY(rawElevation: number): number {
+  return (rawElevation - TERRAIN_SEA_LEVEL_BASE) * TERRAIN_HEIGHT_SCALE
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value))
 }
 
 function terrainColorByBiome(biomeId: number): readonly [number, number, number] {
@@ -367,6 +614,10 @@ function toNumber(value: unknown): number {
   }
   if (typeof value === 'string') {
     const parsed = Number.parseFloat(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  if (typeof value === 'object' && value !== null && 'toString' in value) {
+    const parsed = Number.parseFloat(String(value))
     return Number.isFinite(parsed) ? parsed : 0
   }
   return 0

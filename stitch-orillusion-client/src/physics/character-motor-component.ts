@@ -14,13 +14,20 @@ export class CharacterMotorComponent extends ComponentBase {
 
   private readonly keys = new Set<string>()
   private rigidbody: Rigidbody | null = null
+  private viewYawDegrees = 180
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
     this.keys.add(event.code)
+    this.keys.add(normalizeKey(event.key))
   }
 
   private readonly onKeyUp = (event: KeyboardEvent) => {
     this.keys.delete(event.code)
+    this.keys.delete(normalizeKey(event.key))
+  }
+
+  private readonly onWindowBlur = () => {
+    this.keys.clear()
   }
 
   public start(): void {
@@ -40,12 +47,16 @@ export class CharacterMotorComponent extends ComponentBase {
 
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
+    window.addEventListener('blur', this.onWindowBlur)
   }
 
   public onUpdate(): void {
     const dtRaw = Time.delta * 0.001
     const dtSeconds = Number.isFinite(dtRaw) && dtRaw > 0 ? Math.min(dtRaw, 0.05) : 1 / 60
-    const intent = this.readIntentSnapshot()
+    const intent = this.readWorldIntentSnapshot()
+
+    // Face the same heading as camera yaw (FPS/TPS-style coupling).
+    this.object3D.rotationY = this.viewYawDegrees + 180
 
     if (intent.inputX === 0 && intent.inputZ === 0) {
       return
@@ -58,20 +69,48 @@ export class CharacterMotorComponent extends ComponentBase {
   }
 
   public readIntentSnapshot(): MotionIntentSnapshot {
-    const inputX = (this.keys.has('KeyD') || this.keys.has('ArrowRight') ? 1 : 0)
-      - (this.keys.has('KeyA') || this.keys.has('ArrowLeft') ? 1 : 0)
-    const inputZ = (this.keys.has('KeyS') || this.keys.has('ArrowDown') ? 1 : 0)
-      - (this.keys.has('KeyW') || this.keys.has('ArrowUp') ? 1 : 0)
+    // Local inputs: +X right (D), +Z forward (W).
+    const inputX = (this.hasAny('KeyD', 'd', 'ArrowRight') ? 1 : 0)
+      - (this.hasAny('KeyA', 'a', 'ArrowLeft') ? 1 : 0)
+    const inputZ = (this.hasAny('KeyW', 'w', 'ArrowUp') ? 1 : 0)
+      - (this.hasAny('KeyS', 's', 'ArrowDown') ? 1 : 0)
 
-    const isRunning = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')
+    const isRunning = this.hasAny('ShiftLeft', 'ShiftRight', 'Shift')
     const requestedSpeed = isRunning ? this.runSpeed : this.walkSpeed
 
     return {
       inputX,
       inputZ,
       requestedSpeed,
-      jump: this.keys.has('Space'),
+      jump: this.hasAny('Space', ' '),
     }
+  }
+
+  public readWorldIntentSnapshot(): MotionIntentSnapshot {
+    const local = this.readIntentSnapshot()
+    if (local.inputX === 0 && local.inputZ === 0) {
+      return local
+    }
+
+    const yaw = (this.viewYawDegrees * Math.PI) / 180
+    const forwardX = -Math.sin(yaw)
+    const forwardZ = -Math.cos(yaw)
+    const rightX = forwardZ
+    const rightZ = -forwardX
+
+    const worldX = rightX * local.inputX + forwardX * local.inputZ
+    const worldZ = rightZ * local.inputX + forwardZ * local.inputZ
+
+    return {
+      inputX: worldX,
+      inputZ: worldZ,
+      requestedSpeed: local.requestedSpeed,
+      jump: local.jump,
+    }
+  }
+
+  public setViewYawDegrees(yawDegrees: number): void {
+    this.viewYawDegrees = yawDegrees
   }
 
   public readPosition(): Vector3 {
@@ -81,6 +120,23 @@ export class CharacterMotorComponent extends ComponentBase {
   public destroy(force?: boolean): void {
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
+    window.removeEventListener('blur', this.onWindowBlur)
     super.destroy(force)
   }
+
+  private hasAny(...keys: string[]): boolean {
+    for (const key of keys) {
+      if (this.keys.has(key)) {
+        return true
+      }
+    }
+    return false
+  }
+}
+
+function normalizeKey(raw: string): string {
+  if (raw === ' ') {
+    return raw
+  }
+  return raw.length === 1 ? raw.toLowerCase() : raw
 }

@@ -61,10 +61,18 @@ export class NetRuntime {
         }
 
         case 'subscription-applied':
-        case 'subscription-error':
-        case 'reducer-dispatched':
-        case 'reducer-failed': {
+        case 'subscription-error': {
           // handled through callbacks/logging in other layers
+          break
+        }
+
+        case 'reducer-dispatched': {
+          logger.debug('reducer dispatched', { reducer: event.reducer })
+          break
+        }
+
+        case 'reducer-failed': {
+          logger.error('reducer dispatch failed', { reducer: event.reducer, error: event.error.message })
           break
         }
       }
