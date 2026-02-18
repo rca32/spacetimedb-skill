@@ -10,7 +10,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "perf:probe": "bun run scripts/render_perf_probe.ts",
+    "visual:capture": "bash scripts/visual_regression_capture.sh",
+    "visual:compare": "bash scripts/visual_regression_compare.sh"
   },
   "dependencies": {
     "koota": "^0.6.5",

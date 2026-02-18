@@ -284,6 +284,27 @@ agent-browser screenshot --full /tmp/worldgen-seed-1337-full.png
 ```
 - 동일 seed 재생성 후 동일 위치 스크린샷 비교(수계/바이옴/자원 분포 일치 확인)
 
+## 8.4 자동화 게이트 (신규)
+```bash
+# 1) 결정론 스냅샷 캡처/비교
+stitch-server/scripts/worldgen_determinism_snapshot.sh --out /tmp/snap-a.snapshot
+stitch-server/scripts/worldgen_determinism_snapshot.sh --out /tmp/snap-b.snapshot
+stitch-server/scripts/worldgen_determinism_compare.sh /tmp/snap-a.snapshot /tmp/snap-b.snapshot
+
+# 2) 서버 worldgen 성능 벤치
+stitch-server/scripts/worldgen_perf_benchmark.sh --iterations 3 --out /tmp/worldgen-perf.csv
+
+# 3) 운영 스모크 게이트
+stitch-server/scripts/full_smoke_gate.sh
+
+# 4) 클라 렌더 성능/시각 회귀
+cd /home/rca32/workspaces/spacetimedb-skill/web-client
+bun run perf:probe -- --url http://127.0.0.1:5173 --output /tmp/render-perf.json
+bun run visual:capture -- --url http://127.0.0.1:5173 --out-dir /tmp/stitch-visual --tag baseline
+bun run visual:capture -- --url http://127.0.0.1:5173 --out-dir /tmp/stitch-visual --tag candidate
+bun run visual:compare -- --base /tmp/stitch-visual/baseline --candidate /tmp/stitch-visual/candidate --threshold 0
+```
+
 ## 9. 단계별 롤아웃 전략
 - Wave 1: 스키마 확장 + 좌표/노이즈 코어 + terrain 1차
 - Wave 2: resource/building 생성 + AOI selective subscription
@@ -300,13 +321,13 @@ agent-browser screenshot --full /tmp/worldgen-seed-1337-full.png
 - 리스크: 기존 기능 회귀(건축/환경효과)
   - 대응: legacy 경로 플래그 유지 후 단계적 전환
 
-## 11. 최종 체크리스트 (상태 업데이트: 2026-02-17)
+## 11. 최종 체크리스트 (상태 업데이트: 2026-02-18)
 - 상태 표기: `[x]` 완료, `[~]` 부분완료, `[ ]` 미완료
 - [x] worldgen 스키마 확장 및 마이그레이션 완료
-- [~] deterministic terrain/biome/resource 생성 완료 (수계 2차/결정론 테스트 스냅샷 미완료)
+- [~] deterministic terrain/biome/resource 생성 완료 (수계 2차 미완료, 결정론 스냅샷 자동화 추가 완료)
 - [x] `resource_node` 좌표 authoritative 반영 완료
 - [x] AOI selective subscription 전환 완료
 - [~] web-client chunk mesh 파이프 전환 완료 (`terrain_chunk_stream` 기반 안정화 완료, `cell_payload` 실지형 메시 파이프 미완료)
-- [ ] 성능/메모리 기준 통과
-- [ ] agent-browser 시각 회귀 기준샷 확보
+- [~] 성능/메모리 기준 통과 (벤치/프로브 자동화 추가, 기준 임계치 튜닝 미완료)
+- [~] agent-browser 시각 회귀 기준샷 확보 (캡처/비교 자동화 추가, baseline 확정 미완료)
 - [x] 운영 기본 명령(`publish -> seed -> import -> generate -> start_world_agents`) 문서화 완료
