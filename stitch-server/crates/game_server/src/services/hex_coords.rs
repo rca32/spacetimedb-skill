@@ -1,5 +1,7 @@
 use std::fmt;
 
+pub const DEFAULT_WORLD_DIMENSION_ID: u32 = 1;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HexCoord {
     pub q: i32,
@@ -223,7 +225,11 @@ impl HexDirection {
     }
 
     pub const fn movement_cost(self) -> f32 {
-        if self.is_pointy() { 1.5 } else { 1.0 }
+        if self.is_pointy() {
+            1.5
+        } else {
+            1.0
+        }
     }
 
     pub const fn offset(self) -> (i32, i32) {
@@ -246,7 +252,11 @@ impl HexDirection {
 
 impl fmt::Display for HexCoord {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HexCoord({}, {}, dim={})", self.q, self.r, self.dimension)
+        write!(
+            f,
+            "HexCoord({}, {}, dim={})",
+            self.q, self.r, self.dimension
+        )
     }
 }
 

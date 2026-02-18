@@ -13,6 +13,7 @@ import {
 export default __t.object("PathStep", {
   stepKey: __t.string(),
   pathId: __t.string(),
+  dimensionId: __t.u32(),
   stepIndex: __t.u16(),
   hexX: __t.i32(),
   hexZ: __t.i32(),

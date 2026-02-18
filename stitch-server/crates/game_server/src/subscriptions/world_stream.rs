@@ -2,11 +2,15 @@ use super::aoi::AoiFilter;
 
 pub fn terrain_chunk_stream_query(
     region_id: u64,
+    dimension_id: u32,
     min_chunk_x: i32,
     max_chunk_x: i32,
     min_chunk_y: i32,
     max_chunk_y: i32,
 ) -> Result<String, String> {
+    if dimension_id == 0 {
+        return Err("dimension_id must be > 0".to_string());
+    }
     if min_chunk_x > max_chunk_x {
         return Err("min_chunk_x must be <= max_chunk_x".to_string());
     }
@@ -15,18 +19,22 @@ pub fn terrain_chunk_stream_query(
     }
 
     Ok(format!(
-        "SELECT * FROM terrain_chunk_stream tc WHERE tc.region_id = {} AND tc.chunk_x BETWEEN {} AND {} AND tc.chunk_y BETWEEN {} AND {}",
-        region_id, min_chunk_x, max_chunk_x, min_chunk_y, max_chunk_y
+        "SELECT * FROM terrain_chunk_stream tc WHERE tc.region_id = {} AND tc.dimension_id = {} AND tc.chunk_x BETWEEN {} AND {} AND tc.chunk_y BETWEEN {} AND {}",
+        region_id, dimension_id, min_chunk_x, max_chunk_x, min_chunk_y, max_chunk_y
     ))
 }
 
 pub fn terrain_chunk_payload_stream_query(
     region_id: u64,
+    dimension_id: u32,
     min_chunk_x: i32,
     max_chunk_x: i32,
     min_chunk_y: i32,
     max_chunk_y: i32,
 ) -> Result<String, String> {
+    if dimension_id == 0 {
+        return Err("dimension_id must be > 0".to_string());
+    }
     if min_chunk_x > max_chunk_x {
         return Err("min_chunk_x must be <= max_chunk_x".to_string());
     }
@@ -35,15 +43,15 @@ pub fn terrain_chunk_payload_stream_query(
     }
 
     Ok(format!(
-        "SELECT * FROM terrain_chunk_payload tcp WHERE tcp.region_id = {} AND tcp.chunk_x BETWEEN {} AND {} AND tcp.chunk_y BETWEEN {} AND {}",
-        region_id, min_chunk_x, max_chunk_x, min_chunk_y, max_chunk_y
+        "SELECT * FROM terrain_chunk_payload tcp WHERE tcp.region_id = {} AND tcp.dimension_id = {} AND tcp.chunk_x BETWEEN {} AND {} AND tcp.chunk_y BETWEEN {} AND {}",
+        region_id, dimension_id, min_chunk_x, max_chunk_x, min_chunk_y, max_chunk_y
     ))
 }
 
 pub fn resource_node_stream_query(filter: &AoiFilter) -> String {
     format!(
         "SELECT * FROM resource_node rn WHERE {} AND {}",
-        filter.region_clause("rn"),
+        filter.region_dimension_clause("rn"),
         filter.hex_bounds_clause("rn")
     )
 }
@@ -55,31 +63,34 @@ mod tests {
     #[test]
     fn test_terrain_chunk_stream_query_validates_bounds() {
         let err =
-            terrain_chunk_stream_query(1, 2, 1, -1, 1).expect_err("invalid range should fail");
+            terrain_chunk_stream_query(1, 1, 2, 1, -1, 1).expect_err("invalid range should fail");
         assert!(err.contains("min_chunk_x"));
 
         let query =
-            terrain_chunk_stream_query(1, -2, 2, -3, 3).expect("valid range should construct");
+            terrain_chunk_stream_query(1, 4, -2, 2, -3, 3).expect("valid range should construct");
         assert!(query.contains("FROM terrain_chunk_stream"));
+        assert!(query.contains("tc.dimension_id = 4"));
     }
 
     #[test]
     fn test_terrain_chunk_payload_stream_query_validates_bounds() {
-        let err = terrain_chunk_payload_stream_query(1, 3, 2, -1, 1)
+        let err = terrain_chunk_payload_stream_query(1, 2, 3, 2, -1, 1)
             .expect_err("invalid range should fail");
         assert!(err.contains("min_chunk_x"));
 
-        let query = terrain_chunk_payload_stream_query(1, -2, 2, -3, 3)
+        let query = terrain_chunk_payload_stream_query(1, 7, -2, 2, -3, 3)
             .expect("valid range should construct");
         assert!(query.contains("FROM terrain_chunk_payload"));
+        assert!(query.contains("tcp.dimension_id = 7"));
     }
 
     #[test]
     fn test_resource_node_stream_query_uses_region_and_bounds() {
-        let filter = AoiFilter::new(9, -10, 10, -12, 12).expect("valid filter should construct");
+        let filter = AoiFilter::new(9, 3, -10, 10, -12, 12).expect("valid filter should construct");
         let query = resource_node_stream_query(&filter);
         assert!(query.contains("FROM resource_node"));
         assert!(query.contains("rn.region_id = 9"));
+        assert!(query.contains("rn.dimension_id = 3"));
         assert!(query.contains("rn.hex_x BETWEEN -10 AND 10"));
         assert!(query.contains("rn.hex_z BETWEEN -12 AND 12"));
     }

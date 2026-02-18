@@ -8,6 +8,7 @@ import type {
 } from './types'
 
 const ID_ALLOC_TIMEOUT_MS = 2_500
+const DEFAULT_WORLD_DIMENSION_ID = Number.parseInt(import.meta.env.VITE_WORLD_DIMENSION_ID ?? '1', 10)
 
 const BUILD_CLAIM_HOUSING_SUBSCRIPTIONS: Array<{ key: string; query: string }> = [
   { key: 'bch-building-def', query: 'SELECT * FROM building_def' },
@@ -53,6 +54,7 @@ type BuildingStateRow = {
   entityId: unknown
   ownerIdentity: unknown
   regionId: unknown
+  dimensionId: number
   hexX: number
   hexZ: number
   state: number
@@ -235,16 +237,25 @@ function createActions(
         return failResult(regionId.message)
       }
 
-      const dispatchPlace = (buildingId: bigint): BuildClaimHousingActionResult =>
-        dispatchReducer(ctx, 'building_place', {
+      const dispatchPlace = (buildingId: bigint): BuildClaimHousingActionResult => {
+        const requestedDimensionId = Number.isFinite(input.dimensionId)
+          ? (input.dimensionId as number)
+          : DEFAULT_WORLD_DIMENSION_ID
+        const dimensionId =
+          Number.isFinite(requestedDimensionId) && requestedDimensionId > 0
+            ? requestedDimensionId
+            : 1
+        return dispatchReducer(ctx, 'building_place_in_dimension', {
           buildingId,
           regionId,
+          dimensionId: toU32(dimensionId),
           hexX: toI32(input.hexX),
           hexZ: toI32(input.hexZ),
           requiredItemDefId: toBigIntOrZero(buildingDef.requiredItemDefId),
           requiredItemQty: toU32(buildingDef.requiredItemQty),
           buildRequired: toU32(buildingDef.buildRequired),
         })
+      }
 
       if (input.buildingId?.trim()) {
         const buildingId = parseU64(input.buildingId, 'buildingId')
@@ -721,6 +732,7 @@ function collectBuildingStates(rows: Iterable<BuildingStateRow>): BuildClaimHous
       entityId: toBigIntString(row.entityId),
       ownerIdentityHex: identityHex(row.ownerIdentity),
       regionId: toBigIntString(row.regionId),
+      dimensionId: row.dimensionId,
       hexX: row.hexX,
       hexZ: row.hexZ,
       state: row.state,

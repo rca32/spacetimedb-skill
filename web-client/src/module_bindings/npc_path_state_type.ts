@@ -13,6 +13,7 @@ import {
 export default __t.object("NpcPathState", {
   npcId: __t.u64(),
   pathId: __t.string(),
+  dimensionId: __t.u32(),
   nextStepIndex: __t.u16(),
   updatedAt: __t.timestamp(),
 });

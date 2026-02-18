@@ -211,6 +211,7 @@ export interface BuildingStateSnapshot {
   entityId: string
   ownerIdentityHex: string
   regionId: string
+  dimensionId: number
   hexX: number
   hexZ: number
   state: number
@@ -304,6 +305,7 @@ export interface BuildClaimHousingActionResult {
 export interface BuildClaimHousingActions {
   placeBuilding: (input: {
     regionId: number
+    dimensionId?: number
     hexX: number
     hexZ: number
     buildingDefId: string

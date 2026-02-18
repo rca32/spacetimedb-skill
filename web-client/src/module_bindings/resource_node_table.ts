@@ -13,6 +13,7 @@ import {
 export default __t.row({
   entityId: __t.u64().primaryKey().name("entity_id"),
   regionId: __t.u64().name("region_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   chunkX: __t.i32().name("chunk_x"),
   chunkY: __t.i32().name("chunk_y"),
   hexX: __t.i32().name("hex_x"),

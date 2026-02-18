@@ -6,6 +6,7 @@ pub struct BuildingState {
     pub entity_id: u64,
     pub owner_identity: Identity,
     pub region_id: u64,
+    pub dimension_id: u32,
     pub hex_x: i32,
     pub hex_z: i32,
     pub state: u8, // 0=placed(project),1=complete,2=deconstructed

@@ -1,5 +1,6 @@
 export interface AoiAnchor {
   regionId: bigint
+  dimensionId: number
   centerX: number
   centerZ: number
   terrainRadius: number
@@ -40,6 +41,9 @@ export function buildWorldAoiQueries(anchor: AoiAnchor): string[] {
   const maxHexZ = (dynamicChunkBounds.maxY + 1) * anchor.chunkSize - 1
 
   const region = anchor.regionId.toString()
+  const dimension = Number.isFinite(anchor.dimensionId) && anchor.dimensionId > 0
+    ? Math.floor(anchor.dimensionId)
+    : 1
   const minimalAoi = (import.meta.env.VITE_MINIMAL_AOI ?? '0') === '1'
 
   if (minimalAoi) {
@@ -54,29 +58,35 @@ export function buildWorldAoiQueries(anchor: AoiAnchor): string[] {
   return [
     'SELECT * FROM world_gen_params',
     `SELECT * FROM transform_state WHERE region_id = ${region}`,
-    `SELECT * FROM terrain_chunk_stream WHERE region_id = ${region} AND chunk_x >= ${terrainBounds.minX} AND chunk_x <= ${terrainBounds.maxX} AND chunk_y >= ${terrainBounds.minY} AND chunk_y <= ${terrainBounds.maxY}`,
-    `SELECT * FROM building_state WHERE region_id = ${region} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
+    `SELECT * FROM terrain_chunk_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${terrainBounds.minX} AND chunk_x <= ${terrainBounds.maxX} AND chunk_y >= ${terrainBounds.minY} AND chunk_y <= ${terrainBounds.maxY}`,
+    `SELECT * FROM building_state WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
     `SELECT * FROM claim_state WHERE region_id = ${region}`,
     `SELECT * FROM combat_state WHERE region_id = ${region}`,
     // NOTE: Subscription SQL currently does not support ORDER BY/LIMIT in this runtime.
     // Cap logic should be handled client-side until server query support is expanded.
     `SELECT * FROM attack_outcome WHERE region_id = ${region}`,
     `SELECT * FROM npc_state WHERE region_id = ${region}`,
-    `SELECT * FROM resource_node WHERE region_id = ${region} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
+    `SELECT * FROM resource_node WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
   ]
 }
 
 export function buildTerrainPayloadAoiQuery(anchor: AoiAnchor): string {
   const terrainBounds = computeChunkBounds(anchor, anchor.terrainRadius)
   const region = anchor.regionId.toString()
-  return `SELECT * FROM terrain_chunk_payload WHERE region_id = ${region} AND chunk_x >= ${terrainBounds.minX} AND chunk_x <= ${terrainBounds.maxX} AND chunk_y >= ${terrainBounds.minY} AND chunk_y <= ${terrainBounds.maxY}`
+  const dimension = Number.isFinite(anchor.dimensionId) && anchor.dimensionId > 0
+    ? Math.floor(anchor.dimensionId)
+    : 1
+  return `SELECT * FROM terrain_chunk_payload WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${terrainBounds.minX} AND chunk_x <= ${terrainBounds.maxX} AND chunk_y >= ${terrainBounds.minY} AND chunk_y <= ${terrainBounds.maxY}`
 }
 
-export function buildPathDebugQueries(regionId: bigint): string[] {
+export function buildPathDebugQueries(regionId: bigint, dimensionId: number): string[] {
   const region = regionId.toString()
+  const dimension = Number.isFinite(dimensionId) && dimensionId > 0
+    ? Math.floor(dimensionId)
+    : 1
   return [
-    `SELECT * FROM path_result WHERE region_id = ${region}`,
-    'SELECT * FROM path_step',
+    `SELECT * FROM path_result WHERE region_id = ${region} AND dimension_id = ${dimension}`,
+    `SELECT * FROM path_step WHERE dimension_id = ${dimension}`,
   ]
 }
 

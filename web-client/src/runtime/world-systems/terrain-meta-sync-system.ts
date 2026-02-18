@@ -34,6 +34,7 @@ export function syncTerrainChunks(
       entity.set(Rotation, { x: 0, y: 0, z: 0, w: 1 })
       entity.set(ChunkData, {
         chunkKey: row.chunkKey,
+        dimensionId: row.dimensionId,
         chunkX: row.chunkX,
         chunkY: row.chunkY,
         biomeId: row.biomeId,

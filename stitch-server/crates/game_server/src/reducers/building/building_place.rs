@@ -1,6 +1,7 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::reducers::inventory::inventory_bootstrap::next_item_instance_id;
+use crate::services::hex_coords::{world_to_hex, HexCoord, DEFAULT_WORLD_DIMENSION_ID};
 use crate::services::permissions;
 use crate::tables::building_state::building_state;
 use crate::tables::claim_state::claim_state;
@@ -14,6 +15,8 @@ use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
 use crate::tables::{BuildingState, ItemInstance, ItemStack};
 
+const MAX_BUILD_HEX_DISTANCE: i32 = 20;
+
 #[spacetimedb::reducer]
 pub fn building_place(
     ctx: &ReducerContext,
@@ -25,6 +28,58 @@ pub fn building_place(
     required_item_qty: u32,
     build_required: u32,
 ) -> Result<(), String> {
+    building_place_with_dimension(
+        ctx,
+        building_id,
+        region_id,
+        DEFAULT_WORLD_DIMENSION_ID,
+        hex_x,
+        hex_z,
+        required_item_def_id,
+        required_item_qty,
+        build_required,
+    )
+}
+
+#[spacetimedb::reducer]
+pub fn building_place_in_dimension(
+    ctx: &ReducerContext,
+    building_id: u64,
+    region_id: u64,
+    dimension_id: u32,
+    hex_x: i32,
+    hex_z: i32,
+    required_item_def_id: u64,
+    required_item_qty: u32,
+    build_required: u32,
+) -> Result<(), String> {
+    building_place_with_dimension(
+        ctx,
+        building_id,
+        region_id,
+        dimension_id,
+        hex_x,
+        hex_z,
+        required_item_def_id,
+        required_item_qty,
+        build_required,
+    )
+}
+
+fn building_place_with_dimension(
+    ctx: &ReducerContext,
+    building_id: u64,
+    region_id: u64,
+    dimension_id: u32,
+    hex_x: i32,
+    hex_z: i32,
+    required_item_def_id: u64,
+    required_item_qty: u32,
+    build_required: u32,
+) -> Result<(), String> {
+    if dimension_id == 0 {
+        return Err("dimension_id must be > 0".to_string());
+    }
     if required_item_qty == 0 || build_required == 0 {
         return Err("required_item_qty/build_required must be > 0".to_string());
     }
@@ -45,10 +100,9 @@ pub fn building_place(
         .entity_id()
         .find(ctx.sender)
         .ok_or("transform missing".to_string())?;
-    let dx = transform.position[0] - hex_x as f32;
-    let dz = transform.position[2] - hex_z as f32;
-    let dist_sq = dx * dx + dz * dz;
-    if dist_sq > 400.0 {
+    let player_hex = world_to_hex(transform.position[0], transform.position[2], dimension_id);
+    let build_hex = HexCoord::new(hex_x, hex_z, dimension_id);
+    if player_hex.distance_to(build_hex) > MAX_BUILD_HEX_DISTANCE {
         return Err("too far from build position".to_string());
     }
 
@@ -62,11 +116,13 @@ pub fn building_place(
         return Err("building_id already exists".to_string());
     }
 
-    if let Some(claim) = claim_covering(ctx, region_id, hex_x, hex_z) {
-        if claim.owner_identity != ctx.sender
-            && !permissions::has_permission(ctx, 1, claim.claim_id, permissions::PERM_BUILD)
-        {
-            return Err("no build permission in claim".to_string());
+    if dimension_id == DEFAULT_WORLD_DIMENSION_ID {
+        if let Some(claim) = claim_covering(ctx, region_id, hex_x, hex_z) {
+            if claim.owner_identity != ctx.sender
+                && !permissions::has_permission(ctx, 1, claim.claim_id, permissions::PERM_BUILD)
+            {
+                return Err("no build permission in claim".to_string());
+            }
         }
     }
 
@@ -83,6 +139,7 @@ pub fn building_place(
         entity_id: building_id,
         owner_identity: ctx.sender,
         region_id,
+        dimension_id,
         hex_x,
         hex_z,
         state: 0,

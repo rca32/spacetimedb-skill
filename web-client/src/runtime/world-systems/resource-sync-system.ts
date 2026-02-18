@@ -28,6 +28,7 @@ export function syncResourceState(
       entity.set(Position, { x: row.hexX, y: 0, z: row.hexZ })
       entity.set(Rotation, { x: 0, y: 0, z: 0, w: 1 })
       entity.set(ResourceData, {
+        dimensionId: row.dimensionId,
         resourceType: row.resourceType,
         amount: row.amount,
         maxAmount: row.maxAmount,

@@ -1,5 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
+use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
 use crate::services::nav;
 use crate::services::projection_views;
 use crate::tables::movement::movement_actor_state;
@@ -137,9 +138,13 @@ pub fn move_to(
         .or_else(|| actor_state.as_ref().map(|row| row.last_position.clone()))
         .unwrap_or_else(|| next_position.clone());
 
-    if let Err(reason) =
-        nav::validate_segment_positions(ctx, region_id, &current_position, &next_position)
-    {
+    if let Err(reason) = nav::validate_segment_positions(
+        ctx,
+        region_id,
+        DEFAULT_WORLD_DIMENSION_ID,
+        &current_position,
+        &next_position,
+    ) {
         log::warn!(
             "move_to dropped terrain_validation: identity={} request_id={} reason={} region_id={} client_ts_ms={} pos=({},{},{})",
             ctx.sender,

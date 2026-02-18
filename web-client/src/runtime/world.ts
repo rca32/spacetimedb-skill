@@ -34,6 +34,7 @@ const TERRAIN_RADIUS_CHUNKS = 3
 const DYNAMIC_RADIUS_CHUNKS = 2
 const COMBAT_LIMIT = 500
 const DEFAULT_CHUNK_SIZE = 32
+const DEFAULT_WORLD_DIMENSION_ID = Number.parseInt(import.meta.env.VITE_WORLD_DIMENSION_ID ?? '1', 10)
 const ENABLE_WORLD_AOI_SUBSCRIPTION = (import.meta.env.VITE_ENABLE_WORLD_AOI_SUB ?? '1') === '1'
 const ENABLE_TERRAIN_PAYLOAD_SUBSCRIPTION = (import.meta.env.VITE_ENABLE_TERRAIN_PAYLOAD_SUB ?? '1') === '1'
 const ENABLE_PATH_DEBUG_OVERLAY_SUBSCRIPTION = (import.meta.env.VITE_DEBUG_PATH_OVERLAY ?? '0') === '1'
@@ -47,6 +48,9 @@ export function createWorldRuntime(): RuntimeModule {
   let currentTerrainPayloadAoiHash = ''
   let currentPathDebugHash = ''
   let localRegionId: bigint | null = null
+  let localDimensionId = Number.isFinite(DEFAULT_WORLD_DIMENSION_ID) && DEFAULT_WORLD_DIMENSION_ID > 0
+    ? DEFAULT_WORLD_DIMENSION_ID
+    : 1
   let localPosition = { x: 0, y: 0, z: 0 }
   let aoiAnchorPosition = { x: 0, z: 0 }
   let lastAoiUpdateAtMs = 0
@@ -72,6 +76,9 @@ export function createWorldRuntime(): RuntimeModule {
           currentTerrainPayloadAoiHash = ''
           currentPathDebugHash = ''
           localRegionId = null
+          localDimensionId = Number.isFinite(DEFAULT_WORLD_DIMENSION_ID) && DEFAULT_WORLD_DIMENSION_ID > 0
+            ? DEFAULT_WORLD_DIMENSION_ID
+            : 1
           localPosition = { x: 0, y: 0, z: 0 }
           aoiAnchorPosition = { x: 0, z: 0 }
           lastAoiUpdateAtMs = 0
@@ -106,6 +113,7 @@ export function createWorldRuntime(): RuntimeModule {
 
         const queries = buildWorldAoiQueries({
           regionId: localRegionId,
+          dimensionId: localDimensionId,
           centerX: aoiAnchorPosition.x,
           centerZ: aoiAnchorPosition.z,
           terrainRadius: TERRAIN_RADIUS_CHUNKS,
@@ -125,6 +133,7 @@ export function createWorldRuntime(): RuntimeModule {
         if (ENABLE_TERRAIN_PAYLOAD_SUBSCRIPTION) {
           const payloadQuery = buildTerrainPayloadAoiQuery({
             regionId: localRegionId,
+            dimensionId: localDimensionId,
             centerX: aoiAnchorPosition.x,
             centerZ: aoiAnchorPosition.z,
             terrainRadius: TERRAIN_RADIUS_CHUNKS,
@@ -146,7 +155,7 @@ export function createWorldRuntime(): RuntimeModule {
         }
 
         if (ENABLE_PATH_DEBUG_OVERLAY_SUBSCRIPTION) {
-          const pathQueries = buildPathDebugQueries(localRegionId)
+          const pathQueries = buildPathDebugQueries(localRegionId, localDimensionId)
           const pathHash = hashQueries(pathQueries)
           if (pathHash !== currentPathDebugHash && (intervalPassed || currentPathDebugHash === '')) {
             ctx.net?.setSubscription(AOI_PATH_DEBUG_SUBSCRIPTION_KEY, pathQueries)

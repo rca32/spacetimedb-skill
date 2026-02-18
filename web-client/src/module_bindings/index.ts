@@ -50,6 +50,8 @@ import BuildingNextIdReducer from "./building_next_id_reducer";
 export { BuildingNextIdReducer };
 import BuildingPlaceReducer from "./building_place_reducer";
 export { BuildingPlaceReducer };
+import BuildingPlaceInDimensionReducer from "./building_place_in_dimension_reducer";
+export { BuildingPlaceInDimensionReducer };
 import ChatSendMessageReducer from "./chat_send_message_reducer";
 export { ChatSendMessageReducer };
 import ClaimExpandReducer from "./claim_expand_reducer";
@@ -152,6 +154,8 @@ import ReportSubmitReducer from "./report_submit_reducer";
 export { ReportSubmitReducer };
 import RequestPathReducer from "./request_path_reducer";
 export { RequestPathReducer };
+import RequestPathInDimensionReducer from "./request_path_in_dimension_reducer";
+export { RequestPathInDimensionReducer };
 import ResourceRegenAgentLoopReducer from "./resource_regen_agent_loop_reducer";
 export { ResourceRegenAgentLoopReducer };
 import RoleGrantReducer from "./role_grant_reducer";
@@ -2062,6 +2066,7 @@ const reducersSchema = __reducers(
   __reducerSchema("building_deconstruct", BuildingDeconstructReducer),
   __reducerSchema("building_next_id", BuildingNextIdReducer),
   __reducerSchema("building_place", BuildingPlaceReducer),
+  __reducerSchema("building_place_in_dimension", BuildingPlaceInDimensionReducer),
   __reducerSchema("chat_send_message", ChatSendMessageReducer),
   __reducerSchema("claim_expand", ClaimExpandReducer),
   __reducerSchema("claim_next_id", ClaimNextIdReducer),
@@ -2112,6 +2117,7 @@ const reducersSchema = __reducers(
   __reducerSchema("report_review", ReportReviewReducer),
   __reducerSchema("report_submit", ReportSubmitReducer),
   __reducerSchema("request_path", RequestPathReducer),
+  __reducerSchema("request_path_in_dimension", RequestPathInDimensionReducer),
   __reducerSchema("resource_regen_agent_loop", ResourceRegenAgentLoopReducer),
   __reducerSchema("role_grant", RoleGrantReducer),
   __reducerSchema("role_revoke", RoleRevokeReducer),

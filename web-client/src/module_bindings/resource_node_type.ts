@@ -13,6 +13,7 @@ import {
 export default __t.object("ResourceNode", {
   entityId: __t.u64(),
   regionId: __t.u64(),
+  dimensionId: __t.u32(),
   chunkX: __t.i32(),
   chunkY: __t.i32(),
   hexX: __t.i32(),

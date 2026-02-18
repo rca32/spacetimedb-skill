@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table};
 
-use crate::services::projection_views;
-use crate::services::hex_coords::HexCoord;
+use crate::services::hex_coords::{HexCoord, DEFAULT_WORLD_DIMENSION_ID};
 use crate::services::pathfinding;
+use crate::services::projection_views;
 use crate::tables::agent_timers::{
     environment_effect_loop_timer, npc_ai_loop_timer, player_regen_loop_timer,
     resource_regen_loop_timer, session_cleanup_loop_timer,
@@ -17,10 +17,10 @@ use crate::tables::environment_effect::{
 };
 use crate::tables::live_ops::balance_params;
 use crate::tables::npc_quest::npc_state;
-use crate::tables::player_views::player_session_view;
 use crate::tables::player_progression::{
     character_stats, npc_action_schedule, resource_state, status_effect,
 };
+use crate::tables::player_views::player_session_view;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
 use crate::tables::world_gen::world_gen_params;
@@ -486,8 +486,8 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
         } else {
             let (target_hex_x, target_hex_z) =
                 compute_npc_destination(npc.npc_id, npc.hex_x, npc.hex_z, action_type, npc.mood);
-            let current = HexCoord::new(npc.hex_x, npc.hex_z, 1);
-            let target = HexCoord::new(target_hex_x, target_hex_z, 1);
+            let current = HexCoord::new(npc.hex_x, npc.hex_z, DEFAULT_WORLD_DIMENSION_ID);
+            let target = HexCoord::new(target_hex_x, target_hex_z, DEFAULT_WORLD_DIMENSION_ID);
             let next_step = match pathfinding::request_npc_step(
                 ctx,
                 npc.npc_id,
@@ -552,8 +552,7 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
         }
     }
 
-    let removed_paths =
-        pathfinding::prune_path_results(ctx, NPC_AI_PATH_KEEP_ROWS_PER_IDENTITY);
+    let removed_paths = pathfinding::prune_path_results(ctx, NPC_AI_PATH_KEEP_ROWS_PER_IDENTITY);
     if removed_paths > 0 {
         log::info!(
             "npc_ai_agent_loop pruned stale paths: removed={}",

@@ -33,6 +33,7 @@ export function syncPathResults(
         pathId: row.pathId,
         requesterIdentityHex: toKeyString(row.requesterIdentity),
         regionId: row.regionId.toString(),
+        dimensionId: row.dimensionId,
         startHexX: row.startHexX,
         startHexZ: row.startHexZ,
         goalHexX: row.goalHexX,

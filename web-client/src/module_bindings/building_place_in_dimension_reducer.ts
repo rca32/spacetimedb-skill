@@ -10,20 +10,13 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.object("BuildingState", {
-  entityId: __t.u64(),
-  ownerIdentity: __t.identity(),
+export default {
+  buildingId: __t.u64(),
   regionId: __t.u64(),
   dimensionId: __t.u32(),
   hexX: __t.i32(),
   hexZ: __t.i32(),
-  state: __t.u8(),
   requiredItemDefId: __t.u64(),
   requiredItemQty: __t.u32(),
-  buildProgress: __t.u32(),
   buildRequired: __t.u32(),
-  createdAt: __t.timestamp(),
-  updatedAt: __t.timestamp(),
-});
-
-
+};

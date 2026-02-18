@@ -13,6 +13,7 @@ import {
 export default __t.row({
   npcId: __t.u64().primaryKey().name("npc_id"),
   pathId: __t.string().name("path_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   nextStepIndex: __t.u16().name("next_step_index"),
   updatedAt: __t.timestamp().name("updated_at"),
 });

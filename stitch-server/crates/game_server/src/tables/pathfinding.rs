@@ -6,6 +6,7 @@ pub struct PathResult {
     pub path_id: String,
     pub requester_identity: Identity,
     pub region_id: u64,
+    pub dimension_id: u32,
     pub start_hex_x: i32,
     pub start_hex_z: i32,
     pub goal_hex_x: i32,
@@ -23,6 +24,7 @@ pub struct PathStep {
     #[primary_key]
     pub step_key: String,
     pub path_id: String,
+    pub dimension_id: u32,
     pub step_index: u16,
     pub hex_x: i32,
     pub hex_z: i32,
@@ -33,6 +35,7 @@ pub struct NpcPathState {
     #[primary_key]
     pub npc_id: u64,
     pub path_id: String,
+    pub dimension_id: u32,
     pub next_step_index: u16,
     pub updated_at: Timestamp,
 }

@@ -25,6 +25,7 @@ export const NetEntity = trait({ table: '', serverId: '' })
 export const WorldObjectKind = trait({ kind: 'Player' as WorldObjectKindType })
 export const ChunkData = trait({
   chunkKey: '',
+  dimensionId: 1,
   chunkX: 0,
   chunkY: 0,
   biomeId: 0,
@@ -46,6 +47,7 @@ export const ChunkMeshState = trait({
   lodLevel: 0,
 })
 export const BuildingData = trait({
+  dimensionId: 1,
   state: 0,
   buildProgress: 0,
   buildRequired: 0,
@@ -58,11 +60,18 @@ export const ClaimData = trait({
   totemBuildingId: '',
   regionId: '',
 })
-export const ResourceData = trait({ resourceType: 0, amount: 0, maxAmount: 0, isDepleted: false })
+export const ResourceData = trait({
+  dimensionId: 1,
+  resourceType: 0,
+  amount: 0,
+  maxAmount: 0,
+  isDepleted: false,
+})
 export const PathResultData = trait({
   pathId: '',
   requesterIdentityHex: '',
   regionId: '',
+  dimensionId: 1,
   startHexX: 0,
   startHexZ: 0,
   goalHexX: 0,
@@ -74,6 +83,7 @@ export const PathResultData = trait({
 })
 export const PathStepData = trait({
   pathId: '',
+  dimensionId: 1,
   stepIndex: 0,
   hexX: 0,
   hexZ: 0,

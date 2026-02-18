@@ -21,7 +21,7 @@ mod tests {
 
     #[test]
     fn test_combat_state_stream_query_uses_region() {
-        let filter = AoiFilter::new(55, -1, 1, -1, 1).expect("valid filter should construct");
+        let filter = AoiFilter::new(55, 1, -1, 1, -1, 1).expect("valid filter should construct");
         let query = combat_state_stream_query(&filter);
         assert!(query.contains("FROM combat_state"));
         assert!(query.contains("cs.region_id = 55"));
@@ -29,7 +29,7 @@ mod tests {
 
     #[test]
     fn test_attack_outcome_stream_query_limits_rows() {
-        let filter = AoiFilter::new(4, 0, 1, 0, 1).expect("valid filter should construct");
+        let filter = AoiFilter::new(4, 1, 0, 1, 0, 1).expect("valid filter should construct");
         let query = attack_outcome_stream_query(&filter, 0);
         assert!(query.contains("ao.region_id = 4"));
         assert!(query.contains("LIMIT 1"));

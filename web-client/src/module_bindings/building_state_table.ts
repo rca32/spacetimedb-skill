@@ -14,6 +14,7 @@ export default __t.row({
   entityId: __t.u64().primaryKey().name("entity_id"),
   ownerIdentity: __t.identity().name("owner_identity"),
   regionId: __t.u64().name("region_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   hexX: __t.i32().name("hex_x"),
   hexZ: __t.i32().name("hex_z"),
   state: __t.u8(),

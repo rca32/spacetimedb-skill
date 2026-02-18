@@ -13,6 +13,7 @@ import {
 export default __t.row({
   stepKey: __t.string().primaryKey().name("step_key"),
   pathId: __t.string().name("path_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   stepIndex: __t.u16().name("step_index"),
   hexX: __t.i32().name("hex_x"),
   hexZ: __t.i32().name("hex_z"),

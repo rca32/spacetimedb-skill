@@ -203,7 +203,7 @@ pub fn request_path_and_store(
 ) -> Result<StoredPathSummary, String> {
     let node_limit = node_limit.max(1);
     let ttl_secs = ttl_secs.max(1);
-    let nav = nav::build_nav_grid(ctx, region_id);
+    let nav = nav::build_nav_grid(ctx, region_id, start.dimension);
     let outcome = find_hex_path(&nav, start, goal, node_limit);
 
     let path_id = build_path_id(
@@ -220,6 +220,7 @@ pub fn request_path_and_store(
         path_id: path_id.clone(),
         requester_identity,
         region_id,
+        dimension_id: start.dimension,
         start_hex_x: start.q,
         start_hex_z: start.r,
         goal_hex_x: goal.q,
@@ -238,6 +239,7 @@ pub fn request_path_and_store(
             ctx.db.path_step().insert(PathStep {
                 step_key: format!("{}:{}", path_id, step_index),
                 path_id: path_id.clone(),
+                dimension_id: step.dimension,
                 step_index,
                 hex_x: step.q,
                 hex_z: step.r,
@@ -262,15 +264,19 @@ pub fn request_npc_step(
     node_limit: u32,
 ) -> Result<Option<HexCoord>, String> {
     if let Some(state) = ctx.db.npc_path_state().npc_id().find(npc_id) {
-        if let Some(result) = ctx.db.path_result().path_id().find(state.path_id.clone()) {
-            if ctx.timestamp.duration_since(result.expires_at).is_none() {
-                if let Some(step) = find_path_step(ctx, &state.path_id, state.next_step_index) {
-                    let next_step = HexCoord::new(step.hex_x, step.hex_z, 1);
-                    let mut next_state = state;
-                    next_state.next_step_index = next_state.next_step_index.saturating_add(1);
-                    next_state.updated_at = ctx.timestamp;
-                    ctx.db.npc_path_state().npc_id().update(next_state);
-                    return Ok(Some(next_step));
+        if state.dimension_id == start.dimension {
+            if let Some(result) = ctx.db.path_result().path_id().find(state.path_id.clone()) {
+                if result.dimension_id == state.dimension_id
+                    && ctx.timestamp.duration_since(result.expires_at).is_none()
+                {
+                    if let Some(step) = find_path_step(ctx, &state.path_id, state.next_step_index) {
+                        let next_step = HexCoord::new(step.hex_x, step.hex_z, step.dimension_id);
+                        let mut next_state = state;
+                        next_state.next_step_index = next_state.next_step_index.saturating_add(1);
+                        next_state.updated_at = ctx.timestamp;
+                        ctx.db.npc_path_state().npc_id().update(next_state);
+                        return Ok(Some(next_step));
+                    }
                 }
             }
         }
@@ -300,6 +306,7 @@ pub fn request_npc_step(
     let next_state = NpcPathState {
         npc_id,
         path_id: stored.path_id,
+        dimension_id: start.dimension,
         next_step_index: step_index.saturating_add(1),
         updated_at: ctx.timestamp,
     };
@@ -309,7 +316,11 @@ pub fn request_npc_step(
         ctx.db.npc_path_state().insert(next_state);
     }
 
-    Ok(Some(HexCoord::new(step.hex_x, step.hex_z, 1)))
+    Ok(Some(HexCoord::new(
+        step.hex_x,
+        step.hex_z,
+        step.dimension_id,
+    )))
 }
 
 pub fn prune_path_results(ctx: &ReducerContext, keep_rows_per_identity: u32) -> u32 {
@@ -333,7 +344,9 @@ pub fn prune_path_results(ctx: &ReducerContext, keep_rows_per_identity: u32) -> 
     });
     let mut per_identity_count = HashMap::<Identity, usize>::new();
     for row in rows {
-        let entry = per_identity_count.entry(row.requester_identity).or_insert(0);
+        let entry = per_identity_count
+            .entry(row.requester_identity)
+            .or_insert(0);
         *entry += 1;
         if *entry > keep {
             path_ids_to_delete.insert(row.path_id);
@@ -346,7 +359,13 @@ pub fn prune_path_results(ctx: &ReducerContext, keep_rows_per_identity: u32) -> 
 
     let mut removed = 0_u32;
     for path_id in &path_ids_to_delete {
-        if ctx.db.path_result().path_id().find(path_id.clone()).is_some() {
+        if ctx
+            .db
+            .path_result()
+            .path_id()
+            .find(path_id.clone())
+            .is_some()
+        {
             ctx.db.path_result().path_id().delete(path_id.clone());
             removed = removed.saturating_add(1);
         }
@@ -405,8 +424,8 @@ fn build_path_id(
     micros_since_epoch: i64,
 ) -> String {
     format!(
-        "path:{}:{}:{}:{}:{}:{}",
-        requester_identity, micros_since_epoch, start.q, start.r, goal.q, goal.r
+        "path:{}:{}:{}:{}:{}:{}:{}",
+        requester_identity, micros_since_epoch, start.dimension, start.q, start.r, goal.q, goal.r
     )
 }
 

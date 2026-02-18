@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use spacetimedb::{ReducerContext, Table, TimeDuration, Timestamp};
 
+use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
 use crate::tables::world_gen::{
     biome_gen_def, resource_clump_def, resource_gen_def, world_gen_params,
 };
@@ -431,7 +432,13 @@ fn upsert_chunk(ctx: &ReducerContext, chunk: TerrainChunk) {
 
 fn upsert_chunk_stream(ctx: &ReducerContext, chunk: TerrainChunkStream) {
     let key = chunk.chunk_key.clone();
-    if ctx.db.terrain_chunk_stream().chunk_key().find(key).is_some() {
+    if ctx
+        .db
+        .terrain_chunk_stream()
+        .chunk_key()
+        .find(key)
+        .is_some()
+    {
         ctx.db.terrain_chunk_stream().chunk_key().update(chunk);
     } else {
         ctx.db.terrain_chunk_stream().insert(chunk);
@@ -440,7 +447,13 @@ fn upsert_chunk_stream(ctx: &ReducerContext, chunk: TerrainChunkStream) {
 
 fn upsert_chunk_payload(ctx: &ReducerContext, chunk: TerrainChunkPayload) {
     let key = chunk.chunk_key.clone();
-    if ctx.db.terrain_chunk_payload().chunk_key().find(key).is_some() {
+    if ctx
+        .db
+        .terrain_chunk_payload()
+        .chunk_key()
+        .find(key)
+        .is_some()
+    {
         ctx.db.terrain_chunk_payload().chunk_key().update(chunk);
     } else {
         ctx.db.terrain_chunk_payload().insert(chunk);
@@ -680,9 +693,9 @@ fn build_chunk(
         encode_cell_payload_i16_to_bytes(&cell_payload, CELL_PAYLOAD_VERSION_V1);
 
     let chunk = TerrainChunk {
-        chunk_key: chunk_key(region_id, 1, chunk_x, chunk_y),
+        chunk_key: chunk_key(region_id, DEFAULT_WORLD_DIMENSION_ID, chunk_x, chunk_y),
         region_id,
-        dimension_id: 1,
+        dimension_id: DEFAULT_WORLD_DIMENSION_ID,
         chunk_x,
         chunk_y,
         biome_id,
@@ -719,8 +732,16 @@ fn build_chunk(
         generated_at: chunk.generated_at,
     };
 
-    let resources =
-        build_chunk_resources(ctx, region_id, chunk_x, chunk_y, &cells, &coords, config)?;
+    let resources = build_chunk_resources(
+        ctx,
+        region_id,
+        DEFAULT_WORLD_DIMENSION_ID,
+        chunk_x,
+        chunk_y,
+        &cells,
+        &coords,
+        config,
+    )?;
     Ok(ChunkBuild {
         chunk,
         chunk_stream,
@@ -732,6 +753,7 @@ fn build_chunk(
 fn build_chunk_resources(
     ctx: &ReducerContext,
     region_id: u64,
+    dimension_id: u32,
     chunk_x: i32,
     chunk_y: i32,
     cells: &[TerrainCellSample],
@@ -824,6 +846,7 @@ fn build_chunk_resources(
             resources.push(ResourceNode {
                 entity_id,
                 region_id,
+                dimension_id,
                 chunk_x,
                 chunk_y,
                 hex_x: tcoord.hex_x,

@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use spacetimedb::{ReducerContext, Table};
 
-use crate::services::hex_coords::{world_to_hex, HexCoord, HexDirection};
+use crate::services::hex_coords::{
+    world_to_hex, HexCoord, HexDirection, DEFAULT_WORLD_DIMENSION_ID,
+};
 use crate::tables::world_gen::world_gen_params;
 use crate::tables::world_state::terrain_chunk_payload;
 use crate::tables::TerrainChunkPayload;
@@ -34,7 +36,7 @@ impl TerrainCell {
 
 pub struct NavGrid {
     chunk_size: i32,
-    cells_by_chunk: HashMap<(i32, i32), TerrainChunkPayload>,
+    cells_by_chunk: HashMap<(u32, i32, i32), TerrainChunkPayload>,
     slope_threshold: i16,
 }
 
@@ -45,7 +47,10 @@ pub struct NavNeighbor {
 }
 
 impl NavGrid {
-    pub fn new(chunk_size: i32, cells_by_chunk: HashMap<(i32, i32), TerrainChunkPayload>) -> Self {
+    pub fn new(
+        chunk_size: i32,
+        cells_by_chunk: HashMap<(u32, i32, i32), TerrainChunkPayload>,
+    ) -> Self {
         Self {
             chunk_size: chunk_size.max(1),
             cells_by_chunk,
@@ -114,6 +119,7 @@ impl NavGrid {
 
     pub fn validate_world_segment_positions(
         self: &Self,
+        dimension_id: u32,
         from: &[f32],
         to: &[f32],
     ) -> Result<(), &'static str> {
@@ -136,7 +142,7 @@ impl NavGrid {
             let t = i as f32 / steps as f32;
             let x = sx + dx * t;
             let z = sz + dz * t;
-            let coord = world_to_hex(x, z, 1);
+            let coord = world_to_hex(x, z, dimension_id);
             if previous == Some(coord) {
                 continue;
             }
@@ -151,9 +157,12 @@ impl NavGrid {
         from: HexCoord,
         to: HexCoord,
     ) -> Result<(), &'static str> {
+        if from.dimension != to.dimension {
+            return Err(TERRAIN_REASON_INVALID_INPUT);
+        }
         let from_vec = [from.q as f32 + 0.5, 0.0, from.r as f32 + 0.5];
         let to_vec = [to.q as f32 + 0.5, 0.0, to.r as f32 + 0.5];
-        self.validate_world_segment_positions(&from_vec, &to_vec)
+        self.validate_world_segment_positions(from.dimension, &from_vec, &to_vec)
     }
 
     pub fn cell_at(self: &Self, coord: HexCoord) -> Option<TerrainCell> {
@@ -162,7 +171,9 @@ impl NavGrid {
         let local_x = coord.q.rem_euclid(self.chunk_size) as usize;
         let local_y = coord.r.rem_euclid(self.chunk_size) as usize;
 
-        let row = self.cells_by_chunk.get(&(chunk_x, chunk_y))?;
+        let row = self
+            .cells_by_chunk
+            .get(&(coord.dimension, chunk_x, chunk_y))?;
         if row.cell_payload_version != TERRAIN_PAYLOAD_VERSION_V1 {
             return None;
         }
@@ -182,7 +193,12 @@ impl NavGrid {
     }
 }
 
-pub fn build_nav_grid(ctx: &ReducerContext, region_id: u64) -> NavGrid {
+pub fn build_nav_grid(ctx: &ReducerContext, region_id: u64, dimension_id: u32) -> NavGrid {
+    let dimension_id = if dimension_id == 0 {
+        DEFAULT_WORLD_DIMENSION_ID
+    } else {
+        dimension_id
+    };
     let chunk_size = ctx
         .db
         .world_gen_params()
@@ -195,8 +211,8 @@ pub fn build_nav_grid(ctx: &ReducerContext, region_id: u64) -> NavGrid {
         .db
         .terrain_chunk_payload()
         .iter()
-        .filter(|row| row.region_id == region_id)
-        .map(|row| ((row.chunk_x, row.chunk_y), row))
+        .filter(|row| row.region_id == region_id && row.dimension_id == dimension_id)
+        .map(|row| ((row.dimension_id, row.chunk_x, row.chunk_y), row))
         .collect::<HashMap<_, _>>();
 
     NavGrid::new(chunk_size, by_chunk)
@@ -205,11 +221,12 @@ pub fn build_nav_grid(ctx: &ReducerContext, region_id: u64) -> NavGrid {
 pub fn validate_segment_positions(
     ctx: &ReducerContext,
     region_id: u64,
+    dimension_id: u32,
     from: &[f32],
     to: &[f32],
 ) -> Result<(), &'static str> {
-    let nav = build_nav_grid(ctx, region_id);
-    nav.validate_world_segment_positions(from, to)
+    let nav = build_nav_grid(ctx, region_id, dimension_id);
+    nav.validate_world_segment_positions(dimension_id, from, to)
 }
 
 fn read_i16_le(bytes: &[u8], index: usize) -> i16 {

@@ -14,6 +14,7 @@ export default __t.object("PathResult", {
   pathId: __t.string(),
   requesterIdentity: __t.identity(),
   regionId: __t.u64(),
+  dimensionId: __t.u32(),
   startHexX: __t.i32(),
   startHexZ: __t.i32(),
   goalHexX: __t.i32(),

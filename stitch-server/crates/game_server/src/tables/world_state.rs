@@ -81,6 +81,7 @@ pub struct ResourceNode {
     #[primary_key]
     pub entity_id: u64,
     pub region_id: u64,
+    pub dimension_id: u32,
     pub chunk_x: i32,
     pub chunk_y: i32,
     pub hex_x: i32,

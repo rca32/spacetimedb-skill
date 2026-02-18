@@ -28,6 +28,7 @@ export function syncBuildingState(
       entity.set(Position, { x: row.hexX, y: 0, z: row.hexZ })
       entity.set(Rotation, { x: 0, y: 0, z: 0, w: 1 })
       entity.set(BuildingData, {
+        dimensionId: row.dimensionId,
         state: row.state,
         buildProgress: row.buildProgress,
         buildRequired: row.buildRequired,

@@ -14,6 +14,7 @@ export default __t.row({
   pathId: __t.string().primaryKey().name("path_id"),
   requesterIdentity: __t.identity().name("requester_identity"),
   regionId: __t.u64().name("region_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   startHexX: __t.i32().name("start_hex_x"),
   startHexZ: __t.i32().name("start_hex_z"),
   goalHexX: __t.i32().name("goal_hex_x"),

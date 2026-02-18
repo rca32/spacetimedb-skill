@@ -33,6 +33,7 @@ export type NpcStateRow = {
 
 export type BuildingStateRow = {
   entityId: bigint
+  dimensionId: number
   hexX: number
   hexZ: number
   state: number
@@ -44,6 +45,7 @@ export type BuildingStateRow = {
 export type ResourceNodeRow = {
   entityId: bigint
   regionId: bigint
+  dimensionId: number
   chunkX: number
   chunkY: number
   hexX: number
@@ -97,6 +99,7 @@ export type PathResultRow = {
   pathId: string
   requesterIdentity: unknown
   regionId: bigint
+  dimensionId: number
   startHexX: number
   startHexZ: number
   goalHexX: number
@@ -112,6 +115,7 @@ export type PathResultRow = {
 export type PathStepRow = {
   stepKey: string
   pathId: string
+  dimensionId: number
   stepIndex: number
   hexX: number
   hexZ: number

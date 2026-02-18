@@ -30,6 +30,7 @@ export function syncPathSteps(
       entity.set(WorldObjectKind, { kind: 'Path' })
       entity.set(PathStepData, {
         pathId: row.pathId,
+        dimensionId: row.dimensionId,
         stepIndex: row.stepIndex,
         hexX: row.hexX,
         hexZ: row.hexZ,

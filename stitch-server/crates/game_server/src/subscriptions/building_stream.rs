@@ -3,7 +3,7 @@ use super::aoi::AoiFilter;
 pub fn building_state_stream_query(filter: &AoiFilter) -> String {
     format!(
         "SELECT * FROM building_state b WHERE {} AND {}",
-        filter.region_clause("b"),
+        filter.region_dimension_clause("b"),
         filter.hex_bounds_clause("b")
     )
 }
@@ -21,10 +21,11 @@ mod tests {
 
     #[test]
     fn test_building_state_stream_query_contains_aoi_bounds() {
-        let filter = AoiFilter::new(10, -5, 5, -7, 7).expect("valid filter should construct");
+        let filter = AoiFilter::new(10, 2, -5, 5, -7, 7).expect("valid filter should construct");
         let query = building_state_stream_query(&filter);
         assert!(query.contains("FROM building_state"));
         assert!(query.contains("b.region_id = 10"));
+        assert!(query.contains("b.dimension_id = 2"));
         assert!(query.contains("b.hex_x BETWEEN -5 AND 5"));
         assert!(query.contains("b.hex_z BETWEEN -7 AND 7"));
     }
