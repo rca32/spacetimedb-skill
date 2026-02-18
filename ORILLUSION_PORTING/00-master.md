@@ -30,6 +30,16 @@
   - reducers: `sync_client_frame`, `submit_motion_intent`, `submit_combat_intent`, `ack_server_correction`
   - subscriptions: `aoi_stream_v2_query` 등
 
+## 최근 작업 로그 (2026-02-19)
+- 상세 기록: `ORILLUSION_PORTING/12-implementation-log-2026-02-19.md`
+- 핵심 반영:
+  - AOI/terrain chunk size 동기화 및 HUD 표시
+  - Camera pointer lock 입력 안정화
+  - terrain 렌더 경로 안정화(UnLit 전환, chunk size 정합)
+  - 서버 init/sign_in 월드 생성 보장
+  - walkable spawn 선택
+  - 구독 SQL `BETWEEN` 제거(`>=`, `<=`)
+
 ## 다음 구현 우선순위
 1. `stitch-server` v2 권위 로직 강화(충돌/히트 검증)
 2. `stitch-orillusion-client`에서 `physics_state_v2` authoritative 보정 루프 강화

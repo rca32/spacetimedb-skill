@@ -117,6 +117,14 @@ export class CharacterMotorComponent extends ComponentBase {
     return this.object3D.transform.worldPosition
   }
 
+  public snapToGround(y: number): void {
+    if (!Number.isFinite(y)) {
+      return
+    }
+    this.object3D.y = y
+    this.rigidbody?.updateTransform(undefined, undefined, true)
+  }
+
   public destroy(force?: boolean): void {
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)

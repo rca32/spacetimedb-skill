@@ -21,6 +21,7 @@ const SESSION_SUBSCRIPTION_KEY = 'session-self'
 const AOI_RADIUS_CHUNKS = 2
 const DEFAULT_CHUNK_SIZE = 32
 const NETWORK_TICK_MS = 100
+const PLAYER_FEET_OFFSET_Y = 0.9
 
 export class OrillusionClientRuntime {
   private readonly bus = new FxEventBus()
@@ -110,6 +111,7 @@ export class OrillusionClientRuntime {
     this.syncActiveShardFromSession()
     this.syncWorldGenParams()
     this.syncPlayerFacing()
+    this.syncLocalPlayerGround()
 
     const now = Date.now()
     if (now - this.lastNetworkTickAtMs >= NETWORK_TICK_MS) {
@@ -118,6 +120,7 @@ export class OrillusionClientRuntime {
     }
 
     this.streamVisualizer?.update(this.net.getConnection(), this.net.getIdentityHex())
+    this.syncLocalPlayerGround()
     this.syncAoiSubscription()
     this.syncHud()
   }
@@ -456,7 +459,7 @@ export class OrillusionClientRuntime {
       `<div>streams: ${this.useV2Streams ? 'v2' : 'legacy'} (pref=${this.config.useV2Streams ? 'v2' : 'legacy'})</div>`,
       `<div>region/dimension: ${this.activeRegionId.toString()}/${this.activeDimensionId}</div>`,
       `<div>chunk-size: ${this.activeChunkSize}</div>`,
-      `<div>terrain/npc/res/player/v2: ${streamStats ? `${streamStats.terrain}/${streamStats.npc}/${streamStats.resource}/${streamStats.players}/${streamStats.v2}` : '-'}</div>`,
+      `<div>terrain/npc/res/bld/player/v2: ${streamStats ? `${streamStats.terrain}/${streamStats.npc}/${streamStats.resource}/${streamStats.building}/${streamStats.players}/${streamStats.v2}` : '-'}</div>`,
       `<div>terrain detail/fallback: ${streamStats ? `${streamStats.terrainDetailed}/${streamStats.terrainFallback}` : '-'}</div>`,
       `<div>dispatch move/v2: ${this.lastMoveDispatchOk ? 'ok' : 'fail'}/${this.lastV2DispatchOk ? 'ok' : '-'}</div>`,
       `<div>authoritative frame: ${this.lastAppliedAuthoritativeFrameNo}</div>`,
@@ -492,6 +495,21 @@ export class OrillusionClientRuntime {
       return
     }
     this.motor.setViewYawDegrees(this.cameraFollow.yawDegrees)
+  }
+
+  private syncLocalPlayerGround(): void {
+    const motor = this.motor
+    const visualizer = this.streamVisualizer
+    if (!motor || !visualizer) {
+      return
+    }
+
+    const pos = motor.readPosition()
+    const groundY = visualizer.sampleTerrainHeight(pos.x, pos.z)
+    if (groundY === null) {
+      return
+    }
+    motor.snapToGround(groundY + PLAYER_FEET_OFFSET_Y)
   }
 
   private syncWorldGenParams(): void {

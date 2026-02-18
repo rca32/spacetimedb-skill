@@ -35,6 +35,7 @@ interface VisualizerStats {
   terrainFallback: number
   npc: number
   resource: number
+  building: number
   players: number
   v2: number
 }
@@ -46,11 +47,12 @@ export class WorldStreamVisualizer {
   private readonly terrainStamps = new Map<string, string>()
   private readonly npcObjects = new Map<string, Object3D>()
   private readonly resourceObjects = new Map<string, Object3D>()
+  private readonly buildingObjects = new Map<string, Object3D>()
   private readonly playerObjects = new Map<string, Object3D>()
   private readonly v2Objects = new Map<string, Object3D>()
+  private terrainCellsByCoord = new Map<string, DecodedTerrainCells>()
+  private terrainChunkSizeHint = DEFAULT_CHUNK_WORLD_SIZE
 
-  private readonly cubeGeometry = new BoxGeometry(1, 1, 1)
-  private readonly sphereGeometry = new SphereGeometry(0.45, 14, 14)
   private chunkWorldSize = DEFAULT_CHUNK_WORLD_SIZE
 
   private stats: VisualizerStats = {
@@ -59,6 +61,7 @@ export class WorldStreamVisualizer {
     terrainFallback: 0,
     npc: 0,
     resource: 0,
+    building: 0,
     players: 0,
     v2: 0,
   }
@@ -82,6 +85,10 @@ export class WorldStreamVisualizer {
     return this.stats
   }
 
+  sampleTerrainHeight(x: number, z: number): number | null {
+    return sampleTerrainHeightAtWorld(x, z, this.terrainChunkSizeHint, this.terrainCellsByCoord)
+  }
+
   update(connection: DbConnection | null, localIdentityHex: string | null): void {
     if (!connection?.isActive) {
       this.clearAll()
@@ -93,6 +100,7 @@ export class WorldStreamVisualizer {
     this.syncTerrain(db)
     this.syncNpcs(db)
     this.syncResources(db)
+    this.syncBuildings(db)
     this.syncPlayers(db, localIdentityHex)
     this.syncV2Streams(db)
 
@@ -102,6 +110,7 @@ export class WorldStreamVisualizer {
       terrainFallback: this.stats.terrainFallback,
       npc: this.npcObjects.size,
       resource: this.resourceObjects.size,
+      building: this.buildingObjects.size,
       players: this.playerObjects.size,
       v2: this.v2Objects.size,
     }
@@ -112,6 +121,7 @@ export class WorldStreamVisualizer {
     if (!streamTable) {
       this.prune(this.terrainObjects, new Set())
       this.terrainStamps.clear()
+      this.terrainCellsByCoord.clear()
       return
     }
     const streamRows = Array.from(streamTable)
@@ -144,6 +154,11 @@ export class WorldStreamVisualizer {
       if (cells) {
         payloadCellsByCoord.set(coord, cells)
       }
+    }
+    this.terrainCellsByCoord = payloadCellsByCoord
+    const firstCells = payloadCellsByCoord.values().next().value as DecodedTerrainCells | undefined
+    if (firstCells && firstCells.chunkSize > 0) {
+      this.terrainChunkSizeHint = firstCells.chunkSize
     }
 
     const seen = new Set<string>()
@@ -225,7 +240,7 @@ export class WorldStreamVisualizer {
     const cells = payloadCellsByCoord.get(chunkCoordKey(chunkX, chunkY)) ?? decodeTerrainPayload(payloadRow)
     if (!cells) {
       const mesh = chunk.addComponent(MeshRenderer)
-      mesh.geometry = this.cubeGeometry
+      mesh.geometry = new BoxGeometry(1, 1, 1)
       if (!setMaterialSafe(mesh, createTerrainMaterial(biomeId))) {
         chunk.destroy()
         return undefined
@@ -281,7 +296,7 @@ export class WorldStreamVisualizer {
       if (!object) {
         object = new Object3D()
         const mesh = object.addComponent(MeshRenderer)
-        mesh.geometry = this.sphereGeometry
+        mesh.geometry = new SphereGeometry(0.45, 14, 14)
         if (!setMaterialSafe(mesh, createUnlitMaterial(0.95, 0.55, 0.2))) {
           object.destroy()
           continue
@@ -291,7 +306,8 @@ export class WorldStreamVisualizer {
       }
 
       object.x = world.x
-      object.y = 0.6
+      const groundY = this.sampleTerrainHeight(world.x, world.z)
+      object.y = (groundY ?? 0) + 0.6
       object.z = world.z
     }
 
@@ -322,7 +338,7 @@ export class WorldStreamVisualizer {
       if (!object) {
         object = new Object3D()
         const mesh = object.addComponent(MeshRenderer)
-        mesh.geometry = this.cubeGeometry
+        mesh.geometry = new BoxGeometry(1, 1, 1)
         if (!setMaterialSafe(mesh, createUnlitMaterial(0.2, 0.88, 0.42))) {
           object.destroy()
           continue
@@ -332,7 +348,9 @@ export class WorldStreamVisualizer {
       }
 
       object.x = world.x
-      object.y = depleted ? 0.2 : 0.45
+      const halfHeight = depleted ? 0.09 : 0.4
+      const groundY = this.sampleTerrainHeight(world.x, world.z)
+      object.y = (groundY ?? 0) + halfHeight
       object.z = world.z
       object.scaleX = 0.55
       object.scaleY = depleted ? 0.18 : 0.8
@@ -340,6 +358,52 @@ export class WorldStreamVisualizer {
     }
 
     this.prune(this.resourceObjects, seen)
+  }
+
+  private syncBuildings(db: Record<string, unknown>): void {
+    const table = getTableRows(db, 'buildingState')
+    if (!table) {
+      this.prune(this.buildingObjects, new Set())
+      return
+    }
+
+    const seen = new Set<string>()
+    for (const row of table) {
+      const id = String(row.entityId ?? '')
+      if (!id) {
+        continue
+      }
+      seen.add(id)
+
+      const hexX = toNumber(row.hexX)
+      const hexZ = toNumber(row.hexZ)
+      const world = hexToWorldXZ({ q: hexX, r: hexZ, dimension: Math.max(1, toNumber(row.dimensionId)) })
+      const buildState = Math.max(0, toNumber(row.state))
+
+      let object = this.buildingObjects.get(id)
+      if (!object) {
+        object = new Object3D()
+        const mesh = object.addComponent(MeshRenderer)
+        mesh.geometry = new BoxGeometry(1, 1, 1)
+        if (!setMaterialSafe(mesh, createUnlitMaterial(0.68, 0.52, 0.3))) {
+          object.destroy()
+          continue
+        }
+        this.root.addChild(object)
+        this.buildingObjects.set(id, object)
+      }
+
+      const scaleY = buildState >= 2 ? 2.6 : buildState >= 1 ? 1.9 : 1.2
+      const groundY = this.sampleTerrainHeight(world.x, world.z)
+      object.x = world.x
+      object.y = (groundY ?? 0) + scaleY * 0.5
+      object.z = world.z
+      object.scaleX = 1.3
+      object.scaleY = scaleY
+      object.scaleZ = 1.3
+    }
+
+    this.prune(this.buildingObjects, seen)
   }
 
   private syncPlayers(db: Record<string, unknown>, localIdentityHex: string | null): void {
@@ -366,7 +430,7 @@ export class WorldStreamVisualizer {
       if (!object) {
         object = new Object3D()
         const mesh = object.addComponent(MeshRenderer)
-        mesh.geometry = this.cubeGeometry
+        mesh.geometry = new BoxGeometry(1, 1, 1)
         const material = identityHex === localIdentityHex
           ? createUnlitMaterial(0.08, 0.95, 0.9)
           : createUnlitMaterial(0.52, 0.74, 0.98)
@@ -379,7 +443,10 @@ export class WorldStreamVisualizer {
       }
 
       object.x = toNumber(position[0])
-      object.y = toNumber(position[1]) + 0.9
+      const x = toNumber(position[0])
+      const z = toNumber(position[2])
+      const groundY = this.sampleTerrainHeight(x, z)
+      object.y = (groundY ?? toNumber(position[1])) + 0.9
       object.z = toNumber(position[2])
       object.scaleX = 0.7
       object.scaleY = 1.8
@@ -414,7 +481,7 @@ export class WorldStreamVisualizer {
       if (!object) {
         object = new Object3D()
         const mesh = object.addComponent(MeshRenderer)
-        mesh.geometry = this.cubeGeometry
+        mesh.geometry = new BoxGeometry(1, 1, 1)
         const [r, g, b] = v2ColorByEntityType(entityType)
         if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
           object.destroy()
@@ -450,8 +517,10 @@ export class WorldStreamVisualizer {
     this.terrainStamps.clear()
     this.prune(this.npcObjects, new Set())
     this.prune(this.resourceObjects, new Set())
+    this.prune(this.buildingObjects, new Set())
     this.prune(this.playerObjects, new Set())
     this.prune(this.v2Objects, new Set())
+    this.terrainCellsByCoord.clear()
 
     this.stats = {
       terrain: 0,
@@ -459,6 +528,7 @@ export class WorldStreamVisualizer {
       terrainFallback: 0,
       npc: 0,
       resource: 0,
+      building: 0,
       players: 0,
       v2: 0,
     }
@@ -696,6 +766,36 @@ function sampleTerrainVertexHeight(
   const fallbackZ = positiveModInt(worldVertexZ, fallbackCells.chunkSize)
   const fallbackSample = fallbackCells.read(fallbackX, fallbackZ)
   return fallbackSample ? elevationToWorldY(terrainHeightFromCell(fallbackSample)) : 0
+}
+
+function sampleTerrainHeightAtWorld(
+  worldX: number,
+  worldZ: number,
+  chunkSizeHint: number,
+  payloadCellsByCoord: Map<string, DecodedTerrainCells>,
+): number | null {
+  if (payloadCellsByCoord.size === 0) {
+    return null
+  }
+  const chunkSize = Math.max(1, Math.trunc(chunkSizeHint))
+  const samples: Array<TerrainCellSample | null> = [
+    readTerrainCellAtWorldCell(Math.floor(worldX), Math.floor(worldZ), chunkSize, payloadCellsByCoord),
+    readTerrainCellAtWorldCell(Math.ceil(worldX), Math.floor(worldZ), chunkSize, payloadCellsByCoord),
+    readTerrainCellAtWorldCell(Math.floor(worldX), Math.ceil(worldZ), chunkSize, payloadCellsByCoord),
+    readTerrainCellAtWorldCell(Math.ceil(worldX), Math.ceil(worldZ), chunkSize, payloadCellsByCoord),
+  ]
+
+  let sum = 0
+  let count = 0
+  for (const sample of samples) {
+    if (!sample) {
+      continue
+    }
+    sum += elevationToWorldY(terrainHeightFromCell(sample))
+    count += 1
+  }
+
+  return count > 0 ? sum / count : null
 }
 
 function readTerrainCellAtWorldCell(

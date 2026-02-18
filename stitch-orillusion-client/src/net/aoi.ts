@@ -36,6 +36,7 @@ export function buildAoiQueries(input: AoiQueryInput, useV2Streams: boolean): st
       `SELECT * FROM terrain_chunk_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${minChunkX} AND chunk_x <= ${maxChunkX} AND chunk_y >= ${minChunkY} AND chunk_y <= ${maxChunkY}`,
       `SELECT * FROM terrain_chunk_payload WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${minChunkX} AND chunk_x <= ${maxChunkX} AND chunk_y >= ${minChunkY} AND chunk_y <= ${maxChunkY}`,
       `SELECT * FROM resource_node WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
+      `SELECT * FROM building_state WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
       `SELECT * FROM npc_state_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
       `SELECT * FROM transform_state WHERE region_id = ${region} AND dimension_id = ${dimension}`,
     ]
@@ -54,6 +55,7 @@ export function buildAoiQueries(input: AoiQueryInput, useV2Streams: boolean): st
     `SELECT * FROM terrain_chunk_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${minChunkX} AND chunk_x <= ${maxChunkX} AND chunk_y >= ${minChunkY} AND chunk_y <= ${maxChunkY}`,
     `SELECT * FROM terrain_chunk_payload WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${minChunkX} AND chunk_x <= ${maxChunkX} AND chunk_y >= ${minChunkY} AND chunk_y <= ${maxChunkY}`,
     `SELECT * FROM resource_node WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
+    `SELECT * FROM building_state WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
     `SELECT * FROM npc_state_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
     `SELECT * FROM transform_state WHERE region_id = ${region} AND dimension_id = ${dimension}`,
   ]
