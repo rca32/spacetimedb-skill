@@ -103,3 +103,69 @@ assetdirectory/scripts/mixamo_open_with_saved_state.sh
 - 기본 세션 이름: `mixamo`
 - 기본 상태 파일: `$HOME/.cache/agent-browser/mixamo-auth-state.json`
 - 상태 파일에는 인증 토큰이 포함될 수 있으므로 외부 공유/버전관리 금지
+
+## Mixamo 에셋 정리 규칙 (다운로드/모델+애니메이션)
+다운로드 폴더(`Downloads`)에서 다음 구조로 정리하면 추후 교체/실험이 쉽다.
+
+```bash
+mkdir -p assetdirectory/mixamo/{raw/models,raw/animations,raw/character_staging,processed/glb/{characters,animations},processed/fbx/{characters,animations},meta}
+```
+
+권장 저장 규칙
+- 모델(raw):
+  - `assetdirectory/mixamo/raw/models/<character>/<source-file>.*`
+- 애니메이션(raw):
+  - `assetdirectory/mixamo/raw/animations/<character>/<source-file>.*`
+- 최종 변환본:
+  - `assetdirectory/mixamo/processed/glb/characters/player_*.glb`
+  - `assetdirectory/mixamo/processed/glb/animations/player_*`
+- 메타:
+  - `assetdirectory/mixamo/meta/mixamo_manifest.csv`(수동/간단 로그)
+
+권장 Mixamo 다운로드 옵션(우리 파이프라인에 맞춤)
+- `Format`: `glTF`(권장) 또는 `FBX Binary`를 한 가지로 고정
+- `Skin`: 
+  - 캐릭터 본체 모델 1개만 `With Skin`
+  - 애니메이션은 모두 `Without Skin`
+- `Frames Per Second`: `30`
+- `In Place`: `On` (루트 이동 제거)
+- `Keyframe Reduction`: `None`
+- 해상도/폴리곤: 웹 기준 저수준 유지(필요 시 다운로드 후 리익포트 단계에서 경량화)
+
+우선순위 추천 클립
+- `idle`, `walk_forward`, `walk_backward`, `walk_left`, `walk_right`, `run_forward`, `run_backward`, `run_left`, `run_right`
+- 추가로 필요한 모션을 점진적으로 확장, 초반 `모든 animation` 동시 다운로드는 파일 수/처리 비용이 큼
+
+다운로드 후 최소 정리 예시
+```bash
+# 캐릭터 본체
+mv /path/to/downloads/*player*asset*.glb assetdirectory/mixamo/raw/models/player/
+
+# 애니메이션
+mv /path/to/downloads/*walk* assetdirectory/mixamo/raw/animations/player/
+mv /path/to/downloads/*idle* assetdirectory/mixamo/raw/animations/player/
+```
+
+프로젝트 반영 전 점검 체크리스트
+- 모든 clip 스켈레톤이 동일한 본 구조를 쓰는지 확인
+- 애니메이션이 `in-place`인지(루트 이동 거의 없음) 확인
+- 최종 파일명 네이밍이 manifest alias와 1:1 대응되는지 확인
+
+자동 정리 스크립트(권장)
+```bash
+assetdirectory/scripts/mixamo_organize_downloads.sh \
+  --character player \
+  --source "$HOME/Downloads" \
+  --target assetdirectory/mixamo \
+  --action move \
+  --extract-zips
+
+# 실행 전 확인(드라이런)
+assetdirectory/scripts/mixamo_organize_downloads.sh --dry-run
+```
+
+자동 정렬 규칙(권장)
+- 애니메이션은 프로젝트 표준명으로 재명명됨(기본 ON):  
+  `player_loco_idle`, `player_loco_walk_forward`, `player_loco_walk_backward`, `player_loco_walk_left`, `player_loco_walk_right`, `player_loco_run_forward`, `player_loco_run_backward`, `player_loco_run_left`, `player_loco_run_right`
+- 원본 이름 유지가 필요하면 `--no-rename-anims` 사용
+- 캐릭터 본체 모델은 `--model-name player_loco_character` 같이 지정 가능

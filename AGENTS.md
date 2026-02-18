@@ -2,6 +2,7 @@
 
 ## 빠른 앵커
 - [SpacetimeDB 작업 규칙](#spacetimedb-작업-규칙)
+- [WSL 브라우저 자동화 규칙](#wsl-브라우저-자동화-규칙)
 - [stitch-server Workflow Cheat Sheet](#stitch-server-workflow-cheat-sheet)
 - [stitch-web-client 기본 안내](#stitch-web-client-기본-안내)
 - [데이터 초기화 및 기본값 로딩 규칙](#데이터-초기화-및-기본값-로딩-규칙)
@@ -22,6 +23,10 @@
 
 ## SpacetimeDB 작업 규칙
 - SpacetimeDB 관련 작업은 반드시 `.opencode/skills/spacetimedb-korean/SKILL.md` 스킬을 참조한다.
+
+## WSL 브라우저 자동화 규칙
+- WSL에서 OAuth/CAPTCHA/2FA/다운로드 제한으로 자동화가 막히면 기본 스킬로 `.agents/skills/wsl-human-cdp-download/SKILL.md`를 사용한다.
+- 스크래핑/파일 수집은 가능하면 브라우저 다운로드 관리자 의존 대신 Linux 경로로 직접 저장하는 방식을 우선한다.
 
 
 ## Manual Test Instructions

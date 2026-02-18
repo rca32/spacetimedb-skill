@@ -10,13 +10,16 @@ powershell.exe -NoProfile -Command "& {
   \$url = '$URL'
   \$profileName = '$PROFILE_NAME'
   \$candidates = @(
-    '$env:ProgramFiles\Google\Chrome\Application\chrome.exe',
-    '$env:ProgramFiles(x86)\Google\Chrome\Application\chrome.exe',
-    '$env:LocalAppData\Google\Chrome\Application\chrome.exe'
+    \"\$env:ProgramFiles\Google\Chrome\Application\chrome.exe\",
+    \"\$env:ProgramFiles(x86)\Google\Chrome\Application\chrome.exe\",
+    \"\$env:LocalAppData\Google\Chrome\Application\chrome.exe\",
+    \"\$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe\",
+    \"\$env:ProgramFiles(x86)\Microsoft\Edge\Application\msedge.exe\",
+    \"\$env:LocalAppData\Microsoft\Edge\Application\msedge.exe\"
   )
   \$chrome = \$candidates | Where-Object { Test-Path \$_ } | Select-Object -First 1
   if (-not \$chrome) {
-    Write-Error 'Chrome executable not found on Windows.'
+    Write-Error 'Chrome/Edge executable not found on Windows.'
     exit 1
   }
   \$profile = Join-Path \$env:LOCALAPPDATA \$profileName

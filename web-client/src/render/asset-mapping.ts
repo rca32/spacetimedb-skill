@@ -55,14 +55,28 @@ export interface EnvironmentModelConfig {
 
 export interface CharacterAnimationAliases {
   idle?: string
+  idle_external?: string
   walk_forward?: string
+  walk_forward_external?: string
   walk_backward?: string
+  walk_backward_external?: string
   walk_left?: string
+  walk_left_external?: string
   walk_right?: string
+  walk_right_external?: string
   run_forward?: string
+  run_forward_external?: string
   run_backward?: string
+  run_backward_external?: string
   run_left?: string
+  run_left_external?: string
   run_right?: string
+  run_right_external?: string
+  jump_external?: string
+  hit_reaction_external?: string
+  death_external?: string
+  emote_wave_external?: string
+  attack_primary_external?: string
   turn_left?: string
   turn_right?: string
   turn_back?: string
