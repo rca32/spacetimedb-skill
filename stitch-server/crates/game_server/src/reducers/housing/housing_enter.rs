@@ -1,12 +1,12 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::services::projection_views;
+use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
 use crate::services::permissions;
+use crate::services::projection_views;
 use crate::tables::housing::{dimension_desc, housing_state, rent_state};
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
 use crate::tables::{SessionState, TransformState};
-use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
 
 #[spacetimedb::reducer]
 pub fn housing_enter(
@@ -36,12 +36,14 @@ pub fn housing_enter(
             .map(|r| r.white_list.contains(&ctx.sender))
             .unwrap_or(false);
 
-        let permitted_by_permissions = permissions::has_permission(
-            ctx,
-            3,
-            housing_entity_id,
-            permissions::PERM_USE,
-        ) || permissions::has_permission(ctx, 2, housing.entrance_building_entity_id, permissions::PERM_BUILD);
+        let permitted_by_permissions =
+            permissions::has_permission(ctx, 3, housing_entity_id, permissions::PERM_USE)
+                || permissions::has_permission(
+                    ctx,
+                    2,
+                    housing.entrance_building_entity_id,
+                    permissions::PERM_BUILD,
+                );
 
         if !permitted_by_rent && !permitted_by_permissions {
             return Err("no access to housing".to_string());
@@ -65,7 +67,13 @@ pub fn housing_enter(
         updated_at: ctx.timestamp,
     };
 
-    if ctx.db.transform_state().entity_id().find(ctx.sender).is_some() {
+    if ctx
+        .db
+        .transform_state()
+        .entity_id()
+        .find(ctx.sender)
+        .is_some()
+    {
         ctx.db.transform_state().entity_id().update(next);
     } else {
         ctx.db.transform_state().insert(next);

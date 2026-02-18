@@ -37,7 +37,12 @@ pub fn chat_send_message(
 
     has_rate_limit_capacity(ctx, "chat_send", &cid)?;
 
-    let message_id = format!("{}:{}:{}", cid, ctx.sender, ctx.timestamp.to_micros_since_unix_epoch());
+    let message_id = format!(
+        "{}:{}:{}",
+        cid,
+        ctx.sender,
+        ctx.timestamp.to_micros_since_unix_epoch()
+    );
     ctx.db.chat_message().insert(ChatMessage {
         message_id,
         channel_id: cid.clone(),
@@ -50,7 +55,10 @@ pub fn chat_send_message(
         ctx,
         ctx.sender,
         "chat",
-        format!("{{\"channel_id\":\"{}\",\"body\":\"{}\"}}", cid, message_body),
+        format!(
+            "{{\"channel_id\":\"{}\",\"body\":\"{}\"}}",
+            cid, message_body
+        ),
     );
 
     Ok(())

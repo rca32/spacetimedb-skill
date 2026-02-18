@@ -31,9 +31,9 @@ import { toKeyString } from './world-systems/common'
 const AOI_SUBSCRIPTION_KEY = 'world-aoi'
 const AOI_TERRAIN_PAYLOAD_SUBSCRIPTION_KEY = 'world-aoi-terrain-payload'
 const AOI_PATH_DEBUG_SUBSCRIPTION_KEY = 'world-path-debug'
-const TERRAIN_RADIUS_CHUNKS = 3
-const DYNAMIC_RADIUS_CHUNKS = 2
-const COMBAT_LIMIT = 500
+const TERRAIN_RADIUS_CHUNKS = Number.parseInt(import.meta.env.VITE_TERRAIN_RADIUS_CHUNKS ?? '2', 10)
+const DYNAMIC_RADIUS_CHUNKS = Number.parseInt(import.meta.env.VITE_DYNAMIC_RADIUS_CHUNKS ?? '1', 10)
+const COMBAT_LIMIT = Number.parseInt(import.meta.env.VITE_COMBAT_LIMIT ?? '300', 10)
 const DEFAULT_CHUNK_SIZE = 32
 const DEFAULT_WORLD_DIMENSION_ID = Number.parseInt(import.meta.env.VITE_WORLD_DIMENSION_ID ?? '1', 10)
 const ENABLE_WORLD_AOI_SUBSCRIPTION = (import.meta.env.VITE_ENABLE_WORLD_AOI_SUB ?? '1') === '1'

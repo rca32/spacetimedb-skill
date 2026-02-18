@@ -57,7 +57,13 @@ pub fn guild_project_update(
         updated_at: ctx.timestamp,
     };
 
-    if ctx.db.guild_project().project_id().find(pid.clone()).is_some() {
+    if ctx
+        .db
+        .guild_project()
+        .project_id()
+        .find(pid.clone())
+        .is_some()
+    {
         ctx.db.guild_project().project_id().update(next);
     } else {
         ctx.db.guild_project().insert(next);

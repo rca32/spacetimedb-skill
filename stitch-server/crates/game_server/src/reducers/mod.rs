@@ -11,4 +11,5 @@ pub mod pathfinding;
 pub mod player;
 pub mod social;
 pub mod trade_market;
+pub mod v2;
 pub mod worldgen;

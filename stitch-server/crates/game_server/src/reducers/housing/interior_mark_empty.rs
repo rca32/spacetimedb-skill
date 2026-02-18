@@ -34,7 +34,9 @@ pub fn interior_mark_empty(
             scheduled_id: housing_entity_id,
             scheduled_at: ScheduleAt::Time(
                 ctx.timestamp
-                    + TimeDuration::from_duration(Duration::from_secs(respawn_delay_seconds as u64)),
+                    + TimeDuration::from_duration(Duration::from_secs(
+                        respawn_delay_seconds as u64,
+                    )),
             ),
             housing_entity_id,
         };

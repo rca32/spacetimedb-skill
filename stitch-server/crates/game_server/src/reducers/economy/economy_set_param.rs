@@ -26,7 +26,13 @@ pub fn economy_set_param(
         updated_at: ctx.timestamp,
     };
 
-    if ctx.db.economy_params().param_key().find(key.clone()).is_some() {
+    if ctx
+        .db
+        .economy_params()
+        .param_key()
+        .find(key.clone())
+        .is_some()
+    {
         ctx.db.economy_params().param_key().update(next);
     } else {
         ctx.db.economy_params().insert(next);

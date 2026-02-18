@@ -21,9 +21,15 @@ export function createRendererRuntime(root: HTMLElement): RendererRuntime {
   const bundle: SceneBundle = createSceneBundle()
   const camera = createPerspectiveCamera(root.clientWidth, root.clientHeight)
   const materials = createMaterialPalette()
+  const maxPixelRatioRaw = Number.parseFloat(import.meta.env.VITE_MAX_PIXEL_RATIO ?? '1')
+  const maxPixelRatio = Number.isFinite(maxPixelRatioRaw) && maxPixelRatioRaw > 0 ? maxPixelRatioRaw : 1
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  const renderer = new THREE.WebGLRenderer({
+    antialias: false,
+    powerPreference: 'high-performance',
+  })
+  renderer.shadowMap.enabled = false
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxPixelRatio))
   renderer.setSize(root.clientWidth, root.clientHeight)
 
   root.innerHTML = ''
@@ -35,6 +41,7 @@ export function createRendererRuntime(root: HTMLElement): RendererRuntime {
     const width = root.clientWidth
     const height = root.clientHeight
     resizeCamera(camera, width, height)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxPixelRatio))
     renderer.setSize(width, height)
   }
 

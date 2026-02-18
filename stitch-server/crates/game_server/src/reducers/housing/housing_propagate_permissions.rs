@@ -24,12 +24,23 @@ pub fn housing_propagate_permissions(
         .ok_or("housing not found".to_string())?;
 
     if ctx.sender != housing.owner_identity
-        && !permissions::has_permission(ctx, TARGET_HOUSING, housing_entity_id, permissions::PERM_ADMIN)
+        && !permissions::has_permission(
+            ctx,
+            TARGET_HOUSING,
+            housing_entity_id,
+            permissions::PERM_ADMIN,
+        )
     {
         return Err("no permission to propagate housing permissions".to_string());
     }
 
-    upsert_permission(ctx, TARGET_HOUSING, housing_entity_id, subject_identity, flags);
+    upsert_permission(
+        ctx,
+        TARGET_HOUSING,
+        housing_entity_id,
+        subject_identity,
+        flags,
+    );
     upsert_permission(
         ctx,
         TARGET_DIMENSION_NETWORK,

@@ -19,7 +19,13 @@ pub fn tax_policy_set(ctx: &ReducerContext, item_def_id: u64, tax_bps: u32) -> R
         updated_at: ctx.timestamp,
     };
 
-    if ctx.db.tax_policy().item_def_id().find(item_def_id).is_some() {
+    if ctx
+        .db
+        .tax_policy()
+        .item_def_id()
+        .find(item_def_id)
+        .is_some()
+    {
         ctx.db.tax_policy().item_def_id().update(next);
     } else {
         ctx.db.tax_policy().insert(next);

@@ -52,7 +52,10 @@ pub fn party_create(ctx: &ReducerContext, party_id: String) -> Result<(), String
     Ok(())
 }
 
-pub(crate) fn find_party_id_by_identity(ctx: &ReducerContext, identity: spacetimedb::Identity) -> Option<String> {
+pub(crate) fn find_party_id_by_identity(
+    ctx: &ReducerContext,
+    identity: spacetimedb::Identity,
+) -> Option<String> {
     ctx.db
         .party_member()
         .iter()

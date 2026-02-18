@@ -18,9 +18,8 @@ use crate::tables::player_views::player_wallet_view;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
 use crate::tables::{
-    NpcState, NpcStateStream,
-    PlayerInventoryContainerView, PlayerInventoryItemView, PlayerInventorySlotView,
-    PlayerMovementFeedbackView, PlayerSessionView, PlayerWalletView,
+    NpcState, NpcStateStream, PlayerInventoryContainerView, PlayerInventoryItemView,
+    PlayerInventorySlotView, PlayerMovementFeedbackView, PlayerSessionView, PlayerWalletView,
 };
 use crate::validation::anti_cheat;
 
@@ -211,7 +210,10 @@ pub fn sync_player_session_view(ctx: &ReducerContext, identity: Identity) {
         .is_some();
     if exists {
         ctx.db.player_session_view().identity().delete(identity);
-        log::info!("player_session_view synced: identity={} mode=delete", identity);
+        log::info!(
+            "player_session_view synced: identity={} mode=delete",
+            identity
+        );
     }
 }
 
@@ -222,7 +224,13 @@ pub fn reconcile_npc_state_stream(ctx: &ReducerContext) {
     for row in npc_rows {
         active_npc_ids.insert(row.npc_id);
         let projected = project_npc_state_row(&row);
-        if ctx.db.npc_state_stream().npc_id().find(row.npc_id).is_some() {
+        if ctx
+            .db
+            .npc_state_stream()
+            .npc_id()
+            .find(row.npc_id)
+            .is_some()
+        {
             ctx.db.npc_state_stream().npc_id().update(projected);
         } else {
             ctx.db.npc_state_stream().insert(projected);
@@ -260,13 +268,12 @@ pub fn upsert_movement_feedback(
         .unwrap_or(ctx.timestamp);
 
     let (server_x, server_y, server_z) = normalize_position(
-        ctx
-        .db
-        .transform_state()
-        .entity_id()
-        .find(identity)
-        .map(|row| row.position)
-        .unwrap_or(fallback_pos),
+        ctx.db
+            .transform_state()
+            .entity_id()
+            .find(identity)
+            .map(|row| row.position)
+            .unwrap_or(fallback_pos),
     );
 
     let next = PlayerMovementFeedbackView {

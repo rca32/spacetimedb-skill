@@ -3,8 +3,8 @@ use spacetimedb::{Identity, ReducerContext, Table};
 use crate::services::permissions;
 use crate::tables::item_def::item_def;
 use crate::tables::live_ops::feature_flags;
-use crate::tables::npc_quest::{npc_anchor_state, npc_population_def};
 use crate::tables::npc_quest::npc_trade_order_def;
+use crate::tables::npc_quest::{npc_anchor_state, npc_population_def};
 use crate::tables::{FeatureFlags, NpcAnchorState, NpcPopulationDef, NpcTradeOrderDef};
 
 fn require_server_or_admin(ctx: &ReducerContext) -> Result<(), String> {
@@ -114,7 +114,13 @@ pub fn upsert_npc_anchor_state(
         updated_at: ctx.timestamp,
     };
 
-    if ctx.db.npc_anchor_state().anchor_id().find(anchor_id).is_some() {
+    if ctx
+        .db
+        .npc_anchor_state()
+        .anchor_id()
+        .find(anchor_id)
+        .is_some()
+    {
         ctx.db.npc_anchor_state().anchor_id().update(row);
     } else {
         ctx.db.npc_anchor_state().insert(row);

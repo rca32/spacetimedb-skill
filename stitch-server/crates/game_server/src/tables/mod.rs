@@ -29,6 +29,7 @@ pub mod social;
 pub mod static_data;
 pub mod trade_market;
 pub mod transform_state;
+pub mod v2;
 pub mod world_gen;
 pub mod world_state;
 
@@ -91,6 +92,10 @@ pub use social::{
 pub use static_data::{BuildingDef, CombatActionDef, QuestChainDef};
 pub use trade_market::{MarketFill, MarketOrder, TradeOffer, TradeSession};
 pub use transform_state::TransformState;
+pub use v2::{
+    AoiStreamV2, ClientFrameV2, CollisionProxyV2, CombatHitV2, CombatIntentV2, MotionIntentV2,
+    PhysicsStateV2, ServerCorrectionV2,
+};
 pub use world_gen::{BiomeGenDef, ResourceClumpDef, ResourceGenDef, WorldGenParams};
 pub use world_state::{
     EntityCore, InstanceState, RegionState, ResourceNode, TerrainChunk, TerrainChunkPayload,

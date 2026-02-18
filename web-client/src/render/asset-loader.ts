@@ -53,7 +53,7 @@ class AssetLoaderImpl {
       return cached
     }
 
-    const lower = path.toLowerCase()
+    const lower = normalizeAssetPath(path)
     let result: LoadedModel
     if (lower.endsWith('.fbx')) {
       const fbx = await this.fbxLoader.loadAsync(path)
@@ -68,6 +68,7 @@ class AssetLoaderImpl {
         animations: gltf.animations,
       }
     }
+    optimizeLoadedModel(result.scene)
 
     this.modelCache.set(path, result)
     return result
@@ -157,7 +158,7 @@ class AssetLoaderImpl {
   }
 
   private async loadAssetByPath(path: string): Promise<void> {
-    const lower = path.toLowerCase()
+    const lower = normalizeAssetPath(path)
     if (lower.endsWith('.glb') || lower.endsWith('.gltf') || lower.endsWith('.fbx')) {
       await this.loadModel(path)
     } else if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.webp')) {
@@ -301,6 +302,27 @@ function disposeMaterial(material: THREE.Material | THREE.Material[]): void {
   if (mat.aoMap) mat.aoMap.dispose()
   if (mat.emissiveMap) mat.emissiveMap.dispose()
   material.dispose()
+}
+
+function optimizeLoadedModel(root: THREE.Object3D): void {
+  root.traverse((node) => {
+    const renderable = node as THREE.Object3D & {
+      isMesh?: boolean
+      castShadow?: boolean
+      receiveShadow?: boolean
+      frustumCulled?: boolean
+    }
+    if (!renderable.isMesh) {
+      return
+    }
+    renderable.castShadow = false
+    renderable.receiveShadow = false
+    renderable.frustumCulled = true
+  })
+}
+
+function normalizeAssetPath(path: string): string {
+  return path.split('#', 1)[0]?.split('?', 1)[0]?.trim().toLowerCase() ?? ''
 }
 
 export const AssetLoader = new AssetLoaderImpl()

@@ -5,10 +5,10 @@ use std::time::Duration;
 
 use spacetimedb::{Identity, ReducerContext, ScheduleAt, Table};
 
-use crate::services::projection_views;
 use crate::services::hex_coords::{HexCoord, DEFAULT_WORLD_DIMENSION_ID};
 use crate::services::pathfinding;
 use crate::services::permissions;
+use crate::services::projection_views;
 use crate::tables::agent_timers::{
     environment_effect_loop_timer, npc_ai_loop_timer, player_regen_loop_timer,
     resource_regen_loop_timer, session_cleanup_loop_timer,
@@ -25,10 +25,10 @@ use crate::tables::npc_quest::{
     npc_anchor_state, npc_population_def, npc_state, npc_trade_order_def, npc_trade_order_state,
 };
 use crate::tables::pathfinding::npc_path_state;
-use crate::tables::player_views::player_session_view;
 use crate::tables::player_progression::{
     character_stats, npc_action_schedule, resource_state, status_effect,
 };
+use crate::tables::player_views::player_session_view;
 use crate::tables::session_state::session_state;
 use crate::tables::trade_market::trade_session;
 use crate::tables::transform_state::transform_state;
@@ -512,7 +512,12 @@ fn ensure_default_npc_trade_order_defs(ctx: &ReducerContext) {
         return;
     }
 
-    let mut item_ids: Vec<u64> = ctx.db.item_def().iter().map(|row| row.item_def_id).collect();
+    let mut item_ids: Vec<u64> = ctx
+        .db
+        .item_def()
+        .iter()
+        .map(|row| row.item_def_id)
+        .collect();
     item_ids.sort_unstable();
     if item_ids.is_empty() {
         return;
@@ -669,8 +674,12 @@ fn sync_npc_trade_orders_for_npc(
             updated_at: row.updated_at,
         })
         .collect();
-    let optional_ids =
-        choose_npc_trade_optional_order_def_ids(&optional_defs, npc_id, refresh_bucket, random_count);
+    let optional_ids = choose_npc_trade_optional_order_def_ids(
+        &optional_defs,
+        npc_id,
+        refresh_bucket,
+        random_count,
+    );
 
     let desired_defs: Vec<NpcTradeOrderDef> = defs
         .into_iter()
@@ -692,7 +701,12 @@ fn sync_npc_trade_orders_for_npc(
         let unit_price = def.base_unit_price.saturating_add(price_jitter);
         let refresh_at = now_us.saturating_add(refresh_interval_us);
 
-        if let Some(mut existing) = ctx.db.npc_trade_order_state().order_key().find(order_key.clone()) {
+        if let Some(mut existing) = ctx
+            .db
+            .npc_trade_order_state()
+            .order_key()
+            .find(order_key.clone())
+        {
             if existing.refresh_at <= now_us
                 || existing.item_def_id != def.item_def_id
                 || existing.side != def.side
@@ -801,7 +815,11 @@ fn choose_travel_anchor_destination(
         let dx = i64::from(npc.hex_x) - i64::from(row.hex_x);
         let dz = i64::from(npc.hex_z) - i64::from(row.hex_z);
         let dist_sq = dx.saturating_mul(dx).saturating_add(dz.saturating_mul(dz));
-        let penalty = if recent.contains(&row.anchor_id) { 1_000_000_000_i64 } else { 0 };
+        let penalty = if recent.contains(&row.anchor_id) {
+            1_000_000_000_i64
+        } else {
+            0
+        };
         dist_sq.saturating_add(penalty)
     });
 
@@ -1014,7 +1032,12 @@ fn sync_npc_anchor_occupancy(ctx: &ReducerContext) {
         if npc.anchor_entity_id == 0 {
             continue;
         }
-        if let Some(mut anchor) = ctx.db.npc_anchor_state().anchor_id().find(npc.anchor_entity_id) {
+        if let Some(mut anchor) = ctx
+            .db
+            .npc_anchor_state()
+            .anchor_id()
+            .find(npc.anchor_entity_id)
+        {
             anchor.occupied_by_npc_id = Some(npc.npc_id);
             anchor.updated_at = ctx.timestamp;
             ctx.db.npc_anchor_state().anchor_id().update(anchor);
@@ -1045,7 +1068,8 @@ fn reconcile_npc_population(ctx: &ReducerContext, now_us: u64) {
     }
 
     let target_by_type = compute_target_by_type(active_anchors.len(), &defs);
-    let def_map: HashMap<u8, NpcPopulationDef> = defs.into_iter().map(|row| (row.npc_type, row)).collect();
+    let def_map: HashMap<u8, NpcPopulationDef> =
+        defs.into_iter().map(|row| (row.npc_type, row)).collect();
 
     let mut desired_anchor_npc_type = HashMap::<u64, u8>::new();
     let mut cursor = 0usize;
@@ -1264,30 +1288,30 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
     let mut schedule_updates: Vec<NpcActionSchedule> = Vec::new();
 
     for mut npc in ctx.db.npc_state().iter() {
-        let mut schedule =
-            if let Some(schedule) = ctx.db.npc_action_schedule().npc_id().find(npc.npc_id) {
-                schedule
+        let mut schedule = if let Some(schedule) =
+            ctx.db.npc_action_schedule().npc_id().find(npc.npc_id)
+        {
+            schedule
+        } else {
+            let action_type = if npc.traveling {
+                normalize_schedule_kind(npc.schedule_kind)
             } else {
-                let action_type = if npc.traveling {
-                    normalize_schedule_kind(npc.schedule_kind)
-                } else {
-                    3
-                };
-                let default_schedule = NpcActionSchedule {
-                    npc_id: npc.npc_id,
-                    next_action_at: now_us
-                        + npc_next_delay(ctx, npc.npc_id, npc.npc_type, action_type),
-                    action_type,
-                    target_region_id: Some(npc.region_id),
-                };
-                ctx.db.npc_action_schedule().insert(NpcActionSchedule {
-                    npc_id: default_schedule.npc_id,
-                    next_action_at: default_schedule.next_action_at,
-                    action_type: default_schedule.action_type,
-                    target_region_id: default_schedule.target_region_id,
-                });
-                default_schedule
+                3
             };
+            let default_schedule = NpcActionSchedule {
+                npc_id: npc.npc_id,
+                next_action_at: now_us + npc_next_delay(ctx, npc.npc_id, npc.npc_type, action_type),
+                action_type,
+                target_region_id: Some(npc.region_id),
+            };
+            ctx.db.npc_action_schedule().insert(NpcActionSchedule {
+                npc_id: default_schedule.npc_id,
+                next_action_at: default_schedule.next_action_at,
+                action_type: default_schedule.action_type,
+                target_region_id: default_schedule.target_region_id,
+            });
+            default_schedule
+        };
 
         if now_us < schedule.next_action_at {
             continue;
@@ -1299,7 +1323,12 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
             schedule.next_action_at =
                 now_us + npc_next_delay(ctx, npc.npc_id, npc.npc_type, action_type);
             schedule.action_type = action_type;
-            if let Some(anchor) = ctx.db.npc_anchor_state().anchor_id().find(npc.anchor_entity_id) {
+            if let Some(anchor) = ctx
+                .db
+                .npc_anchor_state()
+                .anchor_id()
+                .find(npc.anchor_entity_id)
+            {
                 npc.hex_x = anchor.hex_x;
                 npc.hex_z = anchor.hex_z;
                 npc.dest_hex_x = anchor.hex_x;
@@ -1335,8 +1364,13 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
             }
 
             if target_hex_x == npc.hex_x && target_hex_z == npc.hex_z {
-                (target_hex_x, target_hex_z) =
-                    compute_npc_destination(npc.npc_id, npc.hex_x, npc.hex_z, action_type, npc.mood);
+                (target_hex_x, target_hex_z) = compute_npc_destination(
+                    npc.npc_id,
+                    npc.hex_x,
+                    npc.hex_z,
+                    action_type,
+                    npc.mood,
+                );
             }
 
             let current = HexCoord::new(npc.hex_x, npc.hex_z, 1);
@@ -1409,8 +1443,7 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
 
     sync_npc_anchor_occupancy(ctx);
 
-    let removed_paths =
-        pathfinding::prune_path_results(ctx, NPC_AI_PATH_KEEP_ROWS_PER_IDENTITY);
+    let removed_paths = pathfinding::prune_path_results(ctx, NPC_AI_PATH_KEEP_ROWS_PER_IDENTITY);
     if removed_paths > 0 {
         log::info!(
             "npc_ai_agent_loop pruned stale paths: removed={}",
@@ -1433,7 +1466,10 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
 
 fn npc_next_delay(ctx: &ReducerContext, npc_id: u64, npc_type: u8, schedule_kind: u8) -> u64 {
     if let Some(def) = ctx.db.npc_population_def().npc_type().find(npc_type) {
-        if def.enabled && def.max_action_seconds >= def.min_action_seconds && def.min_action_seconds > 0 {
+        if def.enabled
+            && def.max_action_seconds >= def.min_action_seconds
+            && def.min_action_seconds > 0
+        {
             let min_secs = u64::from(def.min_action_seconds);
             let max_secs = u64::from(def.max_action_seconds);
             let span = max_secs.saturating_sub(min_secs).saturating_add(1);
@@ -1445,8 +1481,16 @@ fn npc_next_delay(ctx: &ReducerContext, npc_id: u64, npc_type: u8, schedule_kind
                     ^ (u64::from(normalize_schedule_kind(schedule_kind)) << 40)
                     ^ cycle_bucket.rotate_left(11),
             );
-            let phase = if span == 0 { 0 } else { (npc_id ^ u64::from(npc_type)) % span };
-            let jitter = if span == 0 { 0 } else { (seed % span + phase) % span };
+            let phase = if span == 0 {
+                0
+            } else {
+                (npc_id ^ u64::from(npc_type)) % span
+            };
+            let jitter = if span == 0 {
+                0
+            } else {
+                (seed % span + phase) % span
+            };
             return min_secs.saturating_add(jitter).saturating_mul(1_000_000);
         }
     }

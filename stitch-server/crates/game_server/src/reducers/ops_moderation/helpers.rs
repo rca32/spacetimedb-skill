@@ -108,14 +108,25 @@ pub fn add_moderation_score(
     flag.last_reason = reason;
     flag.updated_at = ctx.timestamp;
 
-    if ctx.db.moderation_flag().identity().find(target_identity).is_some() {
+    if ctx
+        .db
+        .moderation_flag()
+        .identity()
+        .find(target_identity)
+        .is_some()
+    {
         ctx.db.moderation_flag().identity().update(flag);
     } else {
         ctx.db.moderation_flag().insert(flag);
     }
 }
 
-pub fn set_ban(ctx: &ReducerContext, target_identity: Identity, duration_minutes: i32, reason: String) {
+pub fn set_ban(
+    ctx: &ReducerContext,
+    target_identity: Identity,
+    duration_minutes: i32,
+    reason: String,
+) {
     let minutes = duration_minutes.max(1) as u64;
     let until_at = ctx.timestamp + TimeDuration::from_micros((minutes * 60 * 1_000_000) as i64);
     let next = BanList {

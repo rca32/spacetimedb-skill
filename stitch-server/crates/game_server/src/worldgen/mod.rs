@@ -174,7 +174,13 @@ pub fn generate_region(
     params: &WorldGenParams,
     overwrite: bool,
 ) -> Result<GenerateSummary, String> {
-    generate_region_in_dimension(ctx, region_id, DEFAULT_WORLD_DIMENSION_ID, params, overwrite)
+    generate_region_in_dimension(
+        ctx,
+        region_id,
+        DEFAULT_WORLD_DIMENSION_ID,
+        params,
+        overwrite,
+    )
 }
 
 pub fn generate_region_in_dimension(

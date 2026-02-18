@@ -1,6 +1,6 @@
 use crate::agents::{
-    environment_effect_agent_loop, player_regen_agent_loop, resource_regen_agent_loop,
-    session_cleanup_agent_loop, npc_ai_agent_loop,
+    environment_effect_agent_loop, npc_ai_agent_loop, player_regen_agent_loop,
+    resource_regen_agent_loop, session_cleanup_agent_loop,
 };
 use spacetimedb::{ScheduleAt, Timestamp};
 

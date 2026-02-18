@@ -4,7 +4,11 @@ use super::helpers::{append_audit_log, is_supported_role, require_admin, role_bi
 use crate::tables::role_binding::role_binding;
 
 #[spacetimedb::reducer]
-pub fn role_revoke(ctx: &ReducerContext, target_identity: Identity, role: String) -> Result<(), String> {
+pub fn role_revoke(
+    ctx: &ReducerContext,
+    target_identity: Identity,
+    role: String,
+) -> Result<(), String> {
     require_admin(ctx)?;
 
     let normalized = role.trim().to_ascii_lowercase();
@@ -13,7 +17,13 @@ pub fn role_revoke(ctx: &ReducerContext, target_identity: Identity, role: String
     }
 
     let binding_id = role_binding_id(target_identity, &normalized);
-    if ctx.db.role_binding().binding_id().find(binding_id.clone()).is_some() {
+    if ctx
+        .db
+        .role_binding()
+        .binding_id()
+        .find(binding_id.clone())
+        .is_some()
+    {
         ctx.db.role_binding().binding_id().delete(binding_id);
     }
 

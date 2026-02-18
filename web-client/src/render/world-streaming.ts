@@ -45,13 +45,30 @@ const GLTF_BUILDING_SCALE = 0.8
 const GLTF_RESOURCE_SCALE = 0.8
 const GLTF_PLAYER_SCALE = 0.9
 const GLTF_NPC_SCALE = 0.85
+const LOCAL_PLAYER_SCALE = Number.parseFloat(import.meta.env.VITE_LOCAL_PLAYER_SCALE ?? '0.01')
+const CHARACTER_DETAIL_DISTANCE = Number.parseFloat(import.meta.env.VITE_CHARACTER_DETAIL_DISTANCE ?? '12')
+const CHARACTER_DETAIL_DISTANCE_SQ = Number.isFinite(CHARACTER_DETAIL_DISTANCE)
+  ? CHARACTER_DETAIL_DISTANCE * CHARACTER_DETAIL_DISTANCE
+  : 12 * 12
+const ENABLE_DETAILED_REMOTE_MODELS = (import.meta.env.VITE_ENABLE_DETAILED_REMOTE_MODELS ?? '0') === '1'
+const ENABLE_DETAILED_NPC_MODELS = (import.meta.env.VITE_ENABLE_DETAILED_NPC_MODELS ?? '0') === '1'
+const CHARACTER_ANIM_UPDATE_DISTANCE = Number.parseFloat(
+  import.meta.env.VITE_CHARACTER_ANIM_UPDATE_DISTANCE ?? '18',
+)
+const CHARACTER_ANIM_UPDATE_DISTANCE_SQ = Number.isFinite(CHARACTER_ANIM_UPDATE_DISTANCE)
+  ? CHARACTER_ANIM_UPDATE_DISTANCE * CHARACTER_ANIM_UPDATE_DISTANCE
+  : 18 * 18
+const FAR_ANIM_UPDATE_FRAME_INTERVAL = (() => {
+  const raw = Number.parseInt(import.meta.env.VITE_FAR_ANIM_UPDATE_FRAME_INTERVAL ?? '4', 10)
+  return Number.isFinite(raw) && raw > 0 ? raw : 4
+})()
 const TERRAIN_CHUNK_SIZE = 16
 const TERRAIN_HEIGHT_SCALE = 0.2
 const TERRAIN_SEA_LEVEL_BASE = 12
 const WATER_SURFACE_OFFSET = 0.03
 const CHUNK_DECORATION_MARGIN = 2.3
-const DEFAULT_DECORATION_PER_CHUNK = 4
-const DEFAULT_LANDMARK_CHANCE = 0.34
+const DEFAULT_DECORATION_PER_CHUNK = 0
+const DEFAULT_LANDMARK_CHANCE = 0
 const WATER_COLOR = new THREE.Color(0x3b6796)
 const BIOME_COLORS = [0x284032, 0x395629, 0x5b4d2d, 0x30495e, 0x4d3b55, 0x6c5e39].map(
   (hex) => new THREE.Color(hex),
@@ -324,6 +341,7 @@ export class WorldStreamingRenderer {
   private readonly failedExternalActionBindings = new Set<string>()
   private readonly pathDebugLines = new Map<string, PathDebugLineRenderable>()
   private readonly queuedCharacterActions = new Map<string, QueuedCharacterAction[]>()
+  private animatorFrameCounter = 0
 
   constructor(scene: THREE.Scene, materials: MaterialPalette) {
     const terrainGeometry = new THREE.PlaneGeometry(16, 16)
@@ -437,6 +455,7 @@ export class WorldStreamingRenderer {
     const manifest = AssetLoader.getManifest()
     const environmentConfig = manifest ? getEnvironmentModelConfig(manifest) : null
     const payloadByChunkKey = new Map<string, { payloadVersion: number; cellCount: number; payloadBytes: number[] }>()
+    let localCharacterPos: { x: number; z: number } | null = null
 
     world.ecs.query(IsTerrainChunkPayload, ChunkPayloadData).readEach(([payload]) => {
       payloadByChunkKey.set(payload.chunkKey, {
@@ -547,9 +566,9 @@ export class WorldStreamingRenderer {
         x: presentation.x,
         y: presentation.y + 0.9,
         z: presentation.z,
-        sx: GLTF_PLAYER_SCALE,
-        sy: GLTF_PLAYER_SCALE,
-        sz: GLTF_PLAYER_SCALE,
+        sx: LOCAL_PLAYER_SCALE,
+        sy: LOCAL_PLAYER_SCALE,
+        sz: LOCAL_PLAYER_SCALE,
         qx: presentation.qx,
         qy: presentation.qy,
         qz: presentation.qz,
@@ -558,6 +577,7 @@ export class WorldStreamingRenderer {
       }
       const modelPath = manifest ? getCharacterModelPath('localPlayer', manifest) : null
       const animationAliases = manifest ? getCharacterAnimationAliases('localPlayer', manifest) : null
+      localCharacterPos = { x: presentation.x, z: presentation.z }
 
       if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf, true)) {
         this.updateCharacterAnimationState(key, transform, dtSeconds, true, animationAliases)
@@ -570,6 +590,8 @@ export class WorldStreamingRenderer {
 
     world.ecs.query(IsRemotePlayer, NetEntity, PresentationTransform).readEach(([net, presentation]) => {
       const key = `${net.table}:${net.serverId}`
+      const useDetailedModel =
+        ENABLE_DETAILED_REMOTE_MODELS && shouldUseDetailedCharacterModel(localCharacterPos, presentation)
       const transform = {
         x: presentation.x,
         y: presentation.y + 0.85,
@@ -586,10 +608,11 @@ export class WorldStreamingRenderer {
       const modelPath = manifest ? getCharacterModelPath('remotePlayer', manifest) : null
       const animationAliases = manifest ? getCharacterAnimationAliases('remotePlayer', manifest) : null
 
-      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf, true)) {
+      if (useDetailedModel && modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf, true)) {
         this.updateCharacterAnimationState(key, transform, dtSeconds, false, animationAliases)
         return
       }
+      this.removeGltfRenderable(key)
 
       seenActors.add(key)
       this.actorPool.upsert(key, transform, REMOTE_PLAYER_COLOR)
@@ -597,6 +620,8 @@ export class WorldStreamingRenderer {
 
     world.ecs.query(IsNpc, NetEntity, PresentationTransform).readEach(([net, presentation]) => {
       const key = `${net.table}:${net.serverId}`
+      const useDetailedModel =
+        ENABLE_DETAILED_NPC_MODELS && shouldUseDetailedCharacterModel(localCharacterPos, presentation)
       const transform = {
         x: presentation.x,
         y: presentation.y + 0.85,
@@ -613,16 +638,17 @@ export class WorldStreamingRenderer {
       const modelPath = manifest ? getCharacterModelPath('npc', manifest) : null
       const animationAliases = manifest ? getCharacterAnimationAliases('npc', manifest) : null
 
-      if (modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf, true)) {
+      if (useDetailedModel && modelPath && this.upsertGltfRenderable(key, modelPath, transform, seenGltf, true)) {
         this.updateCharacterAnimationState(key, transform, dtSeconds, false, animationAliases)
         return
       }
+      this.removeGltfRenderable(key)
 
       seenNpcs.add(key)
       this.npcPool.upsert(key, transform, NPC_COLOR)
     })
 
-    this.updateCharacterAnimators(dtSeconds)
+    this.updateCharacterAnimators(dtSeconds, localCharacterPos)
 
     if (ENABLE_PATH_DEBUG_OVERLAY) {
       this.syncPathDebugOverlay(world, localIdentityHex)
@@ -684,7 +710,7 @@ export class WorldStreamingRenderer {
     const terrain = new THREE.Mesh(built.terrainGeometry, this.terrainMaterial)
     terrain.userData.cameraObstacle = true
     terrain.castShadow = false
-    terrain.receiveShadow = true
+    terrain.receiveShadow = false
     group.add(terrain)
 
     let water: THREE.Mesh | null = null
@@ -992,6 +1018,17 @@ export class WorldStreamingRenderer {
     clone.userData.cameraObstacle = cameraObstacle
     clone.traverse((node) => {
       node.userData.cameraObstacle = cameraObstacle
+      const renderable = node as THREE.Object3D & {
+        isMesh?: boolean
+        castShadow?: boolean
+        receiveShadow?: boolean
+        frustumCulled?: boolean
+      }
+      if (renderable.isMesh) {
+        renderable.castShadow = false
+        renderable.receiveShadow = false
+        renderable.frustumCulled = true
+      }
     })
     clone.visible = true
     this.applyModelTransform(clone, transform)
@@ -1005,9 +1042,27 @@ export class WorldStreamingRenderer {
     return true
   }
 
-  private updateCharacterAnimators(dtSeconds: number): void {
+  private updateCharacterAnimators(
+    dtSeconds: number,
+    localCharacterPos: { x: number; z: number } | null,
+  ): void {
+    this.animatorFrameCounter += 1
+    const allowFarAnimatorUpdate =
+      this.animatorFrameCounter % FAR_ANIM_UPDATE_FRAME_INTERVAL === 0
+
     for (const animator of this.characterAnimators.values()) {
-      animator.mixer.update(dtSeconds)
+      let shouldUpdateMixer = true
+      if (localCharacterPos) {
+        const dx = animator.object.position.x - localCharacterPos.x
+        const dz = animator.object.position.z - localCharacterPos.z
+        const distanceSq = dx * dx + dz * dz
+        shouldUpdateMixer =
+          distanceSq <= CHARACTER_ANIM_UPDATE_DISTANCE_SQ || allowFarAnimatorUpdate
+      }
+
+      if (shouldUpdateMixer) {
+        animator.mixer.update(dtSeconds)
+      }
       const scripted = animator.scriptedAction
       if (!scripted) {
         continue
@@ -1026,7 +1081,7 @@ export class WorldStreamingRenderer {
 
   private setupCharacterAnimator(key: string, object: THREE.Object3D, path: string): void {
     const model = AssetLoader.getModel(path)
-    if (!model || model.animations.length === 0) {
+    if (!model) {
       return
     }
 
@@ -1103,9 +1158,6 @@ export class WorldStreamingRenderer {
     }
 
     this.trySetupDirectionalActions(animator, animationAliases)
-    if (animationAliases) {
-      this.tryBindAuxExternalActions(animator, animationAliases)
-    }
     this.tryPlayQueuedCharacterAction(key, animator, animationAliases)
 
     if (animator.scriptedAction) {
@@ -1195,17 +1247,12 @@ export class WorldStreamingRenderer {
     }
 
     const next = queue[0]
-    const alias = externalAliasForActionSlot(aliases, next.slot)
-    if (!alias) {
+    const action = this.resolveScriptedAction(animator, aliases, next.slot)
+    if (!action) {
       queue.shift()
       if (queue.length === 0) {
         this.queuedCharacterActions.delete(key)
       }
-      return
-    }
-
-    const action = this.resolveExternalActionByAlias(animator, alias, next.slot)
-    if (!action) {
       return
     }
 
@@ -1244,6 +1291,9 @@ export class WorldStreamingRenderer {
         uniqueActions.add(animator.turnActions.turnBack)
       }
       for (const directionalAction of uniqueActions) {
+        if (directionalAction === action) {
+          continue
+        }
         directionalAction.setEffectiveWeight(0)
       }
     }
@@ -1255,6 +1305,23 @@ export class WorldStreamingRenderer {
       remainingSeconds: Math.max(0.35, action.getClip().duration + 0.2),
     }
     animator.activeAction = action
+  }
+
+  private resolveScriptedAction(
+    animator: CharacterAnimator,
+    aliases: CharacterAnimationAliases,
+    slot: CharacterActionSlot,
+  ): THREE.AnimationAction | undefined {
+    const internalAlias = internalAliasForActionSlot(aliases, slot)
+    if (internalAlias) {
+      const internal = this.resolveActionByAlias(animator, internalAlias)
+      if (internal) {
+        return internal
+      }
+    }
+
+    const externalAlias = externalAliasForActionSlot(aliases, slot)
+    return this.resolveExternalActionByAlias(animator, externalAlias, slot)
   }
 
   private trySetupDirectionalActions(animator: CharacterAnimator, aliases: CharacterAnimationAliases | null): void {
@@ -1335,8 +1402,6 @@ export class WorldStreamingRenderer {
     const turnBack =
       this.resolveExternalActionByAlias(animator, aliases.turn_back_external, 'turn_back_external') ??
       this.resolveActionByAlias(animator, aliases.turn_back)
-    this.tryBindAuxExternalActions(animator, aliases)
-
     const directionalActions: DirectionalActionSet = {
       idle,
       walkForward,
@@ -1390,7 +1455,8 @@ export class WorldStreamingRenderer {
     actionSlot: string,
     fallbackHint: string,
   ): THREE.AnimationAction | undefined {
-    const internal = this.resolveActionByAlias(animator, alias) ?? this.findAnimationAction(animator, fallbackHint)
+    const internal =
+      this.resolveActionByAlias(animator, alias) ?? this.findAnimationActionByHint(animator, fallbackHint)
     if (internal) {
       return internal
     }
@@ -1399,6 +1465,20 @@ export class WorldStreamingRenderer {
       return undefined
     }
     return this.resolveExternalActionByAlias(animator, externalAlias, actionSlot)
+  }
+
+  private findAnimationActionByHint(
+    animator: CharacterAnimator,
+    hint: string,
+  ): THREE.AnimationAction | undefined {
+    const wanted = normalizeAnimationName(hint)
+    for (const [name, action] of animator.actions.entries()) {
+      const normalized = normalizeAnimationName(name)
+      if (normalized.includes(wanted) || wanted.includes(normalized)) {
+        return action
+      }
+    }
+    return undefined
   }
 
   private tryBindAuxExternalActions(animator: CharacterAnimator, aliases: CharacterAnimationAliases): void {
@@ -1490,18 +1570,23 @@ export class WorldStreamingRenderer {
 
     const targetSignature = skeletonSignature(targetMesh.skeleton)
     const sourceSignature = skeletonSignature(sourceMesh.skeleton)
-    const cacheKey = `${animator.modelPath}|${spec.path}|${spec.clipName ?? ''}|${targetSignature}|${sourceSignature}`
+    const sameSkeleton = targetSignature === sourceSignature
+    const cacheKey = `${animator.modelPath}|${spec.path}|${spec.clipName ?? ''}|${targetSignature}|${sourceSignature}|${sameSkeleton ? 'direct' : 'retarget'}`
 
     let clip = this.retargetedClipCache.get(cacheKey)
     if (!clip) {
-      const retargetOptions = buildRetargetOptions(targetMesh.skeleton, sourceMesh.skeleton)
-      try {
-        clip = SkeletonUtils.retargetClip(targetMesh, sourceMesh, sourceClip, retargetOptions)
-      } catch {
-        return undefined
+      if (sameSkeleton) {
+        clip = sourceClip.clone()
+      } else {
+        const retargetOptions = buildRetargetOptions(targetMesh.skeleton, sourceMesh.skeleton)
+        try {
+          clip = SkeletonUtils.retargetClip(targetMesh, sourceMesh, sourceClip, retargetOptions)
+        } catch {
+          return undefined
+        }
+        targetMesh.skeleton.pose()
       }
       clip.name = actionName
-      targetMesh.skeleton.pose()
       this.retargetedClipCache.set(cacheKey, clip)
     }
 
@@ -1518,7 +1603,7 @@ export class WorldStreamingRenderer {
     }
 
     if (!clipName || clipName.trim().length === 0) {
-      return sourceModel.animations[0]
+      return this.pickBestSourceClip(sourceModel.animations)
     }
 
     const wanted = normalizeAnimationName(clipName)
@@ -1533,7 +1618,27 @@ export class WorldStreamingRenderer {
         return clip
       }
     }
-    return sourceModel.animations[0]
+    return this.pickBestSourceClip(sourceModel.animations)
+  }
+
+  private pickBestSourceClip(clips: THREE.AnimationClip[]): THREE.AnimationClip {
+    if (clips.length === 1) {
+      return clips[0]
+    }
+
+    let best = clips[0]
+    let bestScore = Number.NEGATIVE_INFINITY
+    for (const clip of clips) {
+      const duration = Number.isFinite(clip.duration) ? clip.duration : 0
+      const tracks = clip.tracks.length
+      const shortPenalty = duration <= 0.6 ? 50 : 0
+      const score = duration * 10 + tracks - shortPenalty
+      if (score > bestScore) {
+        best = clip
+        bestScore = score
+      }
+    }
+    return best
   }
 
   private updateDirectionalAnimationState(
@@ -2038,7 +2143,7 @@ function resolveEnvironmentLandmarkPaths(environmentConfig: EnvironmentModelConf
 
 function resolveDecorationCount(environmentConfig: EnvironmentModelConfig | null): number {
   const raw = environmentConfig?.decorationPerChunk ?? DEFAULT_DECORATION_PER_CHUNK
-  return clamp(Math.round(raw), 1, 8)
+  return clamp(Math.round(raw), 0, 4)
 }
 
 function resolveLandmarkChance(environmentConfig: EnvironmentModelConfig | null): number {
@@ -2063,6 +2168,18 @@ function isEnvironmentObstacleModel(path: string): boolean {
     lower.includes('/walls/') ||
     lower.includes('/rocks/')
   )
+}
+
+function shouldUseDetailedCharacterModel(
+  localCharacterPos: { x: number; z: number } | null,
+  target: { x: number; z: number },
+): boolean {
+  if (!localCharacterPos) {
+    return true
+  }
+  const dx = target.x - localCharacterPos.x
+  const dz = target.z - localCharacterPos.z
+  return dx * dx + dz * dz <= CHARACTER_DETAIL_DISTANCE_SQ
 }
 
 function hashInt3(a: number, b: number, c: number): number {
@@ -2140,6 +2257,24 @@ function externalAliasForActionSlot(
   }
 }
 
+function internalAliasForActionSlot(
+  aliases: CharacterAnimationAliases,
+  slot: CharacterActionSlot,
+): string | undefined {
+  switch (slot) {
+    case 'jump_external':
+      return aliases.turn_left ?? 'wheelchair-look-left'
+    case 'emote_wave_external':
+      return aliases.turn_right ?? 'wheelchair-look-right'
+    case 'attack_primary_external':
+      return aliases.turn_back ?? 'wheelchair-move-back'
+    case 'hit_reaction_external':
+      return aliases.turn_left ?? 'wheelchair-look-left'
+    case 'death_external':
+      return aliases.turn_back ?? 'wheelchair-move-back'
+  }
+}
+
 function parseExternalClipSpec(alias: string | undefined): ExternalClipSpec | null {
   if (!alias || alias.trim().length === 0) {
     return null
@@ -2152,7 +2287,12 @@ function parseExternalClipSpec(alias: string | undefined): ExternalClipSpec | nu
     return null
   }
 
-  const lower = path.toLowerCase()
+  const pathWithoutQuery = path.split('?', 1)[0]?.trim() ?? ''
+  if (pathWithoutQuery.length === 0) {
+    return null
+  }
+
+  const lower = pathWithoutQuery.toLowerCase()
   if (!lower.endsWith('.fbx') && !lower.endsWith('.glb') && !lower.endsWith('.gltf')) {
     return null
   }

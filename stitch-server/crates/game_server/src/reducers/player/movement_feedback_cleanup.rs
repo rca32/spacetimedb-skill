@@ -64,7 +64,8 @@ pub fn movement_feedback_cleanup_global(
         keep_rows_per_identity.min(MAX_KEEP_ROWS)
     } as usize;
 
-    let mut rows: Vec<PlayerMovementFeedbackView> = ctx.db.player_movement_feedback_view().iter().collect();
+    let mut rows: Vec<PlayerMovementFeedbackView> =
+        ctx.db.player_movement_feedback_view().iter().collect();
     if rows.is_empty() {
         return Ok(());
     }

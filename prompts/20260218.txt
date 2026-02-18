@@ -27,3 +27,25 @@ prompts/20260218_worklog.md
 뽑아내서 작업할 내용을 만들어죠 ,NPCDESIGN 밑에 작성 해주고
 
 2.BitCraft에 구현 된것 이외에 최신 LLM을 사용해서 Agent 행동 talk,인지등을 개선할 예정이니까 이것도 추가할수 있게 설계를 해죠.
+
+
+///
+
+
+
+사용스킬[$orillusion-best-practices,$spacetimedb-korean,$agent-browser]
+
+[참고 문서]
+WEBCLIENTDESIGN/00-master.md
+WORLDGENERATORDESIGN/00-master.md
+orillusion-web/docs/guide/index.md
+
+web-client은 three랑 koota을 사용해서 개발된 프로젝트인데, 성능의 문제가 심각해서
+orillusion 로 porting을 할려고 해 기본의 호환성은 완전히 무시 해도 되고 최고 성능을 목표로 orillusion의 모든 기능을 사용해서
+포팅을 하고 싶어.
+1.Entity and Component,Object3D,Scene3D 시스템을 적극 활용하게 기존 설계를 수정하고
+2.Camera 시스템도 기존에 구현된걸 web-client걸 완전히 버리고   custom components 기반으로 구현 하면 훨신 용이 할듯..
+즉 기존 소스 구조를 완전히 파괴되어도 괜찮고 server쪽 소스만 재활용 해도 괜찮아..
+
+상세한 개발 계획을 단계별로 작성해서 ORILLUSION_PORTING 밑에 만들어죠.
+프로젝트 폴더 명은 stitch-orillusion-client 야

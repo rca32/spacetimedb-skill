@@ -9,8 +9,8 @@ use crate::tables::player_progression::{
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
 use crate::tables::{
-    NpcActionRequest, NpcActionResult, NpcConversationSession, NpcConversationTurn,
-    NpcCostMetrics, NpcInteractionLog, NpcPolicyViolation, NpcResponseCache,
+    NpcActionRequest, NpcActionResult, NpcConversationSession, NpcConversationTurn, NpcCostMetrics,
+    NpcInteractionLog, NpcPolicyViolation, NpcResponseCache,
 };
 
 use super::npc_talk::ensure_npc;
@@ -42,7 +42,13 @@ pub fn npc_dialogue_request(
     if rid.is_empty() {
         return Err("request_id must not be empty".to_string());
     }
-    if ctx.db.npc_action_request().request_id().find(rid.clone()).is_some() {
+    if ctx
+        .db
+        .npc_action_request()
+        .request_id()
+        .find(rid.clone())
+        .is_some()
+    {
         return Ok(());
     }
 
@@ -96,7 +102,10 @@ pub fn npc_dialogue_request(
     {
         existing.last_at = ctx.timestamp;
         existing.status = 1;
-        ctx.db.npc_conversation_session().session_id().update(existing);
+        ctx.db
+            .npc_conversation_session()
+            .session_id()
+            .update(existing);
     } else {
         ctx.db
             .npc_conversation_session()
@@ -231,7 +240,12 @@ pub fn npc_action_resolve(
     if violates_policy(&final_summary) {
         let player_identity = session_id
             .as_ref()
-            .and_then(|sid| ctx.db.npc_conversation_session().session_id().find(sid.clone()))
+            .and_then(|sid| {
+                ctx.db
+                    .npc_conversation_session()
+                    .session_id()
+                    .find(sid.clone())
+            })
             .map(|row| row.player_identity)
             .unwrap_or(ctx.sender);
         ctx.db.npc_policy_violation().insert(NpcPolicyViolation {
@@ -262,7 +276,13 @@ pub fn npc_action_resolve(
                 response_summary: final_summary.clone(),
                 updated_at: ctx.timestamp,
             };
-            if ctx.db.npc_response_cache().cache_key().find(cache_key).is_some() {
+            if ctx
+                .db
+                .npc_response_cache()
+                .cache_key()
+                .find(cache_key)
+                .is_some()
+            {
                 ctx.db.npc_response_cache().cache_key().update(row);
             } else {
                 ctx.db.npc_response_cache().insert(row);
@@ -275,7 +295,13 @@ pub fn npc_action_resolve(
     ctx.db.npc_action_request().request_id().update(request);
 
     let result_id = format!("{}:{}", rid, ctx.timestamp);
-    if ctx.db.npc_action_result().result_id().find(result_id.clone()).is_none() {
+    if ctx
+        .db
+        .npc_action_result()
+        .result_id()
+        .find(result_id.clone())
+        .is_none()
+    {
         ctx.db.npc_action_result().insert(NpcActionResult {
             result_id,
             request_id: rid,
@@ -305,18 +331,16 @@ pub fn npc_action_resolve(
 }
 
 fn payload_value(payload: &str, key: &str) -> Option<String> {
-    payload
-        .split(';')
-        .find_map(|entry| {
-            let mut iter = entry.splitn(2, '=');
-            let k = iter.next()?.trim();
-            let v = iter.next()?.trim();
-            if k == key && !v.is_empty() {
-                Some(v.to_string())
-            } else {
-                None
-            }
-        })
+    payload.split(';').find_map(|entry| {
+        let mut iter = entry.splitn(2, '=');
+        let k = iter.next()?.trim();
+        let v = iter.next()?.trim();
+        if k == key && !v.is_empty() {
+            Some(v.to_string())
+        } else {
+            None
+        }
+    })
 }
 
 fn hash_prompt(npc_id: u64, utterance: &str) -> u64 {
@@ -330,7 +354,5 @@ fn hash_prompt(npc_id: u64, utterance: &str) -> u64 {
 
 fn violates_policy(summary: &str) -> bool {
     let normalized = summary.to_ascii_lowercase();
-    normalized.contains("exploit")
-        || normalized.contains("hack")
-        || normalized.contains("cheat")
+    normalized.contains("exploit") || normalized.contains("hack") || normalized.contains("cheat")
 }

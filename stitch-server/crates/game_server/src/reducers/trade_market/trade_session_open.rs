@@ -77,7 +77,8 @@ pub fn trade_session_open(
     if my_tf.region_id != my_session.region_id || my_tf.dimension_id != my_dimension {
         return Err("initiator transform/session mismatch".to_string());
     }
-    if partner_tf.region_id != partner_session.region_id || partner_tf.dimension_id != partner_dimension
+    if partner_tf.region_id != partner_session.region_id
+        || partner_tf.dimension_id != partner_dimension
     {
         return Err("partner transform/session mismatch".to_string());
     }

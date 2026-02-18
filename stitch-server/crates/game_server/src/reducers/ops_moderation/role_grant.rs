@@ -5,7 +5,11 @@ use crate::tables::role_binding::role_binding;
 use crate::tables::RoleBinding;
 
 #[spacetimedb::reducer]
-pub fn role_grant(ctx: &ReducerContext, target_identity: Identity, role: String) -> Result<(), String> {
+pub fn role_grant(
+    ctx: &ReducerContext,
+    target_identity: Identity,
+    role: String,
+) -> Result<(), String> {
     require_admin(ctx)?;
 
     let normalized = role.trim().to_ascii_lowercase();
@@ -14,7 +18,13 @@ pub fn role_grant(ctx: &ReducerContext, target_identity: Identity, role: String)
     }
 
     let binding_id = role_binding_id(target_identity, &normalized);
-    if ctx.db.role_binding().binding_id().find(binding_id.clone()).is_none() {
+    if ctx
+        .db
+        .role_binding()
+        .binding_id()
+        .find(binding_id.clone())
+        .is_none()
+    {
         ctx.db.role_binding().insert(RoleBinding {
             binding_id,
             identity: target_identity,

@@ -34,7 +34,12 @@ pub fn housing_create(
         .ok_or("entrance building not found".to_string())?;
 
     if building.owner_identity != ctx.sender
-        && !permissions::has_permission(ctx, 2, entrance_building_entity_id, permissions::PERM_ADMIN)
+        && !permissions::has_permission(
+            ctx,
+            2,
+            entrance_building_entity_id,
+            permissions::PERM_ADMIN,
+        )
     {
         return Err("no permission to create housing".to_string());
     }

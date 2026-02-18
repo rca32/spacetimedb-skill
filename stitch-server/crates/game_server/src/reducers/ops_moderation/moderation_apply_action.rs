@@ -34,7 +34,12 @@ pub fn moderation_apply_action(
         }
         "ban" => {
             add_moderation_score(ctx, target_identity, 3, reason.clone());
-            set_ban(ctx, target_identity, duration_minutes.max(60), reason.clone());
+            set_ban(
+                ctx,
+                target_identity,
+                duration_minutes.max(60),
+                reason.clone(),
+            );
         }
         "unban" => {
             clear_ban(ctx, target_identity);

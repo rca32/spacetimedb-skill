@@ -2,14 +2,16 @@ use spacetimedb::{ReducerContext, Table};
 
 use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
 use crate::services::projection_views;
-use crate::tables::housing::dimension_desc;
 use crate::tables::account::account;
+use crate::tables::housing::dimension_desc;
 use crate::tables::player_progression::{character_stats, resource_state};
 use crate::tables::player_state::player_state;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
 use crate::tables::world_state::terrain_chunk;
-use crate::tables::{Account, CharacterStats, PlayerState, ResourceState, SessionState, TransformState};
+use crate::tables::{
+    Account, CharacterStats, PlayerState, ResourceState, SessionState, TransformState,
+};
 use crate::utils::identity_to_entity_id;
 
 pub mod account_bootstrap;

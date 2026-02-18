@@ -29,7 +29,13 @@ pub fn rent_set_whitelist(
         next.push(housing.owner_identity);
     }
 
-    if ctx.db.rent_state().entity_id().find(housing_entity_id).is_some() {
+    if ctx
+        .db
+        .rent_state()
+        .entity_id()
+        .find(housing_entity_id)
+        .is_some()
+    {
         ctx.db.rent_state().entity_id().update(RentState {
             entity_id: housing_entity_id,
             white_list: next.clone(),
