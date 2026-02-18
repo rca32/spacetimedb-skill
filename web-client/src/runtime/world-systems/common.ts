@@ -25,14 +25,18 @@ export type NpcStateRow = {
   npcId: bigint
   regionId: bigint
   dimensionId: number
+  npcType: number
   hexX: number
   hexZ: number
   destHexX: number
   destHexZ: number
   role: number
   mood: number
+  traveling: boolean
   scheduleKind: number
   nextActionTs: bigint
+  anchorEntityId: bigint
+  previousAnchors: bigint[]
 }
 
 export type BuildingStateRow = {

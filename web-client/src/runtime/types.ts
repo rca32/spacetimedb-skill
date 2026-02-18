@@ -438,6 +438,7 @@ export interface SocialFeedSnapshot {
 
 export interface NpcSnapshot {
   npcId: string
+  npcType: number
   regionId: string
   dimensionId: number
   hexX: number
@@ -446,8 +447,11 @@ export interface NpcSnapshot {
   destHexZ: number
   role: number
   mood: number
+  traveling: boolean
   scheduleKind: number
   nextActionTs: string
+  anchorEntityId: string
+  previousAnchors: string[]
 }
 
 export interface NpcInteractionSnapshot {

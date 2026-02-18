@@ -1,13 +1,13 @@
 //! Scheduled reducers and background agents live here.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table};
 
-use crate::services::hex_coords::{HexCoord, DEFAULT_WORLD_DIMENSION_ID};
-use crate::services::pathfinding;
 use crate::services::projection_views;
+use crate::services::hex_coords::HexCoord;
+use crate::services::pathfinding;
 use crate::tables::agent_timers::{
     environment_effect_loop_timer, npc_ai_loop_timer, player_regen_loop_timer,
     resource_regen_loop_timer, session_cleanup_loop_timer,
@@ -20,6 +20,7 @@ use crate::tables::environment_effect::{
 };
 use crate::tables::live_ops::balance_params;
 use crate::tables::npc_quest::{npc_anchor_state, npc_population_def, npc_state};
+use crate::tables::pathfinding::npc_path_state;
 use crate::tables::player_views::player_session_view;
 use crate::tables::player_progression::{
     character_stats, npc_action_schedule, resource_state, status_effect,
@@ -47,17 +48,10 @@ const NPC_AI_STEP_HEX: i32 = 2;
 const NPC_AI_PATH_NODE_LIMIT: u32 = 2_048;
 const NPC_AI_PATH_KEEP_ROWS_PER_IDENTITY: u32 = 64;
 const STARTER_REGION_ID: u64 = 1;
+const NPC_ANCHOR_KIND_GENERIC: u8 = 0;
 const NPC_ANCHOR_KIND_RUIN: u8 = 1;
-
-#[derive(Clone, Copy)]
-struct SeedNpc {
-    npc_id: u64,
-    hex_x: i32,
-    hex_z: i32,
-    role: u8,
-    mood: u8,
-    schedule_kind: u8,
-}
+const AUTO_ANCHOR_MAX: usize = 32;
+const AUTO_ANCHOR_RADIUS_CHUNKS: i32 = 4;
 
 const DEFAULT_NPC_POPULATION_DEFS: [(u8, u16, u16, u16, u8, u8, bool); 8] = [
     // npc_type, population_permille, min_action_seconds, max_action_seconds,
@@ -70,185 +64,6 @@ const DEFAULT_NPC_POPULATION_DEFS: [(u8, u16, u16, u16, u8, u8, bool); 8] = [
     (6, 120, 2, 6, 1, 6, true),
     (7, 120, 2, 6, 1, 7, true),
     (8, 120, 4, 12, 2, 8, true),
-];
-
-const SEEDED_NPCS: [SeedNpc; 22] = [
-    SeedNpc {
-        npc_id: 9_001,
-        hex_x: 1,
-        hex_z: 1,
-        role: 2,
-        mood: 1,
-        schedule_kind: 3,
-    },
-    SeedNpc {
-        npc_id: 9_002,
-        hex_x: -1,
-        hex_z: 1,
-        role: 2,
-        mood: 2,
-        schedule_kind: 3,
-    },
-    SeedNpc {
-        npc_id: 10_001,
-        hex_x: 2,
-        hex_z: -1,
-        role: 1,
-        mood: 0,
-        schedule_kind: 1,
-    },
-    SeedNpc {
-        npc_id: 10_002,
-        hex_x: -2,
-        hex_z: -1,
-        role: 1,
-        mood: 2,
-        schedule_kind: 1,
-    },
-    SeedNpc {
-        npc_id: 10_003,
-        hex_x: 3,
-        hex_z: 0,
-        role: 3,
-        mood: 4,
-        schedule_kind: 1,
-    },
-    SeedNpc {
-        npc_id: 10_004,
-        hex_x: -3,
-        hex_z: 0,
-        role: 4,
-        mood: 6,
-        schedule_kind: 2,
-    },
-    SeedNpc {
-        npc_id: 10_005,
-        hex_x: 0,
-        hex_z: -2,
-        role: 5,
-        mood: 8,
-        schedule_kind: 0,
-    },
-    SeedNpc {
-        npc_id: 10_006,
-        hex_x: 1,
-        hex_z: -3,
-        role: 6,
-        mood: 10,
-        schedule_kind: 1,
-    },
-    SeedNpc {
-        npc_id: 10_007,
-        hex_x: -1,
-        hex_z: -3,
-        role: 4,
-        mood: 12,
-        schedule_kind: 2,
-    },
-    SeedNpc {
-        npc_id: 10_008,
-        hex_x: 0,
-        hex_z: 2,
-        role: 1,
-        mood: 14,
-        schedule_kind: 1,
-    },
-    SeedNpc {
-        npc_id: 10_009,
-        hex_x: 2,
-        hex_z: 2,
-        role: 7,
-        mood: 16,
-        schedule_kind: 1,
-    },
-    SeedNpc {
-        npc_id: 10_010,
-        hex_x: -2,
-        hex_z: 2,
-        role: 3,
-        mood: 18,
-        schedule_kind: 3,
-    },
-    SeedNpc {
-        npc_id: 10_011,
-        hex_x: 3,
-        hex_z: -3,
-        role: 6,
-        mood: 20,
-        schedule_kind: 1,
-    },
-    SeedNpc {
-        npc_id: 10_012,
-        hex_x: -3,
-        hex_z: -3,
-        role: 5,
-        mood: 22,
-        schedule_kind: 0,
-    },
-    SeedNpc {
-        npc_id: 10_013,
-        hex_x: 4,
-        hex_z: 1,
-        role: 8,
-        mood: 24,
-        schedule_kind: 2,
-    },
-    SeedNpc {
-        npc_id: 10_014,
-        hex_x: -4,
-        hex_z: 1,
-        role: 4,
-        mood: 26,
-        schedule_kind: 1,
-    },
-    SeedNpc {
-        npc_id: 10_015,
-        hex_x: 5,
-        hex_z: -1,
-        role: 1,
-        mood: 28,
-        schedule_kind: 1,
-    },
-    SeedNpc {
-        npc_id: 10_016,
-        hex_x: -5,
-        hex_z: -1,
-        role: 3,
-        mood: 30,
-        schedule_kind: 3,
-    },
-    SeedNpc {
-        npc_id: 10_017,
-        hex_x: 4,
-        hex_z: -4,
-        role: 2,
-        mood: 32,
-        schedule_kind: 1,
-    },
-    SeedNpc {
-        npc_id: 10_018,
-        hex_x: -4,
-        hex_z: -4,
-        role: 2,
-        mood: 34,
-        schedule_kind: 1,
-    },
-    SeedNpc {
-        npc_id: 10_019,
-        hex_x: 6,
-        hex_z: 2,
-        role: 7,
-        mood: 36,
-        schedule_kind: 1,
-    },
-    SeedNpc {
-        npc_id: 10_020,
-        hex_x: -6,
-        hex_z: 2,
-        role: 8,
-        mood: 38,
-        schedule_kind: 2,
-    },
 ];
 
 fn to_micros_u64(ctx: &ReducerContext) -> u64 {
@@ -604,96 +419,10 @@ fn seed_world_if_empty(ctx: &ReducerContext) -> Result<(), String> {
 
     let now_us = to_micros_u64(ctx);
     ensure_default_npc_population_defs(ctx);
-    ensure_default_npc_anchors(ctx);
-    ensure_seeded_npcs(ctx, now_us);
-    ensure_npc_schedules(ctx, now_us);
+    refresh_default_npc_anchors(ctx);
+    reconcile_npc_population(ctx, now_us);
     sync_npc_anchor_occupancy(ctx);
     Ok(())
-}
-
-fn ensure_seeded_npcs(ctx: &ReducerContext, now_us: u64) {
-    for seed in SEEDED_NPCS {
-        let npc_type = npc_type_for_seed(seed);
-        let profile = ctx.db.npc_population_def().npc_type().find(npc_type);
-        let schedule_kind =
-            normalize_schedule_kind(profile.as_ref().map(|v| v.default_schedule_kind).unwrap_or(seed.schedule_kind));
-        let traveling = profile
-            .as_ref()
-            .map(|v| v.traveling_enabled)
-            .unwrap_or(schedule_kind != 0 && schedule_kind != 3);
-        let role = profile.as_ref().map(|v| v.default_role).unwrap_or(seed.role);
-        let next_action_ts = now_us + npc_next_delay(ctx, seed.npc_id, npc_type, schedule_kind);
-        let anchor_entity_id = seed.npc_id;
-        if let Some(mut npc) = ctx.db.npc_state().npc_id().find(seed.npc_id) {
-            npc.npc_type = npc_type;
-            npc.region_id = STARTER_REGION_ID;
-            npc.dimension_id = DEFAULT_WORLD_DIMENSION_ID;
-            npc.hex_x = seed.hex_x;
-            npc.hex_z = seed.hex_z;
-            npc.dest_hex_x = seed.hex_x;
-            npc.dest_hex_z = seed.hex_z;
-            npc.role = role;
-            npc.mood = seed.mood;
-            npc.traveling = traveling;
-            npc.schedule_kind = schedule_kind;
-            npc.next_action_ts = next_action_ts;
-            npc.anchor_entity_id = anchor_entity_id;
-            if npc.previous_anchors.last().copied().unwrap_or_default() != anchor_entity_id {
-                npc.previous_anchors.push(anchor_entity_id);
-            }
-            if npc.previous_anchors.len() > 3 {
-                let drain_len = npc.previous_anchors.len() - 3;
-                npc.previous_anchors.drain(0..drain_len);
-            }
-            ctx.db.npc_state().npc_id().update(npc);
-        } else {
-            ctx.db.npc_state().insert(NpcState {
-                npc_id: seed.npc_id,
-                npc_type,
-                region_id: STARTER_REGION_ID,
-                dimension_id: DEFAULT_WORLD_DIMENSION_ID,
-                hex_x: seed.hex_x,
-                hex_z: seed.hex_z,
-                dest_hex_x: seed.hex_x,
-                dest_hex_z: seed.hex_z,
-                role,
-                mood: seed.mood,
-                traveling,
-                schedule_kind,
-                next_action_ts,
-                anchor_entity_id,
-                previous_anchors: vec![anchor_entity_id],
-            });
-        }
-    }
-}
-
-fn ensure_npc_schedules(ctx: &ReducerContext, now_us: u64) {
-    for npc in ctx.db.npc_state().iter() {
-        let action_type = if npc.traveling {
-            normalize_schedule_kind(npc.schedule_kind)
-        } else {
-            3
-        };
-        let next_action_at = if action_type == 1 || action_type == 2 {
-            now_us
-        } else {
-            now_us + npc_next_delay(ctx, npc.npc_id, npc.npc_type, action_type)
-        };
-        if let Some(mut schedule) = ctx.db.npc_action_schedule().npc_id().find(npc.npc_id) {
-            schedule.action_type = action_type;
-            schedule.target_region_id = Some(npc.region_id);
-            schedule.next_action_at = next_action_at;
-            ctx.db.npc_action_schedule().npc_id().update(schedule);
-        } else {
-            ctx.db.npc_action_schedule().insert(NpcActionSchedule {
-                npc_id: npc.npc_id,
-                next_action_at,
-                action_type,
-                target_region_id: Some(npc.region_id),
-            });
-        }
-    }
 }
 
 fn ensure_default_npc_population_defs(ctx: &ReducerContext) {
@@ -725,18 +454,68 @@ fn ensure_default_npc_population_defs(ctx: &ReducerContext) {
     }
 }
 
-fn ensure_default_npc_anchors(ctx: &ReducerContext) {
-    for seed in SEEDED_NPCS {
-        let anchor = NpcAnchorState {
-            anchor_id: seed.npc_id,
-            region_id: STARTER_REGION_ID,
-            hex_x: seed.hex_x,
-            hex_z: seed.hex_z,
+fn refresh_default_npc_anchors(ctx: &ReducerContext) {
+    let chunk_size = ctx
+        .db
+        .world_gen_params()
+        .id()
+        .find(crate::worldgen::WORLD_GEN_PARAMS_ID)
+        .map(|row| i32::from(row.terrain_chunk_size).max(1))
+        .unwrap_or(i32::from(crate::worldgen::DEFAULT_WORLD_CHUNK_SIZE));
+
+    let mut desired = Vec::<NpcAnchorState>::new();
+    for building in ctx
+        .db
+        .building_state()
+        .iter()
+        .filter(|row| row.region_id == STARTER_REGION_ID && row.state != 2)
+    {
+        desired.push(NpcAnchorState {
+            anchor_id: building.entity_id,
+            region_id: building.region_id,
+            hex_x: building.hex_x,
+            hex_z: building.hex_z,
             anchor_kind: NPC_ANCHOR_KIND_RUIN,
             is_active: true,
             occupied_by_npc_id: None,
             updated_at: ctx.timestamp,
-        };
+        });
+    }
+
+    if desired.is_empty() {
+        let mut chunks: Vec<_> = ctx
+            .db
+            .terrain_chunk()
+            .iter()
+            .filter(|row| row.region_id == STARTER_REGION_ID)
+            .filter(|row| {
+                row.chunk_x.abs() <= AUTO_ANCHOR_RADIUS_CHUNKS
+                    && row.chunk_y.abs() <= AUTO_ANCHOR_RADIUS_CHUNKS
+            })
+            .collect();
+        chunks.sort_by_key(|row| (row.chunk_y, row.chunk_x));
+        for chunk in chunks.into_iter().take(AUTO_ANCHOR_MAX) {
+            desired.push(NpcAnchorState {
+                anchor_id: synthetic_anchor_id(STARTER_REGION_ID, chunk.chunk_x, chunk.chunk_y),
+                region_id: STARTER_REGION_ID,
+                hex_x: chunk
+                    .chunk_x
+                    .saturating_mul(chunk_size)
+                    .saturating_add(chunk_size / 2),
+                hex_z: chunk
+                    .chunk_y
+                    .saturating_mul(chunk_size)
+                    .saturating_add(chunk_size / 2),
+                anchor_kind: NPC_ANCHOR_KIND_GENERIC,
+                is_active: true,
+                occupied_by_npc_id: None,
+                updated_at: ctx.timestamp,
+            });
+        }
+    }
+
+    let desired_ids: HashSet<u64> = desired.iter().map(|row| row.anchor_id).collect();
+    for anchor in desired {
         if ctx
             .db
             .npc_anchor_state()
@@ -747,6 +526,27 @@ fn ensure_default_npc_anchors(ctx: &ReducerContext) {
             ctx.db.npc_anchor_state().anchor_id().update(anchor);
         } else {
             ctx.db.npc_anchor_state().insert(anchor);
+        }
+    }
+
+    let stale_ids: Vec<u64> = ctx
+        .db
+        .npc_anchor_state()
+        .iter()
+        .filter(|row| row.region_id == STARTER_REGION_ID)
+        .filter(|row| {
+            (row.anchor_kind == NPC_ANCHOR_KIND_GENERIC || row.anchor_kind == NPC_ANCHOR_KIND_RUIN)
+                && !desired_ids.contains(&row.anchor_id)
+        })
+        .map(|row| row.anchor_id)
+        .collect();
+
+    for anchor_id in stale_ids {
+        if let Some(mut anchor) = ctx.db.npc_anchor_state().anchor_id().find(anchor_id) {
+            anchor.is_active = false;
+            anchor.occupied_by_npc_id = None;
+            anchor.updated_at = ctx.timestamp;
+            ctx.db.npc_anchor_state().anchor_id().update(anchor);
         }
     }
 }
@@ -770,17 +570,215 @@ fn sync_npc_anchor_occupancy(ctx: &ReducerContext) {
     }
 }
 
-fn npc_type_for_seed(seed: SeedNpc) -> u8 {
-    if seed.role == 0 {
-        1
-    } else {
-        seed.role
+fn reconcile_npc_population(ctx: &ReducerContext, now_us: u64) {
+    let mut active_anchors: Vec<NpcAnchorState> = ctx
+        .db
+        .npc_anchor_state()
+        .iter()
+        .filter(|row| row.region_id == STARTER_REGION_ID && row.is_active)
+        .collect();
+    active_anchors.sort_by_key(|row| row.anchor_id);
+
+    let mut defs: Vec<NpcPopulationDef> = ctx
+        .db
+        .npc_population_def()
+        .iter()
+        .filter(|row| row.enabled && row.population_permille > 0)
+        .collect();
+    defs.sort_by_key(|row| row.npc_type);
+
+    if active_anchors.is_empty() || defs.is_empty() {
+        return;
     }
+
+    let target_by_type = compute_target_by_type(active_anchors.len(), &defs);
+    let def_map: HashMap<u8, NpcPopulationDef> = defs.into_iter().map(|row| (row.npc_type, row)).collect();
+
+    let mut desired_anchor_npc_type = HashMap::<u64, u8>::new();
+    let mut cursor = 0usize;
+    let mut ordered_types = def_map.keys().copied().collect::<Vec<_>>();
+    ordered_types.sort_unstable();
+    for npc_type in ordered_types {
+        let target = target_by_type.get(&npc_type).copied().unwrap_or(0);
+        for _ in 0..target {
+            if cursor >= active_anchors.len() {
+                break;
+            }
+            desired_anchor_npc_type.insert(active_anchors[cursor].anchor_id, npc_type);
+            cursor += 1;
+        }
+    }
+
+    for anchor in &active_anchors {
+        let Some(npc_type) = desired_anchor_npc_type.get(&anchor.anchor_id).copied() else {
+            continue;
+        };
+        let Some(def) = def_map.get(&npc_type) else {
+            continue;
+        };
+
+        let npc_id = anchor.anchor_id;
+        let schedule_kind = normalize_schedule_kind(def.default_schedule_kind);
+        let traveling = def.traveling_enabled;
+        let role = def.default_role;
+        let default_next_action_ts = now_us + npc_next_delay(ctx, npc_id, npc_type, schedule_kind);
+
+        if let Some(mut npc) = ctx.db.npc_state().npc_id().find(npc_id) {
+            let previous_anchor = npc.anchor_entity_id;
+            let profile_changed = npc.npc_type != npc_type
+                || npc.schedule_kind != schedule_kind
+                || npc.traveling != traveling
+                || npc.role != role
+                || previous_anchor != anchor.anchor_id;
+
+            if previous_anchor != 0 && previous_anchor != anchor.anchor_id {
+                npc.previous_anchors.push(previous_anchor);
+                if npc.previous_anchors.len() > 3 {
+                    let drain_len = npc.previous_anchors.len() - 3;
+                    npc.previous_anchors.drain(0..drain_len);
+                }
+            }
+
+            npc.npc_type = npc_type;
+            npc.region_id = anchor.region_id;
+            npc.role = role;
+            npc.traveling = traveling;
+            npc.schedule_kind = schedule_kind;
+            npc.anchor_entity_id = anchor.anchor_id;
+            if !npc.traveling || profile_changed {
+                npc.hex_x = anchor.hex_x;
+                npc.hex_z = anchor.hex_z;
+                npc.dest_hex_x = anchor.hex_x;
+                npc.dest_hex_z = anchor.hex_z;
+            }
+            if profile_changed || npc.next_action_ts == 0 {
+                npc.next_action_ts = default_next_action_ts;
+            }
+
+            ctx.db.npc_state().npc_id().update(npc);
+        } else {
+            ctx.db.npc_state().insert(NpcState {
+                npc_id,
+                npc_type,
+                region_id: anchor.region_id,
+                hex_x: anchor.hex_x,
+                hex_z: anchor.hex_z,
+                dest_hex_x: anchor.hex_x,
+                dest_hex_z: anchor.hex_z,
+                role,
+                mood: 0,
+                traveling,
+                schedule_kind,
+                next_action_ts: default_next_action_ts,
+                anchor_entity_id: anchor.anchor_id,
+                previous_anchors: vec![anchor.anchor_id],
+            });
+        }
+
+        let action_type = if traveling { schedule_kind } else { 3 };
+        let default_next_action_at = if action_type == 1 || action_type == 2 {
+            now_us
+        } else {
+            default_next_action_ts
+        };
+
+        if let Some(mut schedule) = ctx.db.npc_action_schedule().npc_id().find(npc_id) {
+            if schedule.action_type != action_type
+                || schedule.target_region_id != Some(anchor.region_id)
+            {
+                schedule.action_type = action_type;
+                schedule.target_region_id = Some(anchor.region_id);
+                schedule.next_action_at = default_next_action_at;
+                ctx.db.npc_action_schedule().npc_id().update(schedule);
+            }
+        } else {
+            ctx.db.npc_action_schedule().insert(NpcActionSchedule {
+                npc_id,
+                next_action_at: default_next_action_at,
+                action_type,
+                target_region_id: Some(anchor.region_id),
+            });
+        }
+    }
+
+    let stale_npc_ids: Vec<u64> = ctx
+        .db
+        .npc_state()
+        .iter()
+        .filter(|row| row.region_id == STARTER_REGION_ID)
+        .filter(|row| row.anchor_entity_id != 0)
+        .filter(|row| !desired_anchor_npc_type.contains_key(&row.anchor_entity_id))
+        .map(|row| row.npc_id)
+        .collect();
+
+    for npc_id in stale_npc_ids {
+        ctx.db.npc_state().npc_id().delete(npc_id);
+        if ctx.db.npc_action_schedule().npc_id().find(npc_id).is_some() {
+            ctx.db.npc_action_schedule().npc_id().delete(npc_id);
+        }
+        if ctx.db.npc_path_state().npc_id().find(npc_id).is_some() {
+            ctx.db.npc_path_state().npc_id().delete(npc_id);
+        }
+    }
+}
+
+fn compute_target_by_type(anchor_count: usize, defs: &[NpcPopulationDef]) -> HashMap<u8, usize> {
+    let mut targets = HashMap::<u8, usize>::new();
+    let mut total = 0usize;
+    for def in defs {
+        let count = ((anchor_count as u64) * u64::from(def.population_permille) / 1_000) as usize;
+        targets.insert(def.npc_type, count);
+        total = total.saturating_add(count);
+    }
+
+    if total <= anchor_count {
+        return targets;
+    }
+
+    let mut overflow = total - anchor_count;
+    let mut ordered = defs.iter().map(|row| row.npc_type).collect::<Vec<_>>();
+    ordered.sort_by(|left, right| {
+        let l = targets.get(left).copied().unwrap_or(0);
+        let r = targets.get(right).copied().unwrap_or(0);
+        r.cmp(&l).then_with(|| left.cmp(right))
+    });
+
+    while overflow > 0 {
+        let mut reduced_any = false;
+        for npc_type in &ordered {
+            if overflow == 0 {
+                break;
+            }
+            let entry = targets.entry(*npc_type).or_default();
+            if *entry > 0 {
+                *entry -= 1;
+                overflow -= 1;
+                reduced_any = true;
+            }
+        }
+        if !reduced_any {
+            break;
+        }
+    }
+
+    targets
+}
+
+fn synthetic_anchor_id(region_id: u64, chunk_x: i32, chunk_y: i32) -> u64 {
+    let q = chunk_x as i64 as u64;
+    let r = chunk_y as i64 as u64;
+    let mixed = q.wrapping_mul(0x9E37_79B1_u64)
+        ^ r.wrapping_mul(0x85EB_CA77_u64)
+        ^ region_id.wrapping_mul(0xC2B2_AE3D_u64);
+    0xA000_0000_0000_0000_u64 | (mixed & 0x0FFF_FFFF_FFFF_FFFF_u64)
 }
 
 #[spacetimedb::reducer]
 pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
     let now_us = to_micros_u64(ctx);
+    ensure_default_npc_population_defs(ctx);
+    refresh_default_npc_anchors(ctx);
+    reconcile_npc_population(ctx, now_us);
 
     let mut npc_updates = Vec::new();
     let mut schedule_updates: Vec<NpcActionSchedule> = Vec::new();
@@ -836,8 +834,8 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
         } else {
             let (target_hex_x, target_hex_z) =
                 compute_npc_destination(npc.npc_id, npc.hex_x, npc.hex_z, action_type, npc.mood);
-            let current = HexCoord::new(npc.hex_x, npc.hex_z, npc.dimension_id);
-            let target = HexCoord::new(target_hex_x, target_hex_z, npc.dimension_id);
+            let current = HexCoord::new(npc.hex_x, npc.hex_z, 1);
+            let target = HexCoord::new(target_hex_x, target_hex_z, 1);
             let next_step = match pathfinding::request_npc_step(
                 ctx,
                 npc.npc_id,

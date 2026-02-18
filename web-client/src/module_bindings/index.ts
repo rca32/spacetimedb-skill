@@ -192,6 +192,10 @@ import TradeSessionOpenReducer from "./trade_session_open_reducer";
 export { TradeSessionOpenReducer };
 import UnlockInventoryContainerReducer from "./unlock_inventory_container_reducer";
 export { UnlockInventoryContainerReducer };
+import UpsertNpcAnchorStateReducer from "./upsert_npc_anchor_state_reducer";
+export { UpsertNpcAnchorStateReducer };
+import UpsertNpcPopulationDefReducer from "./upsert_npc_population_def_reducer";
+export { UpsertNpcPopulationDefReducer };
 
 // Import and reexport all procedure arg types
 
@@ -326,6 +330,8 @@ import NpcActionScheduleRow from "./npc_action_schedule_table";
 export { NpcActionScheduleRow };
 import NpcAiLoopTimerRow from "./npc_ai_loop_timer_table";
 export { NpcAiLoopTimerRow };
+import NpcAnchorStateRow from "./npc_anchor_state_table";
+export { NpcAnchorStateRow };
 import NpcConversationSessionRow from "./npc_conversation_session_table";
 export { NpcConversationSessionRow };
 import NpcConversationTurnRow from "./npc_conversation_turn_table";
@@ -342,6 +348,8 @@ import NpcPathStateRow from "./npc_path_state_table";
 export { NpcPathStateRow };
 import NpcPolicyViolationRow from "./npc_policy_violation_table";
 export { NpcPolicyViolationRow };
+import NpcPopulationDefRow from "./npc_population_def_table";
+export { NpcPopulationDefRow };
 import NpcRelationRow from "./npc_relation_table";
 export { NpcRelationRow };
 import NpcResponseCacheRow from "./npc_response_cache_table";
@@ -576,6 +584,8 @@ import NpcActionSchedule from "./npc_action_schedule_type";
 export { NpcActionSchedule };
 import NpcAiLoopTimer from "./npc_ai_loop_timer_type";
 export { NpcAiLoopTimer };
+import NpcAnchorState from "./npc_anchor_state_type";
+export { NpcAnchorState };
 import NpcConversationSession from "./npc_conversation_session_type";
 export { NpcConversationSession };
 import NpcConversationTurn from "./npc_conversation_turn_type";
@@ -592,6 +602,8 @@ import NpcPathState from "./npc_path_state_type";
 export { NpcPathState };
 import NpcPolicyViolation from "./npc_policy_violation_type";
 export { NpcPolicyViolation };
+import NpcPopulationDef from "./npc_population_def_type";
+export { NpcPopulationDef };
 import NpcRelation from "./npc_relation_type";
 export { NpcRelation };
 import NpcResponseCache from "./npc_response_cache_type";
@@ -1413,6 +1425,17 @@ const tablesSchema = __schema(
     ],
   }, NpcAiLoopTimerRow),
   __table({
+    name: 'npc_anchor_state',
+    indexes: [
+      { name: 'anchor_id', algorithm: 'btree', columns: [
+        'anchorId',
+      ] },
+    ],
+    constraints: [
+      { name: 'npc_anchor_state_anchor_id_key', constraint: 'unique', columns: ['anchorId'] },
+    ],
+  }, NpcAnchorStateRow),
+  __table({
     name: 'npc_conversation_session',
     indexes: [
       { name: 'session_id', algorithm: 'btree', columns: [
@@ -1500,6 +1523,17 @@ const tablesSchema = __schema(
       { name: 'npc_policy_violation_violation_id_key', constraint: 'unique', columns: ['violationId'] },
     ],
   }, NpcPolicyViolationRow),
+  __table({
+    name: 'npc_population_def',
+    indexes: [
+      { name: 'npc_type', algorithm: 'btree', columns: [
+        'npcType',
+      ] },
+    ],
+    constraints: [
+      { name: 'npc_population_def_npc_type_key', constraint: 'unique', columns: ['npcType'] },
+    ],
+  }, NpcPopulationDefRow),
   __table({
     name: 'npc_relation',
     indexes: [
@@ -2144,6 +2178,8 @@ const reducersSchema = __reducers(
   __reducerSchema("trade_item_add", TradeItemAddReducer),
   __reducerSchema("trade_session_open", TradeSessionOpenReducer),
   __reducerSchema("unlock_inventory_container", UnlockInventoryContainerReducer),
+  __reducerSchema("upsert_npc_anchor_state", UpsertNpcAnchorStateReducer),
+  __reducerSchema("upsert_npc_population_def", UpsertNpcPopulationDefReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

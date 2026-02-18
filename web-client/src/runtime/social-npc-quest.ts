@@ -97,6 +97,7 @@ type SocialFeedRow = {
 
 type NpcStateRow = {
   npcId: unknown
+  npcType: number
   regionId: unknown
   dimensionId: number
   hexX: number
@@ -105,8 +106,11 @@ type NpcStateRow = {
   destHexZ: number
   role: number
   mood: number
+  traveling: boolean
   scheduleKind: number
   nextActionTs: bigint
+  anchorEntityId: unknown
+  previousAnchors: unknown[]
 }
 
 type NpcInteractionLogRow = {
@@ -649,6 +653,7 @@ function collectNpcs(
     }
     list.push({
       npcId: toBigIntString(row.npcId),
+      npcType: row.npcType,
       regionId: toBigIntString(row.regionId),
       dimensionId: row.dimensionId,
       hexX: row.hexX,
@@ -657,8 +662,11 @@ function collectNpcs(
       destHexZ: row.destHexZ,
       role: row.role,
       mood: row.mood,
+      traveling: row.traveling,
       scheduleKind: row.scheduleKind,
       nextActionTs: row.nextActionTs.toString(),
+      anchorEntityId: toBigIntString(row.anchorEntityId),
+      previousAnchors: row.previousAnchors.map((value) => toBigIntString(value)),
     })
   }
   list.sort((left, right) => compareBigIntString(left.npcId, right.npcId))

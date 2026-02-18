@@ -12,6 +12,7 @@ import {
 
 export default __t.row({
   npcId: __t.u64().primaryKey().name("npc_id"),
+  npcType: __t.u8().name("npc_type"),
   regionId: __t.u64().name("region_id"),
   dimensionId: __t.u32().name("dimension_id"),
   hexX: __t.i32().name("hex_x"),
@@ -20,6 +21,9 @@ export default __t.row({
   destHexZ: __t.i32().name("dest_hex_z"),
   role: __t.u8(),
   mood: __t.u8(),
+  traveling: __t.bool(),
   scheduleKind: __t.u8().name("schedule_kind"),
   nextActionTs: __t.u64().name("next_action_ts"),
+  anchorEntityId: __t.u64().name("anchor_entity_id"),
+  previousAnchors: __t.array(__t.u64()).name("previous_anchors"),
 });

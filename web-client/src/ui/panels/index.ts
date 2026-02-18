@@ -1271,7 +1271,10 @@ export class PanelLayer {
   private refreshNpcUi(snapshot: SocialNpcQuestSnapshot): void {
     const npcOptions = snapshot.npcs.map((row) => ({
       value: row.npcId,
-      label: `npc=${row.npcId} hex=(${row.hexX},${row.hexZ}) role=${row.role} mood=${row.mood} next=${row.nextActionTs}`,
+      label:
+        `npc=${row.npcId} type=${row.npcType} ` +
+        `hex=(${row.hexX},${row.hexZ}) role=${row.role} mood=${row.mood} ` +
+        `travel=${row.traveling ? 'Y' : 'N'} anchor=${row.anchorEntityId} prev=${row.previousAnchors.length} next=${row.nextActionTs}`,
     }))
     syncSelect(this.npcNpcSelect, npcOptions)
   }

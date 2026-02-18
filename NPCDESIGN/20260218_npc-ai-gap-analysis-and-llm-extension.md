@@ -350,3 +350,55 @@ agent-browser screenshot --full /tmp/npc-ai-llm-smoke.png
 3. `npc_dialogue_request` + `npc_action_resolve`를 먼저 붙여 LLM 대화 경로를 최소 단위로 연다.
 4. 마지막에 perception/intent 루프를 추가해 인지형 행동으로 확장한다.
 
+---
+
+## 9. 2026-02-18 구현 반영 현황 (요청 1,2,3)
+
+아래 항목은 본 문서 작성 이후 실제 코드에 반영된 상태이다.
+
+### 9.1 요청 1: NPC 지능 기반 작업의 1차 구현 반영
+- 완료: `WP-01` 스폰 기준 데이터 도입
+  - `NpcPopulationDef` 테이블 추가 및 CSV import 연결
+  - 기본 population 정의 시드 + admin upsert reducer 경로 확보
+- 완료: `WP-02` 앵커/점유 모델 도입
+  - `NpcAnchorState` 테이블 추가
+  - 건물 기반 앵커 + terrain fallback 앵커 구성
+  - 점유 sync(`occupied_by_npc_id`) 루프 반영
+- 완료: `WP-03` traveling/stationary 분기 반영
+  - `NpcState` 확장: `npc_type`, `traveling`, `anchor_entity_id`, `previous_anchors`
+  - population reconcile 시 타입/행동 스케줄 동기화
+
+### 9.2 요청 2: 최신 LLM Agent 행동 확장 가능 설계 반영
+- 완료: LLM/에이전트 확장 포인트를 server authoritative 구조로 명시
+  - 본 문서 4장(LLM 설계) 기준으로 `npc_action_request/result` 중심 파이프라인 유지
+  - 운영 제어를 위한 관리자 upsert reducer(`upsert_npc_population_def`, `upsert_npc_anchor_state`) 추가
+- 현재 상태:
+  - LLM 대화/인지 실행 루프(`npc_perception_agent_loop`, `npc_cognition_agent_loop`, `npc_execution_agent_loop`)는 설계 완료, 구현은 다음 단계
+
+### 9.3 요청 3: 동기화/검증(웹 클라 + 게이트) 반영
+- 완료: web-client 바인딩 재생성 및 런타임 필드 반영
+  - `npcType`, `traveling`, `anchorEntityId`, `previousAnchors`를 snapshot/UI까지 연결
+- 완료: NPC 스모크 게이트 스크립트 추가
+  - `stitch-server/scripts/npc_ai_smoke_gate.sh`
+  - population/anchor/schedule/movement signal 검증
+
+### 9.4 파일 기준 구현 스냅샷
+- 서버:
+  - `stitch-server/crates/game_server/src/agents/mod.rs`
+  - `stitch-server/crates/game_server/src/tables/npc_quest.rs`
+  - `stitch-server/crates/game_server/src/reducers/npc_quest/npc_ai_admin.rs`
+  - `stitch-server/crates/game_server/src/lib.rs`
+  - `stitch-server/assets/static_data/npc/npc_population_def.csv`
+- 웹:
+  - `web-client/src/runtime/social-npc-quest.ts`
+  - `web-client/src/runtime/types.ts`
+  - `web-client/src/runtime/world-systems/common.ts`
+  - `web-client/src/ui/panels/index.ts`
+  - `web-client/src/module_bindings/*` (재생성)
+- 스크립트:
+  - `stitch-server/scripts/npc_ai_smoke_gate.sh`
+
+### 9.5 다음 우선순위 (미완료 WP)
+1. `WP-04` NPC 주문 라이프사이클 구현(항시/랜덤 주문)
+2. `WP-05` 권한/feature flag 게이트 강화
+3. LLM 최소 경로 구현: `npc_dialogue_request` + `npc_action_resolve`
