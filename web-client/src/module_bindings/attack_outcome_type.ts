@@ -16,6 +16,7 @@ export default __t.object("AttackOutcome", {
   attackerIdentity: __t.identity(),
   targetIdentity: __t.identity(),
   regionId: __t.u64(),
+  dimensionId: __t.u32(),
   damage: __t.i32(),
   targetHpAfter: __t.i32(),
   hit: __t.bool(),

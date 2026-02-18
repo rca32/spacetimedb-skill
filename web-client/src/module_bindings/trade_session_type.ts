@@ -15,6 +15,7 @@ export default __t.object("TradeSession", {
   initiatorIdentity: __t.identity(),
   partnerIdentity: __t.identity(),
   regionId: __t.u64(),
+  dimensionId: __t.u32(),
   phase: __t.u8(),
   initiatorAccepted: __t.bool(),
   partnerAccepted: __t.bool(),

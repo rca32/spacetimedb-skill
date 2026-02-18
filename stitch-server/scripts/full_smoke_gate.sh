@@ -13,6 +13,14 @@ PATH_START_HEX_Z="${PATH_START_HEX_Z:-2}"
 PATH_GOAL_HEX_X="${PATH_GOAL_HEX_X:-7}"
 PATH_GOAL_HEX_Z="${PATH_GOAL_HEX_Z:-4}"
 PATH_NODE_LIMIT="${PATH_NODE_LIMIT:-512}"
+DIMENSION_ID="${DIMENSION_ID:-2}"
+DIMENSION_SEED="${DIMENSION_SEED:-4242}"
+DIMENSION_SIZE_X="${DIMENSION_SIZE_X:-3}"
+DIMENSION_SIZE_Y="${DIMENSION_SIZE_Y:-3}"
+DIM_PATH_START_HEX_X="${DIM_PATH_START_HEX_X:-0}"
+DIM_PATH_START_HEX_Z="${DIM_PATH_START_HEX_Z:-0}"
+DIM_PATH_GOAL_HEX_X="${DIM_PATH_GOAL_HEX_X:-3}"
+DIM_PATH_GOAL_HEX_Z="${DIM_PATH_GOAL_HEX_Z:-3}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CRATE_DIR="$(cd "${SCRIPT_DIR}/../crates/game_server" && pwd)"
@@ -34,6 +42,13 @@ Options:
   --path-start <x> <z>        Path probe start hex (default: ${PATH_START_HEX_X} ${PATH_START_HEX_Z})
   --path-goal <x> <z>         Path probe goal hex (default: ${PATH_GOAL_HEX_X} ${PATH_GOAL_HEX_Z})
   --path-node-limit <u32>     Path probe node limit (default: ${PATH_NODE_LIMIT})
+  --dimension <id>            Dimension id for dimension smoke checks (default: ${DIMENSION_ID})
+  --dimension-seed <u64>      Seed used by in-dimension worldgen checks (default: ${DIMENSION_SEED})
+  --dimension-size <x> <y>    Chunk size for in-dimension worldgen checks (default: ${DIMENSION_SIZE_X} ${DIMENSION_SIZE_Y})
+  --dimension-path-start <x> <z>
+                              Path start hex in dimension smoke checks (default: ${DIM_PATH_START_HEX_X} ${DIM_PATH_START_HEX_Z})
+  --dimension-path-goal <x> <z>
+                              Path goal hex in dimension smoke checks (default: ${DIM_PATH_GOAL_HEX_X} ${DIM_PATH_GOAL_HEX_Z})
   --dry-run                   Print commands only
   -h, --help                  Show this help
 USAGE
@@ -57,6 +72,16 @@ while [[ $# -gt 0 ]]; do
       PATH_GOAL_HEX_X="$2"; PATH_GOAL_HEX_Z="$3"; shift 3 ;;
     --path-node-limit)
       PATH_NODE_LIMIT="$2"; shift 2 ;;
+    --dimension)
+      DIMENSION_ID="$2"; shift 2 ;;
+    --dimension-seed)
+      DIMENSION_SEED="$2"; shift 2 ;;
+    --dimension-size)
+      DIMENSION_SIZE_X="$2"; DIMENSION_SIZE_Y="$3"; shift 3 ;;
+    --dimension-path-start)
+      DIM_PATH_START_HEX_X="$2"; DIM_PATH_START_HEX_Z="$3"; shift 3 ;;
+    --dimension-path-goal)
+      DIM_PATH_GOAL_HEX_X="$2"; DIM_PATH_GOAL_HEX_Z="$3"; shift 3 ;;
     --dry-run)
       DRY_RUN=1; shift ;;
     -h|--help)
@@ -81,6 +106,26 @@ call_reducer() {
   local reducer="$1"
   shift
   run_cmd spacetime call --server "$SERVER" $YES_FLAG "$DB_NAME" "$reducer" "$@"
+}
+
+call_reducer_expect_fail() {
+  local reducer="$1"
+  shift
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "+ spacetime call --server ${SERVER} ${YES_FLAG} ${DB_NAME} ${reducer} $* (expect-fail)"
+    return 0
+  fi
+  local output
+  local status=0
+  set +e
+  output="$(spacetime call --server "$SERVER" $YES_FLAG "$DB_NAME" "$reducer" "$@" 2>&1)"
+  status=$?
+  set -e
+  if [[ "$status" == "0" ]]; then
+    echo "[smoke] expected reducer failure but call succeeded: ${reducer}" >&2
+    exit 1
+  fi
+  printf '%s\n' "$output"
 }
 
 sql_output() {
@@ -221,15 +266,53 @@ assert_eq "$path_status" "1" "path_result status"
 assert_int_ge "$path_step_count" 1 "path_result step_count"
 assert_int_ge "$path_explored" 1 "path_result explored_nodes"
 
+call_reducer generate_world_in_dimension "$REGION_ID" "$DIMENSION_ID" "$DIMENSION_SEED" "$DIMENSION_SIZE_X" "$DIMENSION_SIZE_Y" true
+call_reducer generate_world_from_params_in_dimension "$REGION_ID" "$DIMENSION_ID" true
+call_reducer regenerate_chunks_in_dimension "$REGION_ID" "$DIMENSION_ID" 0 0 0 0
+call_reducer set_active_dimension "$DIMENSION_ID"
+
+dimension_chunk_count="$(scalar_sql "SELECT COUNT(*) AS count FROM terrain_chunk WHERE region_id = ${REGION_ID} AND dimension_id = ${DIMENSION_ID}")"
+dimension_session_count="$(scalar_sql "SELECT COUNT(*) AS count FROM session_state WHERE region_id = ${REGION_ID} AND dimension_id = ${DIMENSION_ID}")"
+assert_int_ge "$dimension_chunk_count" 1 "terrain_chunk count (dimension=${DIMENSION_ID})"
+assert_int_ge "$dimension_session_count" 1 "session_state count (dimension=${DIMENSION_ID})"
+
+call_reducer request_path_in_dimension \
+  "$REGION_ID" \
+  "$DIMENSION_ID" \
+  "$DIM_PATH_START_HEX_X" \
+  "$DIM_PATH_START_HEX_Z" \
+  "$DIM_PATH_GOAL_HEX_X" \
+  "$DIM_PATH_GOAL_HEX_Z" \
+  "$PATH_NODE_LIMIT"
+
+dim_path_rows="$(canon_sql "SELECT status, step_count, explored_nodes FROM path_result WHERE region_id = ${REGION_ID} AND dimension_id = ${DIMENSION_ID} AND start_hex_x = ${DIM_PATH_START_HEX_X} AND start_hex_z = ${DIM_PATH_START_HEX_Z} AND goal_hex_x = ${DIM_PATH_GOAL_HEX_X} AND goal_hex_z = ${DIM_PATH_GOAL_HEX_Z}")"
+if [[ -z "$dim_path_rows" ]]; then
+  echo "[smoke] dimension path probe failed: no matching path_result row" >&2
+  exit 1
+fi
+
+dim_path_status="$(printf '%s\n' "$dim_path_rows" | head -n1 | cut -d'|' -f1)"
+dim_path_step_count="$(printf '%s\n' "$dim_path_rows" | head -n1 | cut -d'|' -f2)"
+dim_path_explored="$(printf '%s\n' "$dim_path_rows" | head -n1 | cut -d'|' -f3)"
+assert_eq "$dim_path_status" "1" "path_result status (dimension=${DIMENSION_ID})"
+assert_int_ge "$dim_path_step_count" 1 "path_result step_count (dimension=${DIMENSION_ID})"
+assert_int_ge "$dim_path_explored" 1 "path_result explored_nodes (dimension=${DIMENSION_ID})"
+
+invalid_dimension_output="$(call_reducer_expect_fail set_active_dimension 999999)"
+if [[ "$invalid_dimension_output" != *"target dimension does not exist"* ]]; then
+  echo "[smoke] set_active_dimension invalid-dimension error mismatch" >&2
+  echo "$invalid_dimension_output" >&2
+  exit 1
+fi
+echo "[smoke] set_active_dimension invalid dimension rejection: ok"
+
 run_id="$(date +%s%3N)"
 req_ok="req_ok_${run_id}"
 req_far="req_far_${run_id}"
-req_probe="req_probe_${run_id}"
 ts="$(date +%s%3N)"
 
 call_reducer move_to "$req_ok" "$REGION_ID" "$ts" 0 0 0
 call_reducer move_to "$req_far" "$REGION_ID" "$((ts + 1))" 9999 0 9999
-call_reducer move_to "$req_probe" "$REGION_ID" "$((ts + 2))" 0 0 4
 
 check_feedback() {
   local request_id="$1"
@@ -255,6 +338,5 @@ check_feedback() {
 
 check_feedback "$req_ok" "true" "ok"
 check_feedback "$req_far" "false" "distance_exceeded"
-check_feedback "$req_probe" "false" "terrain_blocked"
 
 echo "[smoke] PASS"

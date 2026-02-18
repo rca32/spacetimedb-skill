@@ -15,6 +15,7 @@ export default __t.object("AttackScheduled", {
   attackerIdentity: __t.identity(),
   targetIdentity: __t.identity(),
   regionId: __t.u64(),
+  dimensionId: __t.u32(),
   clientTsMs: __t.u64(),
   impactDamage: __t.i32(),
   phase: __t.u8(),

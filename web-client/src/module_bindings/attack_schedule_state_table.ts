@@ -15,6 +15,7 @@ export default __t.row({
   attackerIdentity: __t.identity().name("attacker_identity"),
   targetIdentity: __t.identity().name("target_identity"),
   regionId: __t.u64().name("region_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   clientTsMs: __t.u64().name("client_ts_ms"),
   impactDamage: __t.i32().name("impact_damage"),
   phase: __t.u8(),

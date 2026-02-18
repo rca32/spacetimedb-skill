@@ -119,6 +119,7 @@ export class PanelLayer {
   private readonly housingEntityIdInput: HTMLInputElement
   private readonly housingNetworkIdInput: HTMLInputElement
   private readonly housingDimensionEntityIdInput: HTMLInputElement
+  private readonly housingDimensionSelect: HTMLSelectElement
   private readonly housingDimensionIdInput: HTMLInputElement
   private readonly housingSetActiveDimensionButton: HTMLButtonElement
   private readonly housingInteriorInstanceIdInput: HTMLInputElement
@@ -336,6 +337,7 @@ export class PanelLayer {
     this.housingEntityIdInput = housingUi.housingEntityIdInput
     this.housingNetworkIdInput = housingUi.networkEntityIdInput
     this.housingDimensionEntityIdInput = housingUi.dimensionEntityIdInput
+    this.housingDimensionSelect = housingUi.dimensionSelect
     this.housingDimensionIdInput = housingUi.dimensionIdInput
     this.housingSetActiveDimensionButton = housingUi.setActiveDimensionButton
     this.housingInteriorInstanceIdInput = housingUi.interiorInstanceIdInput
@@ -742,7 +744,7 @@ export class PanelLayer {
 
     this.housingCreateButton.addEventListener('click', () => {
       const entranceBuildingEntityId = this.housingEntranceBuildingSelect.value
-      const dimensionId = Number.parseInt(this.housingDimensionIdInput.value, 10)
+      const dimensionId = this.resolveHousingDimensionId()
       const interiorInstanceId = this.housingInteriorInstanceIdInput.value.trim()
       if (!entranceBuildingEntityId) {
         this.setToast('select entrance building')
@@ -755,7 +757,7 @@ export class PanelLayer {
       this.dispatchAction('housing_create', () =>
         this.buildClaimHousingActions?.createHousing({
           entranceBuildingEntityId,
-          dimensionId: Number.isFinite(dimensionId) ? dimensionId : 0,
+          dimensionId,
           interiorInstanceId,
           housingEntityId: this.housingEntityIdInput.value.trim() || undefined,
           networkEntityId: this.housingNetworkIdInput.value.trim() || undefined,
@@ -765,12 +767,23 @@ export class PanelLayer {
     })
 
     this.housingSetActiveDimensionButton.addEventListener('click', () => {
-      const dimensionId = Number.parseInt(this.housingDimensionIdInput.value, 10)
+      const dimensionId = this.resolveHousingDimensionId()
       this.dispatchAction('set_active_dimension', () =>
         this.buildClaimHousingActions?.setActiveDimension({
-          dimensionId: Number.isFinite(dimensionId) ? dimensionId : 0,
+          dimensionId,
         }),
       )
+    })
+
+    this.housingDimensionSelect.addEventListener('change', () => {
+      const selected = this.housingDimensionSelect.value
+      if (selected === 'custom') {
+        return
+      }
+      const parsed = Number.parseInt(selected, 10)
+      if (Number.isFinite(parsed) && parsed > 0) {
+        this.housingDimensionIdInput.value = parsed.toString()
+      }
     })
 
     this.housingEnterButton.addEventListener('click', () => {
@@ -1151,6 +1164,62 @@ export class PanelLayer {
         this.housingWhitelistInput.value = rent.whiteListIdentityHexes.join(',')
       }
     }
+
+    this.refreshHousingDimensionPicker(snapshot)
+  }
+
+  private refreshHousingDimensionPicker(snapshot: BuildClaimHousingSnapshot): void {
+    const knownDimensions = new Set<number>()
+    knownDimensions.add(1)
+
+    for (const row of snapshot.dimensionDescs) {
+      if (Number.isFinite(row.dimensionId) && row.dimensionId > 0) {
+        knownDimensions.add(row.dimensionId)
+      }
+    }
+    for (const row of snapshot.claims) {
+      if (Number.isFinite(row.dimensionId) && row.dimensionId > 0) {
+        knownDimensions.add(row.dimensionId)
+      }
+    }
+    for (const row of snapshot.buildings) {
+      if (Number.isFinite(row.dimensionId) && row.dimensionId > 0) {
+        knownDimensions.add(row.dimensionId)
+      }
+    }
+
+    const manual = Number.parseInt(this.housingDimensionIdInput.value, 10)
+    if (Number.isFinite(manual) && manual > 0) {
+      knownDimensions.add(manual)
+    }
+
+    const options: SelectOption[] = [...knownDimensions]
+      .sort((a, b) => a - b)
+      .map((dimensionId) => ({
+        value: dimensionId.toString(),
+        label: `Dimension ${dimensionId}`,
+      }))
+    options.push({ value: 'custom', label: 'Custom (manual input)' })
+    syncSelect(this.housingDimensionSelect, options)
+
+    const currentSelection = this.housingDimensionSelect.value
+    if (currentSelection && currentSelection !== 'custom') {
+      this.housingDimensionIdInput.value = currentSelection
+    }
+  }
+
+  private resolveHousingDimensionId(): number {
+    const selected = this.housingDimensionSelect.value
+    if (selected && selected !== 'custom') {
+      const parsedSelected = Number.parseInt(selected, 10)
+      if (Number.isFinite(parsedSelected) && parsedSelected > 0) {
+        this.housingDimensionIdInput.value = parsedSelected.toString()
+        return parsedSelected
+      }
+    }
+
+    const parsedManual = Number.parseInt(this.housingDimensionIdInput.value, 10)
+    return Number.isFinite(parsedManual) && parsedManual > 0 ? parsedManual : 1
   }
 
   private refreshSocialNpcQuestUi(snapshot: SocialNpcQuestSnapshot): void {
@@ -1598,6 +1667,7 @@ export class PanelLayer {
     housingEntityIdInput: HTMLInputElement
     networkEntityIdInput: HTMLInputElement
     dimensionEntityIdInput: HTMLInputElement
+    dimensionSelect: HTMLSelectElement
     dimensionIdInput: HTMLInputElement
     setActiveDimensionButton: HTMLButtonElement
     interiorInstanceIdInput: HTMLInputElement
@@ -1627,6 +1697,7 @@ export class PanelLayer {
     const housingEntityIdInput = createTextInput('housing id (optional)')
     const networkEntityIdInput = createTextInput('network id (optional)')
     const dimensionEntityIdInput = createTextInput('dimension entity id (optional)')
+    const dimensionSelect = createSelect([{ value: '1', label: 'Dimension 1' }])
     const dimensionIdInput = createNumberInput('1')
     const setActiveDimensionButton = createButton('Set Active Dimension')
     const interiorInstanceIdInput = createTextInput('interior instance id')
@@ -1660,7 +1731,8 @@ export class PanelLayer {
       createLabeled('Housing Id', housingEntityIdInput),
       createLabeled('Network Id', networkEntityIdInput),
       createLabeled('Dimension Entity Id', dimensionEntityIdInput),
-      createLabeled('Dimension Id', dimensionIdInput),
+      createLabeled('Dimension Picker', dimensionSelect),
+      createLabeled('Dimension Id (manual)', dimensionIdInput),
       setActiveDimensionButton,
       createLabeled('Interior Instance Id', interiorInstanceIdInput),
       createHousingButton,
@@ -1691,6 +1763,7 @@ export class PanelLayer {
       housingEntityIdInput,
       networkEntityIdInput,
       dimensionEntityIdInput,
+      dimensionSelect,
       dimensionIdInput,
       setActiveDimensionButton,
       interiorInstanceIdInput,

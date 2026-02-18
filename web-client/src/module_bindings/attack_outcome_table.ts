@@ -16,6 +16,7 @@ export default __t.row({
   attackerIdentity: __t.identity().name("attacker_identity"),
   targetIdentity: __t.identity().name("target_identity"),
   regionId: __t.u64().name("region_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   damage: __t.i32(),
   targetHpAfter: __t.i32().name("target_hp_after"),
   hit: __t.bool(),

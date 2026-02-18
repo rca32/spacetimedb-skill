@@ -13,6 +13,7 @@ import {
 export default __t.object("CombatState", {
   identity: __t.identity(),
   regionId: __t.u64(),
+  dimensionId: __t.u32(),
   inCombat: __t.bool(),
   currentHp: __t.i32(),
   lastAttackClientTsMs: __t.u64(),

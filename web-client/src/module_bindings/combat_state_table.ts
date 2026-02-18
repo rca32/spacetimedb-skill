@@ -13,6 +13,7 @@ import {
 export default __t.row({
   identity: __t.identity().primaryKey(),
   regionId: __t.u64().name("region_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   inCombat: __t.bool().name("in_combat"),
   currentHp: __t.i32().name("current_hp"),
   lastAttackClientTsMs: __t.u64().name("last_attack_client_ts_ms"),

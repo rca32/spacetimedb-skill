@@ -15,6 +15,7 @@ export default __t.row({
   initiatorIdentity: __t.identity().name("initiator_identity"),
   partnerIdentity: __t.identity().name("partner_identity"),
   regionId: __t.u64().name("region_id"),
+  dimensionId: __t.u32().name("dimension_id"),
   phase: __t.u8(),
   initiatorAccepted: __t.bool().name("initiator_accepted"),
   partnerAccepted: __t.bool().name("partner_accepted"),
