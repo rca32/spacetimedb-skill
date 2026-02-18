@@ -19,11 +19,11 @@ use crate::tables::environment_effect::{
     environment_effect_desc, environment_effect_exposure, environment_effect_state,
 };
 use crate::tables::live_ops::balance_params;
-use crate::tables::npc_quest::npc_state;
+use crate::tables::npc_quest::{npc_anchor_state, npc_population_def, npc_state};
+use crate::tables::player_views::player_session_view;
 use crate::tables::player_progression::{
     character_stats, npc_action_schedule, resource_state, status_effect,
 };
-use crate::tables::player_views::player_session_view;
 use crate::tables::session_state::session_state;
 use crate::tables::trade_market::trade_session;
 use crate::tables::transform_state::transform_state;
@@ -31,9 +31,9 @@ use crate::tables::world_gen::world_gen_params;
 use crate::tables::world_state::{region_state, resource_node, terrain_chunk};
 use crate::tables::{
     CharacterStats, EnvironmentEffectDesc, EnvironmentEffectExposure, EnvironmentEffectLoopTimer,
-    EnvironmentEffectState, NpcActionSchedule, NpcAiLoopTimer, NpcState, PlayerRegenLoopTimer,
-    RegionState, ResourceNode, ResourceRegenLoopTimer, ResourceState, SessionCleanupLoopTimer,
-    StatusEffect, TerrainChunk,
+    EnvironmentEffectState, NpcActionSchedule, NpcAiLoopTimer, NpcAnchorState,
+    NpcPopulationDef, NpcState, PlayerRegenLoopTimer, RegionState, ResourceNode,
+    ResourceRegenLoopTimer, ResourceState, SessionCleanupLoopTimer, StatusEffect, TerrainChunk,
 };
 use crate::utils::identity_to_entity_id;
 
@@ -47,6 +47,7 @@ const NPC_AI_STEP_HEX: i32 = 2;
 const NPC_AI_PATH_NODE_LIMIT: u32 = 2_048;
 const NPC_AI_PATH_KEEP_ROWS_PER_IDENTITY: u32 = 64;
 const STARTER_REGION_ID: u64 = 1;
+const NPC_ANCHOR_KIND_RUIN: u8 = 1;
 
 #[derive(Clone, Copy)]
 struct SeedNpc {
@@ -57,6 +58,19 @@ struct SeedNpc {
     mood: u8,
     schedule_kind: u8,
 }
+
+const DEFAULT_NPC_POPULATION_DEFS: [(u8, u16, u16, u16, u8, u8, bool); 8] = [
+    // npc_type, population_permille, min_action_seconds, max_action_seconds,
+    // default_schedule_kind, default_role, traveling_enabled
+    (1, 140, 2, 5, 1, 1, true),
+    (2, 120, 6, 20, 3, 2, false),
+    (3, 120, 2, 5, 1, 3, true),
+    (4, 120, 4, 12, 2, 4, true),
+    (5, 120, 8, 18, 0, 5, false),
+    (6, 120, 2, 6, 1, 6, true),
+    (7, 120, 2, 6, 1, 7, true),
+    (8, 120, 4, 12, 2, 8, true),
+];
 
 const SEEDED_NPCS: [SeedNpc; 22] = [
     SeedNpc {
@@ -589,40 +603,66 @@ fn seed_world_if_empty(ctx: &ReducerContext) -> Result<(), String> {
     }
 
     let now_us = to_micros_u64(ctx);
+    ensure_default_npc_population_defs(ctx);
+    ensure_default_npc_anchors(ctx);
     ensure_seeded_npcs(ctx, now_us);
     ensure_npc_schedules(ctx, now_us);
+    sync_npc_anchor_occupancy(ctx);
     Ok(())
 }
 
 fn ensure_seeded_npcs(ctx: &ReducerContext, now_us: u64) {
     for seed in SEEDED_NPCS {
-        let schedule_kind = normalize_schedule_kind(seed.schedule_kind);
-        let next_action_ts = now_us + npc_next_delay(schedule_kind);
+        let npc_type = npc_type_for_seed(seed);
+        let profile = ctx.db.npc_population_def().npc_type().find(npc_type);
+        let schedule_kind =
+            normalize_schedule_kind(profile.as_ref().map(|v| v.default_schedule_kind).unwrap_or(seed.schedule_kind));
+        let traveling = profile
+            .as_ref()
+            .map(|v| v.traveling_enabled)
+            .unwrap_or(schedule_kind != 0 && schedule_kind != 3);
+        let role = profile.as_ref().map(|v| v.default_role).unwrap_or(seed.role);
+        let next_action_ts = now_us + npc_next_delay(ctx, seed.npc_id, npc_type, schedule_kind);
+        let anchor_entity_id = seed.npc_id;
         if let Some(mut npc) = ctx.db.npc_state().npc_id().find(seed.npc_id) {
+            npc.npc_type = npc_type;
             npc.region_id = STARTER_REGION_ID;
             npc.dimension_id = DEFAULT_WORLD_DIMENSION_ID;
             npc.hex_x = seed.hex_x;
             npc.hex_z = seed.hex_z;
             npc.dest_hex_x = seed.hex_x;
             npc.dest_hex_z = seed.hex_z;
-            npc.role = seed.role;
+            npc.role = role;
             npc.mood = seed.mood;
+            npc.traveling = traveling;
             npc.schedule_kind = schedule_kind;
             npc.next_action_ts = next_action_ts;
+            npc.anchor_entity_id = anchor_entity_id;
+            if npc.previous_anchors.last().copied().unwrap_or_default() != anchor_entity_id {
+                npc.previous_anchors.push(anchor_entity_id);
+            }
+            if npc.previous_anchors.len() > 3 {
+                let drain_len = npc.previous_anchors.len() - 3;
+                npc.previous_anchors.drain(0..drain_len);
+            }
             ctx.db.npc_state().npc_id().update(npc);
         } else {
             ctx.db.npc_state().insert(NpcState {
                 npc_id: seed.npc_id,
+                npc_type,
                 region_id: STARTER_REGION_ID,
                 dimension_id: DEFAULT_WORLD_DIMENSION_ID,
                 hex_x: seed.hex_x,
                 hex_z: seed.hex_z,
                 dest_hex_x: seed.hex_x,
                 dest_hex_z: seed.hex_z,
-                role: seed.role,
+                role,
                 mood: seed.mood,
+                traveling,
                 schedule_kind,
                 next_action_ts,
+                anchor_entity_id,
+                previous_anchors: vec![anchor_entity_id],
             });
         }
     }
@@ -630,11 +670,15 @@ fn ensure_seeded_npcs(ctx: &ReducerContext, now_us: u64) {
 
 fn ensure_npc_schedules(ctx: &ReducerContext, now_us: u64) {
     for npc in ctx.db.npc_state().iter() {
-        let action_type = normalize_schedule_kind(npc.schedule_kind);
+        let action_type = if npc.traveling {
+            normalize_schedule_kind(npc.schedule_kind)
+        } else {
+            3
+        };
         let next_action_at = if action_type == 1 || action_type == 2 {
             now_us
         } else {
-            now_us + npc_next_delay(action_type)
+            now_us + npc_next_delay(ctx, npc.npc_id, npc.npc_type, action_type)
         };
         if let Some(mut schedule) = ctx.db.npc_action_schedule().npc_id().find(npc.npc_id) {
             schedule.action_type = action_type;
@@ -652,6 +696,88 @@ fn ensure_npc_schedules(ctx: &ReducerContext, now_us: u64) {
     }
 }
 
+fn ensure_default_npc_population_defs(ctx: &ReducerContext) {
+    if ctx.db.npc_population_def().iter().next().is_some() {
+        return;
+    }
+
+    for (
+        npc_type,
+        population_permille,
+        min_action_seconds,
+        max_action_seconds,
+        default_schedule_kind,
+        default_role,
+        traveling_enabled,
+    ) in DEFAULT_NPC_POPULATION_DEFS
+    {
+        ctx.db.npc_population_def().insert(NpcPopulationDef {
+            npc_type,
+            population_permille,
+            min_action_seconds,
+            max_action_seconds,
+            default_schedule_kind,
+            default_role,
+            traveling_enabled,
+            enabled: true,
+            updated_at: ctx.timestamp,
+        });
+    }
+}
+
+fn ensure_default_npc_anchors(ctx: &ReducerContext) {
+    for seed in SEEDED_NPCS {
+        let anchor = NpcAnchorState {
+            anchor_id: seed.npc_id,
+            region_id: STARTER_REGION_ID,
+            hex_x: seed.hex_x,
+            hex_z: seed.hex_z,
+            anchor_kind: NPC_ANCHOR_KIND_RUIN,
+            is_active: true,
+            occupied_by_npc_id: None,
+            updated_at: ctx.timestamp,
+        };
+        if ctx
+            .db
+            .npc_anchor_state()
+            .anchor_id()
+            .find(anchor.anchor_id)
+            .is_some()
+        {
+            ctx.db.npc_anchor_state().anchor_id().update(anchor);
+        } else {
+            ctx.db.npc_anchor_state().insert(anchor);
+        }
+    }
+}
+
+fn sync_npc_anchor_occupancy(ctx: &ReducerContext) {
+    for mut anchor in ctx.db.npc_anchor_state().iter() {
+        anchor.occupied_by_npc_id = None;
+        anchor.updated_at = ctx.timestamp;
+        ctx.db.npc_anchor_state().anchor_id().update(anchor);
+    }
+
+    for npc in ctx.db.npc_state().iter() {
+        if npc.anchor_entity_id == 0 {
+            continue;
+        }
+        if let Some(mut anchor) = ctx.db.npc_anchor_state().anchor_id().find(npc.anchor_entity_id) {
+            anchor.occupied_by_npc_id = Some(npc.npc_id);
+            anchor.updated_at = ctx.timestamp;
+            ctx.db.npc_anchor_state().anchor_id().update(anchor);
+        }
+    }
+}
+
+fn npc_type_for_seed(seed: SeedNpc) -> u8 {
+    if seed.role == 0 {
+        1
+    } else {
+        seed.role
+    }
+}
+
 #[spacetimedb::reducer]
 pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
     let now_us = to_micros_u64(ctx);
@@ -664,10 +790,15 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
             if let Some(schedule) = ctx.db.npc_action_schedule().npc_id().find(npc.npc_id) {
                 schedule
             } else {
-                let action_type = normalize_schedule_kind(npc.schedule_kind);
+                let action_type = if npc.traveling {
+                    normalize_schedule_kind(npc.schedule_kind)
+                } else {
+                    3
+                };
                 let default_schedule = NpcActionSchedule {
                     npc_id: npc.npc_id,
-                    next_action_at: now_us + npc_next_delay(action_type),
+                    next_action_at: now_us
+                        + npc_next_delay(ctx, npc.npc_id, npc.npc_type, action_type),
                     action_type,
                     target_region_id: Some(npc.region_id),
                 };
@@ -685,12 +816,22 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
         }
 
         let action_type = sanitize_action_type(schedule.action_type, npc.schedule_kind);
-        if action_type == 0 || action_type == 3 {
-            schedule.next_action_at = now_us + npc_next_delay(action_type);
+        let action_type = if npc.traveling { action_type } else { 3 };
+        if action_type == 0 || action_type == 3 || !npc.traveling {
+            schedule.next_action_at =
+                now_us + npc_next_delay(ctx, npc.npc_id, npc.npc_type, action_type);
             schedule.action_type = action_type;
-            npc.dest_hex_x = npc.hex_x;
-            npc.dest_hex_z = npc.hex_z;
-            npc.next_action_ts = now_us + npc_next_delay(action_type);
+            if let Some(anchor) = ctx.db.npc_anchor_state().anchor_id().find(npc.anchor_entity_id) {
+                npc.hex_x = anchor.hex_x;
+                npc.hex_z = anchor.hex_z;
+                npc.dest_hex_x = anchor.hex_x;
+                npc.dest_hex_z = anchor.hex_z;
+            } else {
+                npc.dest_hex_x = npc.hex_x;
+                npc.dest_hex_z = npc.hex_z;
+            }
+            npc.next_action_ts =
+                now_us + npc_next_delay(ctx, npc.npc_id, npc.npc_type, action_type);
             npc_updates.push(npc);
         } else {
             let (target_hex_x, target_hex_z) =
@@ -722,6 +863,7 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
             };
             if let Some(step) = next_step {
                 process_npc_movement(
+                    ctx,
                     &mut npc,
                     &mut schedule,
                     now_us,
@@ -735,7 +877,8 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
                 // Keep destination intent even when path is temporarily unavailable.
                 npc.dest_hex_x = target_hex_x;
                 npc.dest_hex_z = target_hex_z;
-                npc.next_action_ts = now_us + npc_next_delay(action_type);
+                npc.next_action_ts =
+                    now_us + npc_next_delay(ctx, npc.npc_id, npc.npc_type, action_type);
                 schedule.next_action_at = npc.next_action_ts;
                 schedule.action_type = action_type;
             }
@@ -761,7 +904,10 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
         }
     }
 
-    let removed_paths = pathfinding::prune_path_results(ctx, NPC_AI_PATH_KEEP_ROWS_PER_IDENTITY);
+    sync_npc_anchor_occupancy(ctx);
+
+    let removed_paths =
+        pathfinding::prune_path_results(ctx, NPC_AI_PATH_KEEP_ROWS_PER_IDENTITY);
     if removed_paths > 0 {
         log::info!(
             "npc_ai_agent_loop pruned stale paths: removed={}",
@@ -780,7 +926,20 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
     }
 }
 
-fn npc_next_delay(schedule_kind: u8) -> u64 {
+fn npc_next_delay(ctx: &ReducerContext, npc_id: u64, npc_type: u8, schedule_kind: u8) -> u64 {
+    if let Some(def) = ctx.db.npc_population_def().npc_type().find(npc_type) {
+        if def.enabled && def.max_action_seconds >= def.min_action_seconds && def.min_action_seconds > 0 {
+            let min_secs = u64::from(def.min_action_seconds);
+            let max_secs = u64::from(def.max_action_seconds);
+            let span = max_secs.saturating_sub(min_secs).saturating_add(1);
+            let mut seed =
+                npc_id ^ (u64::from(npc_type) << 32) ^ to_micros_u64(ctx);
+            seed = seed.rotate_left(17) ^ (seed << 11);
+            let jitter = if span == 0 { 0 } else { seed % span };
+            return min_secs.saturating_add(jitter).saturating_mul(1_000_000);
+        }
+    }
+
     let base = match schedule_kind {
         0 => 8,
         1 => NPC_AI_INTERVAL_SECS,
@@ -807,6 +966,7 @@ fn normalize_schedule_kind(schedule_kind: u8) -> u8 {
 }
 
 fn process_npc_movement(
+    ctx: &ReducerContext,
     npc: &mut NpcState,
     schedule: &mut NpcActionSchedule,
     now_us: u64,
@@ -820,7 +980,7 @@ fn process_npc_movement(
     npc.dest_hex_z = dest_hex_z;
     npc.hex_x = step_hex_x;
     npc.hex_z = step_hex_z;
-    npc.next_action_ts = now_us + npc_next_delay(action_type);
+    npc.next_action_ts = now_us + npc_next_delay(ctx, npc.npc_id, npc.npc_type, action_type);
     schedule.next_action_at = npc.next_action_ts;
     schedule.action_type = action_type;
 }

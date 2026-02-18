@@ -1,4 +1,5 @@
 pub mod agent_tick;
+pub mod npc_ai_admin;
 pub mod npc_quest;
 pub mod npc_talk;
 pub mod npc_trade;

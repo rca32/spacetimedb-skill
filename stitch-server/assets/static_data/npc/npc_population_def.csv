@@ -1,0 +1,9 @@
+npc_type,population_permille,min_action_seconds,max_action_seconds,default_schedule_kind,default_role,traveling_enabled,enabled
+1,140,2,5,1,1,true,true
+2,120,6,20,3,2,false,true
+3,120,2,5,1,3,true,true
+4,120,4,12,2,4,true,true
+5,120,8,18,0,5,false,true
+6,120,2,6,1,6,true,true
+7,120,2,6,1,7,true,true
+8,120,4,12,2,8,true,true
