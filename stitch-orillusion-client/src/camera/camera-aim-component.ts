@@ -11,6 +11,7 @@ export class CameraAimComponent extends ComponentBase {
   public maxDistance = 20
   public minPitchDegrees = -20
   public maxPitchDegrees = 78
+  public pointerLockCanvas: HTMLCanvasElement | null = null
 
   private camera: Camera3D | null = null
   private follow: CameraFollowComponent | null = null
@@ -19,7 +20,6 @@ export class CameraAimComponent extends ComponentBase {
   private currentFov = this.normalFov
   private lastMouseX: number | null = null
   private lastMouseY: number | null = null
-  private pointerLockCanvas: HTMLCanvasElement | null = null
 
   private readonly onMouseDown = (event: MouseEvent) => {
     if (event.button !== 0 && event.button !== 2) {
@@ -109,7 +109,9 @@ export class CameraAimComponent extends ComponentBase {
     this.camera = this.object3D.getOrAddComponent(Camera3D)
     this.follow = this.object3D.getComponent(CameraFollowComponent)
     this.currentFov = this.normalFov
-    this.pointerLockCanvas = document.querySelector('canvas')
+    if (!this.pointerLockCanvas) {
+      this.pointerLockCanvas = document.querySelector('canvas')
+    }
 
     window.addEventListener('contextmenu', preventDefault)
     window.addEventListener('mousedown', this.onMouseDown)

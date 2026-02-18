@@ -33,7 +33,7 @@ prompts/20260218_worklog.md
 
 
 
-사용스킬[$orillusion-best-practices,$spacetimedb-korean,$agent-browser]
+사용스킬[$orillusion-best-practices,$spacetimedb-korean]
 
 [참고 문서]
 WEBCLIENTDESIGN/00-master.md
@@ -49,3 +49,9 @@ orillusion 로 porting을 할려고 해 기본의 호환성은 완전히 무시 
 
 상세한 개발 계획을 단계별로 작성해서 ORILLUSION_PORTING 밑에 만들어죠.
 프로젝트 폴더 명은 stitch-orillusion-client 야
+orillusion-web/docs/guide/interaction
+
+
+현재시스템이 hex-coords 고려하고 있는지 확인해고 처리 해죠.
+BitCraftPublicDoc/5-hex-grid-coordinate-system.md
+web-client/src/core/hex/hex-coords.ts

@@ -19,7 +19,7 @@ pub fn terrain_chunk_stream_query(
     }
 
     Ok(format!(
-        "SELECT * FROM terrain_chunk_stream tc WHERE tc.region_id = {} AND tc.dimension_id = {} AND tc.chunk_x BETWEEN {} AND {} AND tc.chunk_y BETWEEN {} AND {}",
+        "SELECT * FROM terrain_chunk_stream tc WHERE tc.region_id = {} AND tc.dimension_id = {} AND tc.chunk_x >= {} AND tc.chunk_x <= {} AND tc.chunk_y >= {} AND tc.chunk_y <= {}",
         region_id, dimension_id, min_chunk_x, max_chunk_x, min_chunk_y, max_chunk_y
     ))
 }
@@ -43,7 +43,7 @@ pub fn terrain_chunk_payload_stream_query(
     }
 
     Ok(format!(
-        "SELECT * FROM terrain_chunk_payload tcp WHERE tcp.region_id = {} AND tcp.dimension_id = {} AND tcp.chunk_x BETWEEN {} AND {} AND tcp.chunk_y BETWEEN {} AND {}",
+        "SELECT * FROM terrain_chunk_payload tcp WHERE tcp.region_id = {} AND tcp.dimension_id = {} AND tcp.chunk_x >= {} AND tcp.chunk_x <= {} AND tcp.chunk_y >= {} AND tcp.chunk_y <= {}",
         region_id, dimension_id, min_chunk_x, max_chunk_x, min_chunk_y, max_chunk_y
     ))
 }
@@ -99,8 +99,10 @@ mod tests {
         assert!(query.contains("FROM resource_node"));
         assert!(query.contains("rn.region_id = 9"));
         assert!(query.contains("rn.dimension_id = 3"));
-        assert!(query.contains("rn.hex_x BETWEEN -10 AND 10"));
-        assert!(query.contains("rn.hex_z BETWEEN -12 AND 12"));
+        assert!(query.contains("rn.hex_x >= -10"));
+        assert!(query.contains("rn.hex_x <= 10"));
+        assert!(query.contains("rn.hex_z >= -12"));
+        assert!(query.contains("rn.hex_z <= 12"));
     }
 
     #[test]
@@ -110,7 +112,9 @@ mod tests {
         assert!(query.contains("FROM npc_state_stream"));
         assert!(query.contains("ns.region_id = 3"));
         assert!(query.contains("ns.dimension_id = 2"));
-        assert!(query.contains("ns.hex_x BETWEEN -20 AND 20"));
-        assert!(query.contains("ns.hex_z BETWEEN -22 AND 22"));
+        assert!(query.contains("ns.hex_x >= -20"));
+        assert!(query.contains("ns.hex_x <= 20"));
+        assert!(query.contains("ns.hex_z >= -22"));
+        assert!(query.contains("ns.hex_z <= 22"));
     }
 }

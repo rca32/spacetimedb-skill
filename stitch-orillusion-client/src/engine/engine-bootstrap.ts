@@ -13,6 +13,7 @@ import { Stats } from '@orillusion/stats'
 import { AppConfig } from '../infra/config'
 
 export interface EngineRuntime {
+  readonly canvas: HTMLCanvasElement
   readonly scene: Scene3D
   readonly cameraObject: Object3D
   readonly camera: Camera3D
@@ -85,6 +86,7 @@ export async function bootstrapEngine(
   Engine3D.startRenderView(view)
 
   return {
+    canvas,
     scene,
     cameraObject,
     camera,

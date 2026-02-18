@@ -1,21 +1,33 @@
 import {
   BoxGeometry,
   Color,
+  Material,
   MeshRenderer,
   Object3D,
-  PlaneGeometry,
   Scene3D,
   SphereGeometry,
   UnLitMaterial,
   VertexAttributeName,
 } from '@orillusion/core'
+import { TerrainGeometry } from '@orillusion/geometry'
+import { hexToWorldXZ } from '../core/hex/hex-coords'
 import type { DbConnection } from '../module_bindings'
 
-const CHUNK_WORLD_SIZE = 32
+const DEFAULT_CHUNK_WORLD_SIZE = 32
 const TERRAIN_PAYLOAD_VERSION_V1 = 1
 const TERRAIN_WATER_FLAG = 1
 const TERRAIN_HEIGHT_SCALE = 0.2
 const TERRAIN_SEA_LEVEL_BASE = 12
+const TERRAIN_NEIGHBOR_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [-1, -1],
+  [0, -1],
+  [1, -1],
+  [-1, 0],
+  [1, 0],
+  [-1, 1],
+  [0, 1],
+  [1, 1],
+]
 
 interface VisualizerStats {
   terrain: number
@@ -39,6 +51,7 @@ export class WorldStreamVisualizer {
 
   private readonly cubeGeometry = new BoxGeometry(1, 1, 1)
   private readonly sphereGeometry = new SphereGeometry(0.45, 14, 14)
+  private chunkWorldSize = DEFAULT_CHUNK_WORLD_SIZE
 
   private stats: VisualizerStats = {
     terrain: 0,
@@ -56,6 +69,13 @@ export class WorldStreamVisualizer {
 
   dispose(): void {
     this.root.destroy()
+  }
+
+  setChunkWorldSize(size: number): void {
+    if (!Number.isFinite(size) || size <= 0) {
+      return
+    }
+    this.chunkWorldSize = Math.max(1, Math.trunc(size))
   }
 
   getStats(): VisualizerStats {
@@ -94,6 +114,7 @@ export class WorldStreamVisualizer {
       this.terrainStamps.clear()
       return
     }
+    const streamRows = Array.from(streamTable)
 
     const payloadByChunkKey = new Map<string, Record<string, unknown>>()
     const payloadTable = getTableRows(db, 'terrainChunkPayload')
@@ -107,26 +128,47 @@ export class WorldStreamVisualizer {
       }
     }
 
+    const payloadCellsByCoord = new Map<string, DecodedTerrainCells>()
+    const payloadSignatureByCoord = new Map<string, string>()
+    for (const row of streamRows) {
+      const chunkKey = String(row.chunkKey ?? '')
+      if (!chunkKey) {
+        continue
+      }
+      const chunkX = Math.trunc(toNumber(row.chunkX))
+      const chunkY = Math.trunc(toNumber(row.chunkY))
+      const coord = chunkCoordKey(chunkX, chunkY)
+      const payloadRow = payloadByChunkKey.get(chunkKey) ?? null
+      payloadSignatureByCoord.set(coord, terrainPayloadSignature(payloadRow))
+      const cells = decodeTerrainPayload(payloadRow)
+      if (cells) {
+        payloadCellsByCoord.set(coord, cells)
+      }
+    }
+
     const seen = new Set<string>()
     let detailedCount = 0
     let fallbackCount = 0
-    for (const row of streamTable) {
+    for (const row of streamRows) {
       const chunkKey = String(row.chunkKey ?? '')
       if (!chunkKey) {
         continue
       }
       seen.add(chunkKey)
 
-      const chunkX = toNumber(row.chunkX)
-      const chunkY = toNumber(row.chunkY)
+      const chunkX = Math.trunc(toNumber(row.chunkX))
+      const chunkY = Math.trunc(toNumber(row.chunkY))
+      const coord = chunkCoordKey(chunkX, chunkY)
       const biomeId = toNumber(row.biomeId)
       const payloadRow = payloadByChunkKey.get(chunkKey) ?? null
-      if (payloadRow) {
+      const cells = payloadCellsByCoord.get(coord) ?? null
+      const chunkWorldSize = cells?.chunkSize ?? inferTerrainChunkSize(payloadRow) ?? this.chunkWorldSize
+      if (payloadCellsByCoord.has(coord)) {
         detailedCount += 1
       } else {
         fallbackCount += 1
       }
-      const stamp = terrainStamp(payloadRow, row)
+      const stamp = terrainStamp(payloadRow, row, chunkX, chunkY, payloadSignatureByCoord)
 
       let object = this.terrainObjects.get(chunkKey)
       const prevStamp = this.terrainStamps.get(chunkKey)
@@ -136,7 +178,15 @@ export class WorldStreamVisualizer {
           this.terrainObjects.delete(chunkKey)
         }
 
-        object = this.buildTerrainChunkObject(biomeId, payloadRow, row)
+        object = this.buildTerrainChunkObject(
+          biomeId,
+          chunkX,
+          chunkY,
+          chunkWorldSize,
+          payloadRow,
+          row,
+          payloadCellsByCoord,
+        )
         if (!object) {
           continue
         }
@@ -146,9 +196,9 @@ export class WorldStreamVisualizer {
         this.terrainStamps.set(chunkKey, stamp)
       }
 
-      object.x = chunkX * CHUNK_WORLD_SIZE
+      object.x = chunkX * chunkWorldSize
       object.y = 0
-      object.z = chunkY * CHUNK_WORLD_SIZE
+      object.z = chunkY * chunkWorldSize
     }
 
     this.prune(this.terrainObjects, seen)
@@ -163,17 +213,20 @@ export class WorldStreamVisualizer {
 
   private buildTerrainChunkObject(
     biomeId: number,
+    chunkX: number,
+    chunkY: number,
+    chunkWorldSize: number,
     payloadRow: Record<string, unknown> | null,
     streamRow: Record<string, unknown>,
+    payloadCellsByCoord: Map<string, DecodedTerrainCells>,
   ): Object3D | undefined {
     const chunk = new Object3D()
-    const [r, g, b] = terrainColorByBiome(biomeId)
 
-    const cells = decodeTerrainPayload(payloadRow)
+    const cells = payloadCellsByCoord.get(chunkCoordKey(chunkX, chunkY)) ?? decodeTerrainPayload(payloadRow)
     if (!cells) {
       const mesh = chunk.addComponent(MeshRenderer)
       mesh.geometry = this.cubeGeometry
-      if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
+      if (!setMaterialSafe(mesh, createTerrainMaterial(biomeId))) {
         chunk.destroy()
         return undefined
       }
@@ -181,23 +234,23 @@ export class WorldStreamVisualizer {
       const heightMax = toNumber(streamRow.heightMax)
       const slabTopY = elevationToWorldY((heightMin + heightMax) * 0.5)
       const slabThickness = Math.max((heightMax - heightMin) * TERRAIN_HEIGHT_SCALE, 0.08)
-      chunk.x = CHUNK_WORLD_SIZE * 0.5
+      chunk.x = chunkWorldSize * 0.5
       chunk.y = slabTopY - slabThickness * 0.5
-      chunk.z = CHUNK_WORLD_SIZE * 0.5
-      chunk.scaleX = CHUNK_WORLD_SIZE
+      chunk.z = chunkWorldSize * 0.5
+      chunk.scaleX = chunkWorldSize
       chunk.scaleY = slabThickness
-      chunk.scaleZ = CHUNK_WORLD_SIZE
+      chunk.scaleZ = chunkWorldSize
       return chunk
     }
 
     const mesh = chunk.addComponent(MeshRenderer)
-    const terrainGeometry = buildTerrainSurfaceGeometry(cells)
+    const terrainGeometry = buildTerrainSurfaceGeometry(cells, chunkX, chunkY, payloadCellsByCoord)
     if (!terrainGeometry) {
       chunk.destroy()
       return undefined
     }
     mesh.geometry = terrainGeometry
-    if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
+    if (!setMaterialSafe(mesh, createTerrainMaterial(biomeId))) {
       chunk.destroy()
       return undefined
     }
@@ -222,6 +275,7 @@ export class WorldStreamVisualizer {
 
       const hexX = toNumber(row.hexX)
       const hexZ = toNumber(row.hexZ)
+      const world = hexToWorldXZ({ q: hexX, r: hexZ, dimension: Math.max(1, toNumber(row.dimensionId)) })
 
       let object = this.npcObjects.get(npcId)
       if (!object) {
@@ -236,9 +290,9 @@ export class WorldStreamVisualizer {
         this.npcObjects.set(npcId, object)
       }
 
-      object.x = hexX
+      object.x = world.x
       object.y = 0.6
-      object.z = hexZ
+      object.z = world.z
     }
 
     this.prune(this.npcObjects, seen)
@@ -261,6 +315,7 @@ export class WorldStreamVisualizer {
 
       const hexX = toNumber(row.hexX)
       const hexZ = toNumber(row.hexZ)
+      const world = hexToWorldXZ({ q: hexX, r: hexZ, dimension: Math.max(1, toNumber(row.dimensionId)) })
       const depleted = Boolean(row.isDepleted)
 
       let object = this.resourceObjects.get(id)
@@ -276,9 +331,9 @@ export class WorldStreamVisualizer {
         this.resourceObjects.set(id, object)
       }
 
-      object.x = hexX
+      object.x = world.x
       object.y = depleted ? 0.2 : 0.45
-      object.z = hexZ
+      object.z = world.z
       object.scaleX = 0.55
       object.scaleY = depleted ? 0.18 : 0.8
       object.scaleZ = 0.55
@@ -424,7 +479,12 @@ function createUnlitMaterial(r: number, g: number, b: number): UnLitMaterial {
   return material
 }
 
-function setMaterialSafe(mesh: MeshRenderer, material: UnLitMaterial): boolean {
+function createTerrainMaterial(biomeId: number): UnLitMaterial {
+  const [r, g, b] = terrainColorByBiome(biomeId)
+  return createUnlitMaterial(r, g, b)
+}
+
+function setMaterialSafe(mesh: MeshRenderer, material: Material): boolean {
   try {
     mesh.material = material
     return true
@@ -448,18 +508,52 @@ interface DecodedTerrainCells {
 function terrainStamp(
   payloadRow: Record<string, unknown> | null,
   streamRow: Record<string, unknown>,
+  chunkX: number,
+  chunkY: number,
+  payloadSignatureByCoord: Map<string, string>,
 ): string {
   const hMin = toNumber(streamRow.heightMin)
   const hMax = toNumber(streamRow.heightMax)
+  const payloadSignature = terrainPayloadSignature(payloadRow)
 
   if (payloadRow) {
-    const chunkSize = toTerrainChunkSize(payloadRow)
-    const bytes = toByteArray(payloadRow.cellPayloadBytes)
-    const tail = bytes && bytes.length >= 2 ? readU16LE(bytes, bytes.length - 2) : 0
-    return `payload:${chunkSize}:${bytes?.length ?? 0}:${tail}:${hMin}:${hMax}`
+    const neighborSignature = terrainNeighborStamp(chunkX, chunkY, payloadSignatureByCoord)
+    return `payload:${payloadSignature}:${neighborSignature}:${hMin}:${hMax}`
   }
 
-  return `none:${hMin}:${hMax}`
+  return `none:${payloadSignature}:${hMin}:${hMax}`
+}
+
+function terrainPayloadSignature(payloadRow: Record<string, unknown> | null): string {
+  if (!payloadRow) {
+    return 'none'
+  }
+
+  const version = toNumber(payloadRow.cellPayloadVersion)
+  const chunkSize = toTerrainChunkSize(payloadRow)
+  const bytes = toByteArray(payloadRow.cellPayloadBytes)
+  if (!bytes || bytes.length < 2) {
+    return `${version}:${chunkSize}:${bytes?.length ?? 0}`
+  }
+
+  const len = bytes.length
+  const head = readU16LE(bytes, 0)
+  const midIndex = Math.max(0, ((len >> 1) - ((len >> 1) % 2)))
+  const mid = readU16LE(bytes, midIndex)
+  const tail = readU16LE(bytes, len - 2)
+  return `${version}:${chunkSize}:${len}:${head}:${mid}:${tail}`
+}
+
+function terrainNeighborStamp(
+  chunkX: number,
+  chunkY: number,
+  payloadSignatureByCoord: Map<string, string>,
+): string {
+  let stamp = ''
+  for (const [dx, dy] of TERRAIN_NEIGHBOR_OFFSETS) {
+    stamp += `|${payloadSignatureByCoord.get(chunkCoordKey(chunkX + dx, chunkY + dy)) ?? 'none'}`
+  }
+  return stamp
 }
 
 function decodeTerrainPayload(payloadRow: Record<string, unknown> | null): DecodedTerrainCells | null {
@@ -518,14 +612,113 @@ function toTerrainChunkSize(payloadRow: Record<string, unknown>, byteLengthHint 
   return 0
 }
 
-function chooseTerrainSampleStep(chunkSize: number): number {
-  if (chunkSize <= 16) {
-    return 1
+function inferTerrainChunkSize(payloadRow: Record<string, unknown> | null): number | null {
+  if (!payloadRow) {
+    return null
   }
-  if (chunkSize <= 32) {
-    return TERRAIN_SAMPLE_STEP
+  const chunkSize = toTerrainChunkSize(payloadRow)
+  return chunkSize > 0 ? chunkSize : null
+}
+
+function buildTerrainSurfaceGeometry(
+  cells: DecodedTerrainCells,
+  chunkX: number,
+  chunkY: number,
+  payloadCellsByCoord: Map<string, DecodedTerrainCells>,
+): TerrainGeometry | null {
+  const chunkSize = cells.chunkSize
+  if (!Number.isFinite(chunkSize) || chunkSize <= 0) {
+    return null
   }
-  return 4
+
+  const segments = Math.max(1, chunkSize)
+  const geometry = new TerrainGeometry(chunkSize, chunkSize, segments, segments)
+  const position = geometry.getAttribute(VertexAttributeName.position)
+  const data = position?.data as Float32Array | undefined
+  if (!data) {
+    return null
+  }
+
+  const half = chunkSize * 0.5
+  const chunkOriginX = chunkX * chunkSize
+  const chunkOriginZ = chunkY * chunkSize
+  for (let i = 0; i < data.length; i += 3) {
+    const localX = (data[i] ?? 0) + half
+    const localZ = (data[i + 2] ?? 0) + half
+    data[i] = localX
+    data[i + 2] = localZ
+
+    const worldVertexX = Math.round(chunkOriginX + localX)
+    const worldVertexZ = Math.round(chunkOriginZ + localZ)
+    data[i + 1] = sampleTerrainVertexHeight(
+      worldVertexX,
+      worldVertexZ,
+      chunkSize,
+      payloadCellsByCoord,
+      cells,
+    )
+  }
+
+  geometry.vertexBuffer.upload(VertexAttributeName.position, position)
+  geometry.computeNormals()
+  return geometry
+}
+
+function sampleTerrainVertexHeight(
+  worldVertexX: number,
+  worldVertexZ: number,
+  chunkSize: number,
+  payloadCellsByCoord: Map<string, DecodedTerrainCells>,
+  fallbackCells: DecodedTerrainCells,
+): number {
+  const samples: Array<TerrainCellSample | null> = [
+    readTerrainCellAtWorldCell(worldVertexX - 1, worldVertexZ - 1, chunkSize, payloadCellsByCoord),
+    readTerrainCellAtWorldCell(worldVertexX, worldVertexZ - 1, chunkSize, payloadCellsByCoord),
+    readTerrainCellAtWorldCell(worldVertexX - 1, worldVertexZ, chunkSize, payloadCellsByCoord),
+    readTerrainCellAtWorldCell(worldVertexX, worldVertexZ, chunkSize, payloadCellsByCoord),
+  ]
+
+  let total = 0
+  let count = 0
+  for (const sample of samples) {
+    if (!sample) {
+      continue
+    }
+    total += elevationToWorldY(terrainHeightFromCell(sample))
+    count += 1
+  }
+
+  if (count > 0) {
+    return total / count
+  }
+
+  const fallbackX = positiveModInt(worldVertexX, fallbackCells.chunkSize)
+  const fallbackZ = positiveModInt(worldVertexZ, fallbackCells.chunkSize)
+  const fallbackSample = fallbackCells.read(fallbackX, fallbackZ)
+  return fallbackSample ? elevationToWorldY(terrainHeightFromCell(fallbackSample)) : 0
+}
+
+function readTerrainCellAtWorldCell(
+  worldCellX: number,
+  worldCellZ: number,
+  chunkSize: number,
+  payloadCellsByCoord: Map<string, DecodedTerrainCells>,
+): TerrainCellSample | null {
+  const chunkX = floorDivInt(worldCellX, chunkSize)
+  const chunkY = floorDivInt(worldCellZ, chunkSize)
+  const cells = payloadCellsByCoord.get(chunkCoordKey(chunkX, chunkY))
+  if (!cells) {
+    return null
+  }
+
+  const localX = positiveModInt(worldCellX, chunkSize)
+  const localZ = positiveModInt(worldCellZ, chunkSize)
+  return cells.read(localX, localZ)
+}
+
+function terrainHeightFromCell(sample: TerrainCellSample): number {
+  const isWater = (sample.flags & TERRAIN_WATER_FLAG) !== 0 || sample.waterLevel > sample.elevation
+  return isWater ? sample.waterLevel : sample.elevation
 }
 
 function toByteArray(value: unknown): Uint8Array | null {
@@ -577,8 +770,17 @@ function elevationToWorldY(rawElevation: number): number {
   return (rawElevation - TERRAIN_SEA_LEVEL_BASE) * TERRAIN_HEIGHT_SCALE
 }
 
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value))
+function floorDivInt(value: number, divisor: number): number {
+  return Math.floor(value / divisor)
+}
+
+function positiveModInt(value: number, divisor: number): number {
+  const mod = value % divisor
+  return mod < 0 ? mod + divisor : mod
+}
+
+function chunkCoordKey(chunkX: number, chunkY: number): string {
+  return `${chunkX}:${chunkY}`
 }
 
 function terrainColorByBiome(biomeId: number): readonly [number, number, number] {

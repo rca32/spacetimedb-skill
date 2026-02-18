@@ -6,6 +6,7 @@
       "name": "stitch-orillusion-client",
       "dependencies": {
         "@orillusion/core": "0.8.4",
+        "@orillusion/geometry": "0.2.7",
         "@orillusion/particle": "0.1.6",
         "@orillusion/physics": "0.3.4",
         "@orillusion/stats": "0.2.6",
@@ -73,6 +74,8 @@
     "@orillusion/ammo": ["@orillusion/ammo@0.2.1", "", {}, "sha512-E/L+73rlF/eENDahX/iKUXiQMeWwmjeppDLMBwx446uBJNpbjMIew4dl0DlpB0K0VCWXrAU+Kl4tV5urjLLwOA=="],
 
     "@orillusion/core": ["@orillusion/core@0.8.4", "", {}, "sha512-Ql0Eh8iX0dgwpeuipAOZOOLEfEDuwVhvUhIJjF3khRpQ8075tehi1vImqvxLYFQsqXA1Vxw1VK5qe+/IzD4AMw=="],
+
+    "@orillusion/geometry": ["@orillusion/geometry@0.2.7", "", { "peerDependencies": { "@orillusion/core": ">=0.8.0" } }, "sha512-SHckn8hxZiuiJNwMWhfyTNM1OYNFFki8j3xFmfP/LK3WRs/G+vgwdQmmsx74hyWIg01DjURpHuVDBS4GRiDW8A=="],
 
     "@orillusion/particle": ["@orillusion/particle@0.1.6", "", { "peerDependencies": { "@orillusion/core": ">=0.8.0" } }, "sha512-F+NTOdCnUE7w/4IjRkDeak9ISxEf0enykFjiwnPb/DXZW3DJF+dTlio4QRAwG4/+2rVJeqox59smpb9687onVg=="],
 

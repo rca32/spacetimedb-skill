@@ -19,13 +19,16 @@ import { WorldStreamVisualizer } from '../world/stream-visualizer'
 const AOI_SUBSCRIPTION_KEY = 'aoi-stream'
 const SESSION_SUBSCRIPTION_KEY = 'session-self'
 const AOI_RADIUS_CHUNKS = 2
-const CHUNK_SIZE = 32
+const DEFAULT_CHUNK_SIZE = 32
 const NETWORK_TICK_MS = 100
 
 export class OrillusionClientRuntime {
   private readonly bus = new FxEventBus()
   private readonly net: NetRuntime
   private useV2Streams: boolean
+  private activeRegionId: bigint
+  private activeDimensionId: number
+  private activeChunkSize: number
 
   private engine: EngineRuntime | null = null
   private postFx: PostFxPipelineController | null = null
@@ -56,6 +59,9 @@ export class OrillusionClientRuntime {
   ) {
     this.net = new NetRuntime(config, logger, tokenStore)
     this.useV2Streams = config.useV2Streams
+    this.activeRegionId = config.defaultRegionId
+    this.activeDimensionId = config.defaultDimensionId
+    this.activeChunkSize = DEFAULT_CHUNK_SIZE
   }
 
   async start(): Promise<void> {
@@ -76,13 +82,15 @@ export class OrillusionClientRuntime {
     const cameraCollision = this.engine.cameraObject.addComponent(CameraCollisionComponent)
     cameraCollision.target = objects.player
 
-    this.engine.cameraObject.addComponent(CameraAimComponent)
+    const cameraAim = this.engine.cameraObject.addComponent(CameraAimComponent)
+    cameraAim.pointerLockCanvas = this.engine.canvas
 
     this.postFx = new PostFxPipelineController(this.engine.scene)
     this.postFx.applyProfile(this.config.postFxProfile)
 
     this.particles = new ParticleSystemController(this.engine.scene, this.bus)
     this.streamVisualizer = new WorldStreamVisualizer(this.engine.scene)
+    this.streamVisualizer.setChunkWorldSize(this.activeChunkSize)
 
     await this.net.start()
     this.installBaselineSubscriptions()
@@ -99,6 +107,8 @@ export class OrillusionClientRuntime {
     this.net.poll(this.logger)
     this.maybeDowngradeToLegacy()
     this.ensureIdentityBootstrap()
+    this.syncActiveShardFromSession()
+    this.syncWorldGenParams()
     this.syncPlayerFacing()
 
     const now = Date.now()
@@ -126,7 +136,7 @@ export class OrillusionClientRuntime {
 
     const moveOk = this.net.dispatchReducer('move_to', {
       requestId: `${identityHex}:${this.frameNo}`,
-      regionId: this.config.defaultRegionId,
+      regionId: this.activeRegionId,
       clientTsMs: BigInt(Date.now()),
       x: position.x,
       y: position.y,
@@ -137,15 +147,15 @@ export class OrillusionClientRuntime {
     if (this.useV2Streams) {
       const frameOk = this.net.dispatchReducer('sync_client_frame', {
         frameNo: BigInt(this.frameNo),
-        regionId: this.config.defaultRegionId,
-        dimensionId: this.config.defaultDimensionId,
+        regionId: this.activeRegionId,
+        dimensionId: this.activeDimensionId,
         clientTimeMs: BigInt(Date.now()),
       })
 
       const intentOk = this.net.dispatchReducer('submit_motion_intent', {
         intentId: `${identityHex}:${this.frameNo}`,
-        regionId: this.config.defaultRegionId,
-        dimensionId: this.config.defaultDimensionId,
+        regionId: this.activeRegionId,
+        dimensionId: this.activeDimensionId,
         frameNo: BigInt(this.frameNo),
         inputX: intent.inputX,
         inputZ: intent.inputZ,
@@ -180,12 +190,12 @@ export class OrillusionClientRuntime {
     const position = motor.readPosition()
     const queries = buildAoiQueries(
       {
-        regionId: this.config.defaultRegionId,
-        dimensionId: this.config.defaultDimensionId,
+        regionId: this.activeRegionId,
+        dimensionId: this.activeDimensionId,
         centerX: position.x,
         centerZ: position.z,
         chunkRadius: AOI_RADIUS_CHUNKS,
-        chunkSize: CHUNK_SIZE,
+        chunkSize: this.activeChunkSize,
         identityHex: this.net.getIdentityHex(),
       },
       this.useV2Streams,
@@ -223,7 +233,7 @@ export class OrillusionClientRuntime {
         SESSION_SUBSCRIPTION_KEY,
         [
           `SELECT * FROM physics_state_v2 WHERE entity_id = 0x${identityHex}`,
-          `SELECT * FROM server_correction_v2 WHERE identity = 0x${identityHex}`,
+          `SELECT * FROM server_correction_v2 WHERE identity = 0x${identityHex} AND region_id = ${this.activeRegionId.toString()} AND dimension_id = ${this.activeDimensionId}`,
           `SELECT * FROM player_session_view WHERE identity = 0x${identityHex}`,
         ],
         this.logger,
@@ -247,7 +257,7 @@ export class OrillusionClientRuntime {
     if (this.authBootstrappedForIdentity !== identityHex) {
       this.authBootstrappedForIdentity = identityHex
       this.net.dispatchReducer('account_bootstrap', { displayName: this.config.displayName })
-      this.net.dispatchReducer('sign_in', { regionId: this.config.defaultRegionId })
+      this.net.dispatchReducer('sign_in', { regionId: this.activeRegionId })
     }
 
     if (this.baselineInstalledForIdentity === identityHex) {
@@ -255,6 +265,72 @@ export class OrillusionClientRuntime {
     }
 
     this.baselineInstalledForIdentity = identityHex
+    this.installBaselineSubscriptions()
+  }
+
+  private syncActiveShardFromSession(): void {
+    const connection = this.net.getConnection()
+    const identityHex = this.net.getIdentityHex()
+    if (!connection?.isActive || !identityHex) {
+      return
+    }
+
+    const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>)
+      .playerSessionView
+    if (!table) {
+      return
+    }
+
+    let sessionMatched = false
+    for (const row of table.iter()) {
+      const rowIdentity = toIdentityHex(row.identity)
+      if (!rowIdentity || rowIdentity !== identityHex) {
+        continue
+      }
+      sessionMatched = true
+
+      const nextRegionId = toU64BigInt(row.regionId, this.activeRegionId)
+      const nextDimensionId = toU64Number(row.dimensionId)
+      if (nextDimensionId <= 0) {
+        continue
+      }
+
+      if (nextRegionId === this.activeRegionId && nextDimensionId === this.activeDimensionId) {
+        return
+      }
+
+      const prevRegionId = this.activeRegionId
+      const prevDimensionId = this.activeDimensionId
+      this.activeRegionId = nextRegionId
+      this.activeDimensionId = nextDimensionId
+      this.logger.info('active shard switched', {
+        regionId: this.activeRegionId.toString(),
+        dimensionId: this.activeDimensionId,
+        prevRegionId: prevRegionId.toString(),
+        prevDimensionId,
+      })
+      this.resetStreamSubscriptions(true)
+      this.installBaselineSubscriptions()
+      return
+    }
+
+    if (sessionMatched) {
+      return
+    }
+
+    const terrainDimension = detectDimensionFromTerrainStream(connection, this.activeRegionId)
+    if (terrainDimension < 0 || terrainDimension === this.activeDimensionId) {
+      return
+    }
+
+    const prevDimensionId = this.activeDimensionId
+    this.activeDimensionId = terrainDimension
+    this.logger.warn('session row missing, fallback dimension from terrain stream', {
+      regionId: this.activeRegionId.toString(),
+      dimensionId: this.activeDimensionId,
+      prevDimensionId,
+    })
+    this.resetStreamSubscriptions(true)
     this.installBaselineSubscriptions()
   }
 
@@ -378,6 +454,8 @@ export class OrillusionClientRuntime {
       `<div>render-frame: ${fps}</div>`,
       `<div>profile: ${this.config.postFxProfile}</div>`,
       `<div>streams: ${this.useV2Streams ? 'v2' : 'legacy'} (pref=${this.config.useV2Streams ? 'v2' : 'legacy'})</div>`,
+      `<div>region/dimension: ${this.activeRegionId.toString()}/${this.activeDimensionId}</div>`,
+      `<div>chunk-size: ${this.activeChunkSize}</div>`,
       `<div>terrain/npc/res/player/v2: ${streamStats ? `${streamStats.terrain}/${streamStats.npc}/${streamStats.resource}/${streamStats.players}/${streamStats.v2}` : '-'}</div>`,
       `<div>terrain detail/fallback: ${streamStats ? `${streamStats.terrainDetailed}/${streamStats.terrainFallback}` : '-'}</div>`,
       `<div>dispatch move/v2: ${this.lastMoveDispatchOk ? 'ok' : 'fail'}/${this.lastV2DispatchOk ? 'ok' : '-'}</div>`,
@@ -416,7 +494,33 @@ export class OrillusionClientRuntime {
     this.motor.setViewYawDegrees(this.cameraFollow.yawDegrees)
   }
 
-  private resetStreamSubscriptions(): void {
+  private syncWorldGenParams(): void {
+    const connection = this.net.getConnection()
+    if (!connection?.isActive) {
+      return
+    }
+
+    const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>).worldGenParams
+    if (!table) {
+      return
+    }
+
+    for (const row of table.iter()) {
+      const nextChunkSize = Math.max(1, toU64Number(row.terrainChunkSize))
+      if (nextChunkSize === this.activeChunkSize) {
+        return
+      }
+
+      const prevChunkSize = this.activeChunkSize
+      this.activeChunkSize = nextChunkSize
+      this.lastAoiHash = ''
+      this.streamVisualizer?.setChunkWorldSize(this.activeChunkSize)
+      this.logger.info('world chunk size synced', { prevChunkSize, chunkSize: this.activeChunkSize })
+      return
+    }
+  }
+
+  private resetStreamSubscriptions(keepAuthBootstrap = false): void {
     for (let i = 0; i < this.lastAoiQueryCount; i += 1) {
       this.net.removeSubscription(`${AOI_SUBSCRIPTION_KEY}-${i}`)
     }
@@ -424,7 +528,9 @@ export class OrillusionClientRuntime {
     this.lastAoiHash = ''
     this.lastAoiQueryCount = 0
     this.baselineInstalledForIdentity = null
-    this.authBootstrappedForIdentity = null
+    if (!keepAuthBootstrap) {
+      this.authBootstrappedForIdentity = null
+    }
     this.lastAppliedAuthoritativeFrameNo = 0
     this.seenCorrectionIds.clear()
   }
@@ -467,4 +573,59 @@ function toU64Number(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0
   }
   return 0
+}
+
+function toU64BigInt(value: unknown, fallback: bigint): bigint {
+  if (typeof value === 'bigint') {
+    return value
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return fallback
+    }
+    return BigInt(Math.trunc(value))
+  }
+  if (typeof value === 'string') {
+    try {
+      return BigInt(value)
+    } catch {
+      return fallback
+    }
+  }
+  if (typeof value === 'object' && value !== null && 'toString' in value) {
+    try {
+      return BigInt(String(value))
+    } catch {
+      return fallback
+    }
+  }
+  return fallback
+}
+
+function detectDimensionFromTerrainStream(
+  connection: { db: Record<string, unknown> },
+  activeRegionId: bigint,
+): number {
+  const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>).terrainChunkStream
+  if (!table) {
+    return -1
+  }
+
+  let firstAvailableDimension = -1
+  for (const row of table.iter()) {
+    const dimension = toU64Number(row.dimensionId)
+    if (dimension <= 0) {
+      continue
+    }
+    if (firstAvailableDimension < 0) {
+      firstAvailableDimension = dimension
+    }
+
+    const rowRegion = toU64BigInt(row.regionId, -1n)
+    if (rowRegion === activeRegionId) {
+      return dimension
+    }
+  }
+
+  return firstAvailableDimension
 }

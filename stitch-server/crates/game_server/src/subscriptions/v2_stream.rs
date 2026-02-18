@@ -19,7 +19,7 @@ pub fn aoi_stream_v2_query(
     }
 
     Ok(format!(
-        "SELECT * FROM aoi_stream_v2 a WHERE a.region_id = {} AND a.dimension_id = {} AND a.chunk_x BETWEEN {} AND {} AND a.chunk_y BETWEEN {} AND {}",
+        "SELECT * FROM aoi_stream_v2 a WHERE a.region_id = {} AND a.dimension_id = {} AND a.chunk_x >= {} AND a.chunk_x <= {} AND a.chunk_y >= {} AND a.chunk_y <= {}",
         region_id, dimension_id, min_chunk_x, max_chunk_x, min_chunk_y, max_chunk_y
     ))
 }

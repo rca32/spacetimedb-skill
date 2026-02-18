@@ -55,8 +55,15 @@ impl AoiFilter {
 
     pub fn hex_bounds_clause(&self, alias: &str) -> String {
         format!(
-            "{}.hex_x BETWEEN {} AND {} AND {}.hex_z BETWEEN {} AND {}",
-            alias, self.min_hex_x, self.max_hex_x, alias, self.min_hex_z, self.max_hex_z
+            "{}.hex_x >= {} AND {}.hex_x <= {} AND {}.hex_z >= {} AND {}.hex_z <= {}",
+            alias,
+            self.min_hex_x,
+            alias,
+            self.max_hex_x,
+            alias,
+            self.min_hex_z,
+            alias,
+            self.max_hex_z
         )
     }
 }

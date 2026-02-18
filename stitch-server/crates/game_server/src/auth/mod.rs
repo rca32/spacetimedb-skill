@@ -1,6 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
+use crate::services::hex_coords::{HexCoord, DEFAULT_WORLD_DIMENSION_ID};
 use crate::services::projection_views;
 use crate::tables::account::account;
 use crate::tables::housing::dimension_desc;
@@ -80,11 +80,12 @@ pub(crate) fn ensure_transform_exists(ctx: &ReducerContext, region_id: u64, dime
         .find(ctx.sender)
         .is_none()
     {
+        let spawn = resolve_spawn_position(ctx, region_id, dimension_id);
         ctx.db.transform_state().insert(TransformState {
             entity_id: ctx.sender,
             region_id,
             dimension_id,
-            position: vec![0.0, 0.0, 0.0],
+            position: spawn,
             rotation: vec![0.0, 0.0, 0.0, 1.0],
             updated_at: ctx.timestamp,
         });
@@ -129,15 +130,22 @@ pub fn set_active_dimension(ctx: &ReducerContext, dimension_id: u32) -> Result<(
     }
 
     if let Some(mut tf) = ctx.db.transform_state().entity_id().find(ctx.sender) {
+        let dimension_changed = tf.dimension_id != dimension_id;
+        let region_changed = tf.region_id != session.region_id;
         tf.dimension_id = dimension_id;
+        if region_changed || dimension_changed {
+            tf.position = resolve_spawn_position(ctx, session.region_id, dimension_id);
+        }
+        tf.region_id = session.region_id;
         tf.updated_at = ctx.timestamp;
         ctx.db.transform_state().entity_id().update(tf);
     } else {
+        let spawn = resolve_spawn_position(ctx, session.region_id, dimension_id);
         ctx.db.transform_state().insert(TransformState {
             entity_id: ctx.sender,
             region_id: session.region_id,
             dimension_id,
-            position: vec![0.0, 0.0, 0.0],
+            position: spawn,
             rotation: vec![0.0, 0.0, 0.0, 1.0],
             updated_at: ctx.timestamp,
         });
@@ -145,4 +153,22 @@ pub fn set_active_dimension(ctx: &ReducerContext, dimension_id: u32) -> Result<(
 
     projection_views::sync_player_session_view(ctx, ctx.sender);
     Ok(())
+}
+
+fn resolve_spawn_position(ctx: &ReducerContext, region_id: u64, dimension_id: u32) -> Vec<f32> {
+    let nav = crate::services::nav::build_nav_grid(ctx, region_id, dimension_id);
+    let origin = HexCoord::new(0, 0, dimension_id);
+    if nav.is_walkable(origin).is_ok() {
+        return vec![0.5, 0.0, 0.5];
+    }
+
+    for radius in 1..=48 {
+        for coord in HexCoord::ring(origin, radius) {
+            if nav.is_walkable(coord).is_ok() {
+                return vec![coord.q as f32 + 0.5, 0.0, coord.r as f32 + 0.5];
+            }
+        }
+    }
+
+    vec![0.5, 0.0, 0.5]
 }

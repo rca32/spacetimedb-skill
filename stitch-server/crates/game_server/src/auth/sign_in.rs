@@ -27,6 +27,13 @@ pub fn sign_in(ctx: &ReducerContext, region_id: u64) -> Result<(), String> {
         return Err("account blocked".to_string());
     }
 
+    crate::worldgen::ensure_world_generated_in_dimension(
+        ctx,
+        region_id,
+        DEFAULT_WORLD_DIMENSION_ID,
+    )?;
+    projection_views::reconcile_npc_state_stream(ctx);
+
     let next_state = SessionState {
         identity: ctx.sender,
         region_id,

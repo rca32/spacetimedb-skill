@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@orillusion/core": "0.8.4",
+    "@orillusion/geometry": "0.2.7",
     "@orillusion/particle": "0.1.6",
     "@orillusion/physics": "0.3.4",
     "@orillusion/stats": "0.2.6",

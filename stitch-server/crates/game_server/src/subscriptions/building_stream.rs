@@ -10,7 +10,7 @@ pub fn building_state_stream_query(filter: &AoiFilter) -> String {
 
 pub fn claim_state_stream_query(filter: &AoiFilter) -> String {
     format!(
-        "SELECT * FROM claim_state c WHERE {} AND c.center_x BETWEEN {} AND {} AND c.center_z BETWEEN {} AND {}",
+        "SELECT * FROM claim_state c WHERE {} AND c.center_x >= {} AND c.center_x <= {} AND c.center_z >= {} AND c.center_z <= {}",
         filter.region_dimension_clause("c"),
         filter.min_hex_x,
         filter.max_hex_x,
@@ -30,8 +30,10 @@ mod tests {
         assert!(query.contains("FROM building_state"));
         assert!(query.contains("b.region_id = 10"));
         assert!(query.contains("b.dimension_id = 2"));
-        assert!(query.contains("b.hex_x BETWEEN -5 AND 5"));
-        assert!(query.contains("b.hex_z BETWEEN -7 AND 7"));
+        assert!(query.contains("b.hex_x >= -5"));
+        assert!(query.contains("b.hex_x <= 5"));
+        assert!(query.contains("b.hex_z >= -7"));
+        assert!(query.contains("b.hex_z <= 7"));
     }
 
     #[test]
@@ -41,7 +43,9 @@ mod tests {
         assert!(query.contains("FROM claim_state"));
         assert!(query.contains("c.region_id = 3"));
         assert!(query.contains("c.dimension_id = 4"));
-        assert!(query.contains("c.center_x BETWEEN -8 AND 8"));
-        assert!(query.contains("c.center_z BETWEEN -9 AND 9"));
+        assert!(query.contains("c.center_x >= -8"));
+        assert!(query.contains("c.center_x <= 8"));
+        assert!(query.contains("c.center_z >= -9"));
+        assert!(query.contains("c.center_z <= 9"));
     }
 }
