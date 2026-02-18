@@ -16,11 +16,11 @@ export class CharacterMotorComponent extends ComponentBase {
   private rigidbody: Rigidbody | null = null
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
-    this.keys.add(event.key.toLowerCase())
+    this.keys.add(event.code)
   }
 
   private readonly onKeyUp = (event: KeyboardEvent) => {
-    this.keys.delete(event.key.toLowerCase())
+    this.keys.delete(event.code)
   }
 
   public start(): void {
@@ -43,7 +43,8 @@ export class CharacterMotorComponent extends ComponentBase {
   }
 
   public onUpdate(): void {
-    const dtSeconds = Math.min(Time.delta * 0.001, 0.05)
+    const dtRaw = Time.delta * 0.001
+    const dtSeconds = Number.isFinite(dtRaw) && dtRaw > 0 ? Math.min(dtRaw, 0.05) : 1 / 60
     const intent = this.readIntentSnapshot()
 
     if (intent.inputX === 0 && intent.inputZ === 0) {
@@ -57,17 +58,19 @@ export class CharacterMotorComponent extends ComponentBase {
   }
 
   public readIntentSnapshot(): MotionIntentSnapshot {
-    const inputX = (this.keys.has('d') ? 1 : 0) - (this.keys.has('a') ? 1 : 0)
-    const inputZ = (this.keys.has('s') ? 1 : 0) - (this.keys.has('w') ? 1 : 0)
+    const inputX = (this.keys.has('KeyD') || this.keys.has('ArrowRight') ? 1 : 0)
+      - (this.keys.has('KeyA') || this.keys.has('ArrowLeft') ? 1 : 0)
+    const inputZ = (this.keys.has('KeyS') || this.keys.has('ArrowDown') ? 1 : 0)
+      - (this.keys.has('KeyW') || this.keys.has('ArrowUp') ? 1 : 0)
 
-    const isRunning = this.keys.has('shift')
+    const isRunning = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')
     const requestedSpeed = isRunning ? this.runSpeed : this.walkSpeed
 
     return {
       inputX,
       inputZ,
       requestedSpeed,
-      jump: this.keys.has(' '),
+      jump: this.keys.has('Space'),
     }
   }
 

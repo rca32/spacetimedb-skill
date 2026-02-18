@@ -42,6 +42,8 @@ export class OrillusionClientRuntime {
   private baselineInstalledForIdentity: string | null = null
   private authBootstrappedForIdentity: string | null = null
   private readonly seenCombatHitIds = new Set<string>()
+  private lastMoveDispatchOk = true
+  private lastV2DispatchOk = false
 
   constructor(
     private readonly root: HTMLElement,
@@ -116,15 +118,26 @@ export class OrillusionClientRuntime {
     const position = motor.readPosition()
 
     const intent = motor.readIntentSnapshot()
-    if (this.config.useV2Streams) {
-      this.net.dispatchReducer('sync_client_frame', {
+
+    const moveOk = this.net.dispatchReducer('move_to', {
+      requestId: `${identityHex}:${this.frameNo}`,
+      regionId: this.config.defaultRegionId,
+      clientTsMs: BigInt(Date.now()),
+      x: position.x,
+      y: position.y,
+      z: position.z,
+    })
+    this.lastMoveDispatchOk = moveOk
+
+    if (this.useV2Streams) {
+      const frameOk = this.net.dispatchReducer('sync_client_frame', {
         frameNo: BigInt(this.frameNo),
         regionId: this.config.defaultRegionId,
         dimensionId: this.config.defaultDimensionId,
         clientTimeMs: BigInt(Date.now()),
       })
 
-      this.net.dispatchReducer('submit_motion_intent', {
+      const intentOk = this.net.dispatchReducer('submit_motion_intent', {
         intentId: `${identityHex}:${this.frameNo}`,
         regionId: this.config.defaultRegionId,
         dimensionId: this.config.defaultDimensionId,
@@ -134,15 +147,9 @@ export class OrillusionClientRuntime {
         requestedSpeed: intent.requestedSpeed,
         jump: intent.jump,
       })
+      this.lastV2DispatchOk = frameOk && intentOk
     } else {
-      this.net.dispatchReducer('move_to', {
-        requestId: `${identityHex}:${this.frameNo}`,
-        regionId: this.config.defaultRegionId,
-        clientTsMs: BigInt(Date.now()),
-        x: position.x,
-        y: position.y,
-        z: position.z,
-      })
+      this.lastV2DispatchOk = false
     }
 
     if (Math.abs(intent.inputX) + Math.abs(intent.inputZ) > 0) {
@@ -232,7 +239,7 @@ export class OrillusionClientRuntime {
       return
     }
 
-    if (this.authBootstrappedForIdentity !== identityHex && !this.useV2Streams) {
+    if (this.authBootstrappedForIdentity !== identityHex) {
       this.authBootstrappedForIdentity = identityHex
       this.net.dispatchReducer('account_bootstrap', { displayName: this.config.displayName })
       this.net.dispatchReducer('sign_in', { regionId: this.config.defaultRegionId })
@@ -356,8 +363,9 @@ export class OrillusionClientRuntime {
       `<div>profile: ${this.config.postFxProfile}</div>`,
       `<div>streams: ${this.useV2Streams ? 'v2' : 'legacy'} (pref=${this.config.useV2Streams ? 'v2' : 'legacy'})</div>`,
       `<div>terrain/npc/res/player/v2: ${streamStats ? `${streamStats.terrain}/${streamStats.npc}/${streamStats.resource}/${streamStats.players}/${streamStats.v2}` : '-'}</div>`,
+      `<div>dispatch move/v2: ${this.lastMoveDispatchOk ? 'ok' : 'fail'}/${this.lastV2DispatchOk ? 'ok' : '-'}</div>`,
       `<div>pos: ${position ? `${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}` : '-'}</div>`,
-      '<div>move: WASD / run: Shift / aim: RMB</div>',
+      '<div>move: WASD / run: Shift / look: LMB,RMB drag / zoom: wheel</div>',
     ].join('')
   }
 
