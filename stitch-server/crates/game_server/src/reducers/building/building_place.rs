@@ -93,6 +93,9 @@ fn building_place_with_dimension(
     if session.region_id != region_id {
         return Err("region mismatch".to_string());
     }
+    if session.dimension_id != dimension_id {
+        return Err("dimension mismatch".to_string());
+    }
 
     let transform = ctx
         .db
@@ -117,7 +120,7 @@ fn building_place_with_dimension(
     }
 
     if dimension_id == DEFAULT_WORLD_DIMENSION_ID {
-        if let Some(claim) = claim_covering(ctx, region_id, hex_x, hex_z) {
+        if let Some(claim) = claim_covering(ctx, region_id, dimension_id, hex_x, hex_z) {
             if claim.owner_identity != ctx.sender
                 && !permissions::has_permission(ctx, 1, claim.claim_id, permissions::PERM_BUILD)
             {
@@ -169,11 +172,12 @@ fn building_place_with_dimension(
 fn claim_covering(
     ctx: &ReducerContext,
     region_id: u64,
+    dimension_id: u32,
     x: i32,
     z: i32,
 ) -> Option<crate::tables::ClaimState> {
     ctx.db.claim_state().iter().find(|c| {
-        if c.region_id != region_id {
+        if c.region_id != region_id || c.dimension_id != dimension_id {
             return false;
         }
         let dx = c.center_x - x;

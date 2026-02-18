@@ -1,6 +1,5 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
 use crate::services::nav;
 use crate::services::projection_views;
 use crate::tables::movement::movement_actor_state;
@@ -103,6 +102,7 @@ pub fn move_to(
     ctx.db.session_state().identity().update(SessionState {
         identity: session.identity,
         region_id: session.region_id,
+        dimension_id: session.dimension_id,
         last_active_at: ctx.timestamp,
     });
 
@@ -141,7 +141,7 @@ pub fn move_to(
     if let Err(reason) = nav::validate_segment_positions(
         ctx,
         region_id,
-        DEFAULT_WORLD_DIMENSION_ID,
+        session.dimension_id,
         &current_position,
         &next_position,
     ) {
@@ -170,6 +170,7 @@ pub fn move_to(
     let next_transform = TransformState {
         entity_id: ctx.sender,
         region_id,
+        dimension_id: session.dimension_id,
         position: next_position.clone(),
         rotation: vec![0.0, 0.0, 0.0, 1.0],
         updated_at: ctx.timestamp,

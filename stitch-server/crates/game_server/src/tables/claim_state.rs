@@ -7,6 +7,7 @@ pub struct ClaimState {
     pub owner_identity: Identity,
     pub totem_building_id: u64,
     pub region_id: u64,
+    pub dimension_id: u32,
     pub center_x: i32,
     pub center_z: i32,
     pub radius: u32,

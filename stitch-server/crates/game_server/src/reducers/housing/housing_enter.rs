@@ -1,9 +1,12 @@
 use spacetimedb::{ReducerContext, Table};
 
+use crate::services::projection_views;
 use crate::services::permissions;
-use crate::tables::housing::{housing_state, rent_state};
+use crate::tables::housing::{dimension_desc, housing_state, rent_state};
+use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
-use crate::tables::TransformState;
+use crate::tables::{SessionState, TransformState};
+use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
 
 #[spacetimedb::reducer]
 pub fn housing_enter(
@@ -45,9 +48,18 @@ pub fn housing_enter(
         }
     }
 
+    let target_dimension_id = ctx
+        .db
+        .dimension_desc()
+        .iter()
+        .find(|row| row.network_entity_id == housing.network_entity_id)
+        .map(|row| row.dimension_id)
+        .unwrap_or(DEFAULT_WORLD_DIMENSION_ID);
+
     let next = TransformState {
         entity_id: ctx.sender,
         region_id: housing.region_index as u64,
+        dimension_id: target_dimension_id,
         position: vec![portal_x, portal_y, portal_z],
         rotation: vec![0.0, 0.0, 0.0, 1.0],
         updated_at: ctx.timestamp,
@@ -57,6 +69,19 @@ pub fn housing_enter(
         ctx.db.transform_state().entity_id().update(next);
     } else {
         ctx.db.transform_state().insert(next);
+    }
+
+    if let Some(mut session) = ctx.db.session_state().identity().find(ctx.sender) {
+        session.region_id = housing.region_index as u64;
+        session.dimension_id = target_dimension_id;
+        session.last_active_at = ctx.timestamp;
+        ctx.db.session_state().identity().update(SessionState {
+            identity: session.identity,
+            region_id: session.region_id,
+            dimension_id: session.dimension_id,
+            last_active_at: session.last_active_at,
+        });
+        projection_views::sync_player_session_view(ctx, ctx.sender);
     }
 
     Ok(())

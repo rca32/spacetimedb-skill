@@ -43,6 +43,9 @@ pub fn attack_start(
     if attacker_session.region_id != target_session.region_id {
         return Err("target is not in same region".to_string());
     }
+    if attacker_session.dimension_id != target_session.dimension_id {
+        return Err("target is not in same dimension".to_string());
+    }
 
     let attacker_tf = ctx
         .db
@@ -56,6 +59,21 @@ pub fn attack_start(
         .entity_id()
         .find(target_identity)
         .ok_or("target transform missing".to_string())?;
+    if attacker_tf.region_id != attacker_session.region_id
+        || attacker_tf.dimension_id != attacker_session.dimension_id
+    {
+        return Err("attacker transform/session mismatch".to_string());
+    }
+    if target_tf.region_id != target_session.region_id
+        || target_tf.dimension_id != target_session.dimension_id
+    {
+        return Err("target transform/session mismatch".to_string());
+    }
+    if attacker_tf.region_id != target_tf.region_id
+        || attacker_tf.dimension_id != target_tf.dimension_id
+    {
+        return Err("target is not in same region/dimension".to_string());
+    }
 
     let dx = attacker_tf.position[0] - target_tf.position[0];
     let dz = attacker_tf.position[2] - target_tf.position[2];

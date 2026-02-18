@@ -393,6 +393,7 @@ fn ensure_seeded_npcs(ctx: &ReducerContext, now_us: u64) {
         let next_action_ts = now_us + npc_next_delay(schedule_kind);
         if let Some(mut npc) = ctx.db.npc_state().npc_id().find(seed.npc_id) {
             npc.region_id = STARTER_REGION_ID;
+            npc.dimension_id = DEFAULT_WORLD_DIMENSION_ID;
             npc.hex_x = seed.hex_x;
             npc.hex_z = seed.hex_z;
             npc.dest_hex_x = seed.hex_x;
@@ -406,6 +407,7 @@ fn ensure_seeded_npcs(ctx: &ReducerContext, now_us: u64) {
             ctx.db.npc_state().insert(NpcState {
                 npc_id: seed.npc_id,
                 region_id: STARTER_REGION_ID,
+                dimension_id: DEFAULT_WORLD_DIMENSION_ID,
                 hex_x: seed.hex_x,
                 hex_z: seed.hex_z,
                 dest_hex_x: seed.hex_x,
@@ -486,8 +488,8 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
         } else {
             let (target_hex_x, target_hex_z) =
                 compute_npc_destination(npc.npc_id, npc.hex_x, npc.hex_z, action_type, npc.mood);
-            let current = HexCoord::new(npc.hex_x, npc.hex_z, DEFAULT_WORLD_DIMENSION_ID);
-            let target = HexCoord::new(target_hex_x, target_hex_z, DEFAULT_WORLD_DIMENSION_ID);
+            let current = HexCoord::new(npc.hex_x, npc.hex_z, npc.dimension_id);
+            let target = HexCoord::new(target_hex_x, target_hex_z, npc.dimension_id);
             let next_step = match pathfinding::request_npc_step(
                 ctx,
                 npc.npc_id,

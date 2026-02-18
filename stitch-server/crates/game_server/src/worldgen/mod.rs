@@ -131,6 +131,18 @@ pub fn ensure_world_generated(
     ctx: &ReducerContext,
     region_id: u64,
 ) -> Result<GenerateSummary, String> {
+    ensure_world_generated_in_dimension(ctx, region_id, DEFAULT_WORLD_DIMENSION_ID)
+}
+
+pub fn ensure_world_generated_in_dimension(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+) -> Result<GenerateSummary, String> {
+    if dimension_id == 0 {
+        return Err("dimension_id must be > 0".to_string());
+    }
+
     ensure_default_worldgen_config(ctx);
     let params = load_worldgen_params(ctx);
 
@@ -142,18 +154,18 @@ pub fn ensure_world_generated(
         .db
         .terrain_chunk()
         .iter()
-        .any(|chunk| chunk.region_id == region_id);
+        .any(|chunk| chunk.region_id == region_id && chunk.dimension_id == dimension_id);
 
     if has_chunks && !params.regenerate_on_start {
-        let stream_backfilled = backfill_chunk_stream_from_chunks(ctx, region_id);
-        let payload_backfilled = backfill_chunk_payload_from_chunks(ctx, region_id);
+        let stream_backfilled = backfill_chunk_stream_from_chunks(ctx, region_id, dimension_id);
+        let payload_backfilled = backfill_chunk_payload_from_chunks(ctx, region_id, dimension_id);
         return Ok(GenerateSummary {
             chunk_count: stream_backfilled.saturating_add(payload_backfilled),
             resource_count: 0,
         });
     }
 
-    generate_region(ctx, region_id, &params, true)
+    generate_region_in_dimension(ctx, region_id, dimension_id, &params, true)
 }
 
 pub fn generate_region(
@@ -162,11 +174,25 @@ pub fn generate_region(
     params: &WorldGenParams,
     overwrite: bool,
 ) -> Result<GenerateSummary, String> {
+    generate_region_in_dimension(ctx, region_id, DEFAULT_WORLD_DIMENSION_ID, params, overwrite)
+}
+
+pub fn generate_region_in_dimension(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+    params: &WorldGenParams,
+    overwrite: bool,
+) -> Result<GenerateSummary, String> {
+    if dimension_id == 0 {
+        return Err("dimension_id must be > 0".to_string());
+    }
+
     validate_params(params)?;
     ensure_region_exists(ctx, region_id);
 
     if overwrite {
-        delete_region_world_data(ctx, region_id);
+        delete_region_world_data(ctx, region_id, dimension_id);
     }
 
     let config = load_generation_config(ctx, params)?;
@@ -180,7 +206,15 @@ pub fn generate_region(
         for x_off in 0..config.params.size_x_chunks {
             let chunk_x = x_start + x_off;
             let chunk_y = z_start + z_off;
-            let build = build_chunk(ctx, region_id, chunk_x, chunk_y, chunk_size, &config)?;
+            let build = build_chunk(
+                ctx,
+                region_id,
+                dimension_id,
+                chunk_x,
+                chunk_y,
+                chunk_size,
+                &config,
+            )?;
             upsert_chunk(ctx, build.chunk);
             upsert_chunk_stream(ctx, build.chunk_stream);
             upsert_chunk_payload(ctx, build.chunk_payload);
@@ -203,6 +237,29 @@ pub fn regenerate_chunk_range(
     from_chunk_y: i32,
     to_chunk_y: i32,
 ) -> Result<GenerateSummary, String> {
+    regenerate_chunk_range_in_dimension(
+        ctx,
+        region_id,
+        DEFAULT_WORLD_DIMENSION_ID,
+        from_chunk_x,
+        to_chunk_x,
+        from_chunk_y,
+        to_chunk_y,
+    )
+}
+
+pub fn regenerate_chunk_range_in_dimension(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+    from_chunk_x: i32,
+    to_chunk_x: i32,
+    from_chunk_y: i32,
+    to_chunk_y: i32,
+) -> Result<GenerateSummary, String> {
+    if dimension_id == 0 {
+        return Err("dimension_id must be > 0".to_string());
+    }
     if from_chunk_x > to_chunk_x || from_chunk_y > to_chunk_y {
         return Err("invalid chunk range: min must be <= max".to_string());
     }
@@ -215,6 +272,7 @@ pub fn regenerate_chunk_range(
     delete_chunk_range_world_data(
         ctx,
         region_id,
+        dimension_id,
         from_chunk_x,
         to_chunk_x,
         from_chunk_y,
@@ -227,7 +285,15 @@ pub fn regenerate_chunk_range(
 
     for chunk_y in from_chunk_y..=to_chunk_y {
         for chunk_x in from_chunk_x..=to_chunk_x {
-            let build = build_chunk(ctx, region_id, chunk_x, chunk_y, chunk_size, &config)?;
+            let build = build_chunk(
+                ctx,
+                region_id,
+                dimension_id,
+                chunk_x,
+                chunk_y,
+                chunk_size,
+                &config,
+            )?;
             upsert_chunk(ctx, build.chunk);
             upsert_chunk_stream(ctx, build.chunk_stream);
             upsert_chunk_payload(ctx, build.chunk_payload);
@@ -298,12 +364,12 @@ fn ensure_region_exists(ctx: &ReducerContext, region_id: u64) {
     });
 }
 
-fn delete_region_world_data(ctx: &ReducerContext, region_id: u64) {
+fn delete_region_world_data(ctx: &ReducerContext, region_id: u64, dimension_id: u32) {
     let terrain_keys: Vec<String> = ctx
         .db
         .terrain_chunk()
         .iter()
-        .filter(|chunk| chunk.region_id == region_id)
+        .filter(|chunk| chunk.region_id == region_id && chunk.dimension_id == dimension_id)
         .map(|chunk| chunk.chunk_key)
         .collect();
     for key in terrain_keys {
@@ -314,7 +380,7 @@ fn delete_region_world_data(ctx: &ReducerContext, region_id: u64) {
         .db
         .terrain_chunk_stream()
         .iter()
-        .filter(|chunk| chunk.region_id == region_id)
+        .filter(|chunk| chunk.region_id == region_id && chunk.dimension_id == dimension_id)
         .map(|chunk| chunk.chunk_key)
         .collect();
     for key in stream_keys {
@@ -325,7 +391,7 @@ fn delete_region_world_data(ctx: &ReducerContext, region_id: u64) {
         .db
         .terrain_chunk_payload()
         .iter()
-        .filter(|chunk| chunk.region_id == region_id)
+        .filter(|chunk| chunk.region_id == region_id && chunk.dimension_id == dimension_id)
         .map(|chunk| chunk.chunk_key)
         .collect();
     for key in payload_keys {
@@ -336,7 +402,7 @@ fn delete_region_world_data(ctx: &ReducerContext, region_id: u64) {
         .db
         .resource_node()
         .iter()
-        .filter(|node| node.region_id == region_id)
+        .filter(|node| node.region_id == region_id && node.dimension_id == dimension_id)
         .map(|node| node.entity_id)
         .collect();
     for entity_id in resource_ids {
@@ -347,6 +413,7 @@ fn delete_region_world_data(ctx: &ReducerContext, region_id: u64) {
 fn delete_chunk_range_world_data(
     ctx: &ReducerContext,
     region_id: u64,
+    dimension_id: u32,
     from_chunk_x: i32,
     to_chunk_x: i32,
     from_chunk_y: i32,
@@ -358,6 +425,7 @@ fn delete_chunk_range_world_data(
         .iter()
         .filter(|chunk| {
             chunk.region_id == region_id
+                && chunk.dimension_id == dimension_id
                 && chunk.chunk_x >= from_chunk_x
                 && chunk.chunk_x <= to_chunk_x
                 && chunk.chunk_y >= from_chunk_y
@@ -375,6 +443,7 @@ fn delete_chunk_range_world_data(
         .iter()
         .filter(|chunk| {
             chunk.region_id == region_id
+                && chunk.dimension_id == dimension_id
                 && chunk.chunk_x >= from_chunk_x
                 && chunk.chunk_x <= to_chunk_x
                 && chunk.chunk_y >= from_chunk_y
@@ -392,6 +461,7 @@ fn delete_chunk_range_world_data(
         .iter()
         .filter(|chunk| {
             chunk.region_id == region_id
+                && chunk.dimension_id == dimension_id
                 && chunk.chunk_x >= from_chunk_x
                 && chunk.chunk_x <= to_chunk_x
                 && chunk.chunk_y >= from_chunk_y
@@ -409,6 +479,7 @@ fn delete_chunk_range_world_data(
         .iter()
         .filter(|node| {
             node.region_id == region_id
+                && node.dimension_id == dimension_id
                 && node.chunk_x >= from_chunk_x
                 && node.chunk_x <= to_chunk_x
                 && node.chunk_y >= from_chunk_y
@@ -460,12 +531,16 @@ fn upsert_chunk_payload(ctx: &ReducerContext, chunk: TerrainChunkPayload) {
     }
 }
 
-fn backfill_chunk_stream_from_chunks(ctx: &ReducerContext, region_id: u64) -> u32 {
+fn backfill_chunk_stream_from_chunks(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+) -> u32 {
     let chunks: Vec<TerrainChunk> = ctx
         .db
         .terrain_chunk()
         .iter()
-        .filter(|chunk| chunk.region_id == region_id)
+        .filter(|chunk| chunk.region_id == region_id && chunk.dimension_id == dimension_id)
         .collect();
 
     let mut inserted = 0_u32;
@@ -499,12 +574,16 @@ fn backfill_chunk_stream_from_chunks(ctx: &ReducerContext, region_id: u64) -> u3
     inserted
 }
 
-fn backfill_chunk_payload_from_chunks(ctx: &ReducerContext, region_id: u64) -> u32 {
+fn backfill_chunk_payload_from_chunks(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+) -> u32 {
     let chunks: Vec<TerrainChunk> = ctx
         .db
         .terrain_chunk()
         .iter()
-        .filter(|chunk| chunk.region_id == region_id)
+        .filter(|chunk| chunk.region_id == region_id && chunk.dimension_id == dimension_id)
         .collect();
 
     let mut inserted = 0_u32;
@@ -619,6 +698,7 @@ fn load_generation_config(
 fn build_chunk(
     ctx: &ReducerContext,
     region_id: u64,
+    dimension_id: u32,
     chunk_x: i32,
     chunk_y: i32,
     chunk_size: i32,
@@ -693,9 +773,9 @@ fn build_chunk(
         encode_cell_payload_i16_to_bytes(&cell_payload, CELL_PAYLOAD_VERSION_V1);
 
     let chunk = TerrainChunk {
-        chunk_key: chunk_key(region_id, DEFAULT_WORLD_DIMENSION_ID, chunk_x, chunk_y),
+        chunk_key: chunk_key(region_id, dimension_id, chunk_x, chunk_y),
         region_id,
-        dimension_id: DEFAULT_WORLD_DIMENSION_ID,
+        dimension_id,
         chunk_x,
         chunk_y,
         biome_id,
@@ -735,7 +815,7 @@ fn build_chunk(
     let resources = build_chunk_resources(
         ctx,
         region_id,
-        DEFAULT_WORLD_DIMENSION_ID,
+        dimension_id,
         chunk_x,
         chunk_y,
         &cells,
@@ -831,6 +911,7 @@ fn build_chunk_resources(
             let entity_id = resource_entity_id(
                 config.params.seed,
                 region_id,
+                dimension_id,
                 tcoord.hex_x,
                 tcoord.hex_z,
                 resource_def.resource_type,
@@ -983,6 +1064,7 @@ fn resource_cell_allowed(def: &ResourceGenDef, cell: TerrainCellSample, water_de
 fn resource_entity_id(
     seed: u64,
     region_id: u64,
+    dimension_id: u32,
     hex_x: i32,
     hex_z: i32,
     resource_type: u8,
@@ -990,7 +1072,7 @@ fn resource_entity_id(
     member_index: u8,
 ) -> u64 {
     let h = hash_u64(
-        seed ^ region_id.rotate_left(11),
+        seed ^ region_id.rotate_left(11) ^ u64::from(dimension_id).rotate_left(29),
         i64::from(hex_x),
         i64::from(hex_z),
         i64::from(clump_id),

@@ -4,6 +4,7 @@ use crate::services::permissions;
 use crate::tables::building_state::building_state;
 use crate::tables::claim_state::claim_state;
 use crate::tables::permission_state::permission_state;
+use crate::tables::session_state::session_state;
 use crate::tables::{ClaimState, PermissionState};
 
 #[spacetimedb::reducer]
@@ -27,6 +28,12 @@ pub fn claim_totem_place(
         .entity_id()
         .find(totem_building_id)
         .ok_or("totem building not found".to_string())?;
+    let session = ctx
+        .db
+        .session_state()
+        .identity()
+        .find(ctx.sender)
+        .ok_or("active session required".to_string())?;
 
     if building.owner_identity != ctx.sender {
         return Err("not owner of totem building".to_string());
@@ -34,13 +41,16 @@ pub fn claim_totem_place(
     if building.state != 1 {
         return Err("totem building must be complete".to_string());
     }
+    if session.region_id != building.region_id || session.dimension_id != building.dimension_id {
+        return Err("totem building is outside current session region/dimension".to_string());
+    }
 
     // Minimum distance from other claims.
     for c in ctx
         .db
         .claim_state()
         .iter()
-        .filter(|c| c.region_id == building.region_id)
+        .filter(|c| c.region_id == building.region_id && c.dimension_id == building.dimension_id)
     {
         let dx = c.center_x - building.hex_x;
         let dz = c.center_z - building.hex_z;
@@ -54,6 +64,7 @@ pub fn claim_totem_place(
         owner_identity: ctx.sender,
         totem_building_id,
         region_id: building.region_id,
+        dimension_id: building.dimension_id,
         center_x: building.hex_x,
         center_z: building.hex_z,
         radius,

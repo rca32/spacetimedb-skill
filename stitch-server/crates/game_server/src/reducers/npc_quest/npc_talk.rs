@@ -27,8 +27,17 @@ pub fn npc_talk(ctx: &ReducerContext, npc_id: u64, request_id: String) -> Result
         .entity_id()
         .find(ctx.sender)
         .ok_or("caller transform missing".to_string())?;
+    if caller_tf.region_id != session.region_id || caller_tf.dimension_id != session.dimension_id {
+        return Err("caller transform/session mismatch".to_string());
+    }
 
-    let npc = ensure_npc(ctx, npc_id, session.region_id, &caller_tf.position);
+    let npc = ensure_npc(
+        ctx,
+        npc_id,
+        session.region_id,
+        session.dimension_id,
+        &caller_tf.position,
+    )?;
     let caller_hex_x = caller_tf.position.first().copied().unwrap_or(0.0).round() as i32;
     let caller_hex_z = caller_tf.position.get(2).copied().unwrap_or(0.0).round() as i32;
     let dx = caller_hex_x - npc.hex_x;
@@ -67,10 +76,14 @@ pub(crate) fn ensure_npc(
     ctx: &ReducerContext,
     npc_id: u64,
     region_id: u64,
+    dimension_id: u32,
     fallback_pos: &[f32],
-) -> NpcState {
+) -> Result<NpcState, String> {
     if let Some(npc) = ctx.db.npc_state().npc_id().find(npc_id) {
-        return npc;
+        if npc.region_id != region_id || npc.dimension_id != dimension_id {
+            return Err("npc is in different region/dimension".to_string());
+        }
+        return Ok(npc);
     }
 
     let hex_x = fallback_pos.first().copied().unwrap_or(0.0).round() as i32;
@@ -80,6 +93,7 @@ pub(crate) fn ensure_npc(
     ctx.db.npc_state().insert(NpcState {
         npc_id,
         region_id,
+        dimension_id,
         hex_x,
         hex_z,
         dest_hex_x: hex_x,
@@ -89,9 +103,10 @@ pub(crate) fn ensure_npc(
         schedule_kind: 1,
         next_action_ts: now,
     });
-    NpcState {
+    Ok(NpcState {
         npc_id,
         region_id,
+        dimension_id,
         hex_x,
         hex_z,
         dest_hex_x: hex_x,
@@ -100,5 +115,5 @@ pub(crate) fn ensure_npc(
         mood: 0,
         schedule_kind: 1,
         next_action_ts: now,
-    }
+    })
 }

@@ -47,6 +47,9 @@ pub fn trade_session_open(
     if my_session.region_id != partner_session.region_id {
         return Err("partner is in different region".to_string());
     }
+    if my_session.dimension_id != partner_session.dimension_id {
+        return Err("partner is in different dimension".to_string());
+    }
 
     let my_tf = ctx
         .db
@@ -60,6 +63,17 @@ pub fn trade_session_open(
         .entity_id()
         .find(partner_identity)
         .ok_or("partner transform missing".to_string())?;
+    if my_tf.region_id != my_session.region_id || my_tf.dimension_id != my_session.dimension_id {
+        return Err("initiator transform/session mismatch".to_string());
+    }
+    if partner_tf.region_id != partner_session.region_id
+        || partner_tf.dimension_id != partner_session.dimension_id
+    {
+        return Err("partner transform/session mismatch".to_string());
+    }
+    if my_tf.region_id != partner_tf.region_id || my_tf.dimension_id != partner_tf.dimension_id {
+        return Err("partner is not in same region/dimension".to_string());
+    }
 
     let dx = my_tf.position[0] - partner_tf.position[0];
     let dz = my_tf.position[2] - partner_tf.position[2];

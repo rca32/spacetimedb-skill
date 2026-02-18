@@ -8,10 +8,14 @@ pub fn building_state_stream_query(filter: &AoiFilter) -> String {
     )
 }
 
-pub fn claim_state_stream_query(region_id: u64) -> String {
+pub fn claim_state_stream_query(filter: &AoiFilter) -> String {
     format!(
-        "SELECT * FROM claim_state c WHERE c.region_id = {}",
-        region_id
+        "SELECT * FROM claim_state c WHERE {} AND c.center_x BETWEEN {} AND {} AND c.center_z BETWEEN {} AND {}",
+        filter.region_dimension_clause("c"),
+        filter.min_hex_x,
+        filter.max_hex_x,
+        filter.min_hex_z,
+        filter.max_hex_z
     )
 }
 
@@ -31,9 +35,13 @@ mod tests {
     }
 
     #[test]
-    fn test_claim_state_stream_query_filters_region() {
-        let query = claim_state_stream_query(3);
+    fn test_claim_state_stream_query_filters_region_dimension() {
+        let filter = AoiFilter::new(3, 4, -8, 8, -9, 9).expect("valid filter should construct");
+        let query = claim_state_stream_query(&filter);
         assert!(query.contains("FROM claim_state"));
         assert!(query.contains("c.region_id = 3"));
+        assert!(query.contains("c.dimension_id = 4"));
+        assert!(query.contains("c.center_x BETWEEN -8 AND 8"));
+        assert!(query.contains("c.center_z BETWEEN -9 AND 9"));
     }
 }

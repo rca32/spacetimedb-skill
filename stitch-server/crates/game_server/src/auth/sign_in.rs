@@ -1,5 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
+use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
 use crate::services::projection_views;
 use crate::tables::account::account;
 use crate::tables::session_state::session_state;
@@ -29,6 +30,7 @@ pub fn sign_in(ctx: &ReducerContext, region_id: u64) -> Result<(), String> {
     let next_state = SessionState {
         identity: ctx.sender,
         region_id,
+        dimension_id: DEFAULT_WORLD_DIMENSION_ID,
         last_active_at: ctx.timestamp,
     };
 
@@ -46,7 +48,7 @@ pub fn sign_in(ctx: &ReducerContext, region_id: u64) -> Result<(), String> {
     );
 
     super::ensure_player_state_exists(ctx, "new-player".to_string());
-    super::ensure_transform_exists(ctx, region_id);
+    super::ensure_transform_exists(ctx, region_id, DEFAULT_WORLD_DIMENSION_ID);
     projection_views::sync_player_session_view(ctx, ctx.sender);
     log::info!(
         "sign_in session_view_synced: identity={} region_id={}",

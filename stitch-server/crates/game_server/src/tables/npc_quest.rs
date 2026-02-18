@@ -5,6 +5,7 @@ pub struct NpcState {
     #[primary_key]
     pub npc_id: u64,
     pub region_id: u64,
+    pub dimension_id: u32,
     pub hex_x: i32,
     pub hex_z: i32,
     pub dest_hex_x: i32,

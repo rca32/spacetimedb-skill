@@ -184,6 +184,7 @@ pub fn sync_player_session_view(ctx: &ReducerContext, identity: Identity) {
         let next = PlayerSessionView {
             identity,
             region_id: session.region_id,
+            dimension_id: session.dimension_id,
             last_active_at: session.last_active_at,
         };
         if exists {

@@ -1,10 +1,14 @@
 use spacetimedb::{ReducerContext, Table};
 
+use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
+use crate::services::projection_views;
+use crate::tables::housing::dimension_desc;
 use crate::tables::account::account;
 use crate::tables::player_progression::{character_stats, resource_state};
 use crate::tables::player_state::player_state;
+use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
-use crate::tables::{Account, CharacterStats, PlayerState, ResourceState, TransformState};
+use crate::tables::{Account, CharacterStats, PlayerState, ResourceState, SessionState, TransformState};
 use crate::utils::identity_to_entity_id;
 
 pub mod account_bootstrap;
@@ -65,7 +69,7 @@ pub(crate) fn ensure_player_state_exists(ctx: &ReducerContext, display_name: Str
     }
 }
 
-pub(crate) fn ensure_transform_exists(ctx: &ReducerContext, region_id: u64) {
+pub(crate) fn ensure_transform_exists(ctx: &ReducerContext, region_id: u64, dimension_id: u32) {
     if ctx
         .db
         .transform_state()
@@ -76,9 +80,61 @@ pub(crate) fn ensure_transform_exists(ctx: &ReducerContext, region_id: u64) {
         ctx.db.transform_state().insert(TransformState {
             entity_id: ctx.sender,
             region_id,
+            dimension_id,
             position: vec![0.0, 0.0, 0.0],
             rotation: vec![0.0, 0.0, 0.0, 1.0],
             updated_at: ctx.timestamp,
         });
     }
+}
+
+#[spacetimedb::reducer]
+pub fn set_active_dimension(ctx: &ReducerContext, dimension_id: u32) -> Result<(), String> {
+    if dimension_id == 0 {
+        return Err("dimension_id must be > 0".to_string());
+    }
+
+    if dimension_id != DEFAULT_WORLD_DIMENSION_ID
+        && !ctx
+            .db
+            .dimension_desc()
+            .iter()
+            .any(|row| row.dimension_id == dimension_id)
+    {
+        return Err("target dimension does not exist".to_string());
+    }
+
+    let session = ctx
+        .db
+        .session_state()
+        .identity()
+        .find(ctx.sender)
+        .ok_or("active session required".to_string())?;
+
+    if session.dimension_id != dimension_id {
+        ctx.db.session_state().identity().update(SessionState {
+            identity: session.identity,
+            region_id: session.region_id,
+            dimension_id,
+            last_active_at: ctx.timestamp,
+        });
+    }
+
+    if let Some(mut tf) = ctx.db.transform_state().entity_id().find(ctx.sender) {
+        tf.dimension_id = dimension_id;
+        tf.updated_at = ctx.timestamp;
+        ctx.db.transform_state().entity_id().update(tf);
+    } else {
+        ctx.db.transform_state().insert(TransformState {
+            entity_id: ctx.sender,
+            region_id: session.region_id,
+            dimension_id,
+            position: vec![0.0, 0.0, 0.0],
+            rotation: vec![0.0, 0.0, 0.0, 1.0],
+            updated_at: ctx.timestamp,
+        });
+    }
+
+    projection_views::sync_player_session_view(ctx, ctx.sender);
+    Ok(())
 }

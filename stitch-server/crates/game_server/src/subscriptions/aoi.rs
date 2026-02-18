@@ -64,7 +64,7 @@ impl AoiFilter {
 pub fn position_stream_query(filter: &AoiFilter) -> String {
     format!(
         "SELECT * FROM transform_state ts WHERE {}",
-        filter.region_clause("ts")
+        filter.region_dimension_clause("ts")
     )
 }
 
@@ -84,5 +84,6 @@ mod tests {
         let query = position_stream_query(&filter);
         assert!(query.contains("FROM transform_state"));
         assert!(query.contains("ts.region_id = 7"));
+        assert!(query.contains("ts.dimension_id = 1"));
     }
 }
