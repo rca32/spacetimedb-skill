@@ -14,6 +14,7 @@ import { NetRuntime } from '../net/net-runtime'
 import { CharacterMotorComponent } from '../physics/character-motor-component'
 import { createPhysicsGround } from '../physics/world-physics'
 import { seedWorldScene } from '../world/world-scene'
+import { WorldStreamVisualizer } from '../world/stream-visualizer'
 
 const AOI_SUBSCRIPTION_KEY = 'aoi-stream'
 const SESSION_SUBSCRIPTION_KEY = 'session-self'
@@ -24,15 +25,18 @@ const NETWORK_TICK_MS = 100
 export class OrillusionClientRuntime {
   private readonly bus = new FxEventBus()
   private readonly net: NetRuntime
+  private useV2Streams: boolean
 
   private engine: EngineRuntime | null = null
   private postFx: PostFxPipelineController | null = null
   private particles: ParticleSystemController | null = null
   private player: Object3D | null = null
   private motor: CharacterMotorComponent | null = null
+  private streamVisualizer: WorldStreamVisualizer | null = null
 
   private frameNo = 0
   private lastAoiHash = ''
+  private lastAoiQueryCount = 0
   private lastNetworkTickAtMs = 0
   private hudEl: HTMLDivElement | null = null
   private baselineInstalledForIdentity: string | null = null
@@ -46,6 +50,7 @@ export class OrillusionClientRuntime {
     tokenStore: TokenStore,
   ) {
     this.net = new NetRuntime(config, logger, tokenStore)
+    this.useV2Streams = config.useV2Streams
   }
 
   async start(): Promise<void> {
@@ -71,6 +76,7 @@ export class OrillusionClientRuntime {
     this.postFx.applyProfile(this.config.postFxProfile)
 
     this.particles = new ParticleSystemController(this.engine.scene, this.bus)
+    this.streamVisualizer = new WorldStreamVisualizer(this.engine.scene)
 
     await this.net.start()
     this.installBaselineSubscriptions()
@@ -78,12 +84,14 @@ export class OrillusionClientRuntime {
 
   stop(): void {
     this.net.stop()
+    this.streamVisualizer?.dispose()
     this.particles?.dispose()
     this.engine?.stop()
   }
 
   private tick(): void {
     this.net.poll(this.logger)
+    this.maybeDowngradeToLegacy()
     this.ensureIdentityBootstrap()
 
     const now = Date.now()
@@ -92,6 +100,7 @@ export class OrillusionClientRuntime {
       this.pushNetworkFrame()
     }
 
+    this.streamVisualizer?.update(this.net.getConnection(), this.net.getIdentityHex())
     this.syncAoiSubscription()
     this.syncHud()
   }
@@ -104,27 +113,38 @@ export class OrillusionClientRuntime {
     }
 
     this.frameNo += 1
-
-    this.net.dispatchReducer('sync_client_frame', {
-      frameNo: BigInt(this.frameNo),
-      regionId: this.config.defaultRegionId,
-      dimensionId: this.config.defaultDimensionId,
-      clientTimeMs: BigInt(Date.now()),
-    })
+    const position = motor.readPosition()
 
     const intent = motor.readIntentSnapshot()
-    this.net.dispatchReducer('submit_motion_intent', {
-      intentId: `${identityHex}:${this.frameNo}`,
-      regionId: this.config.defaultRegionId,
-      dimensionId: this.config.defaultDimensionId,
-      frameNo: BigInt(this.frameNo),
-      inputX: intent.inputX,
-      inputZ: intent.inputZ,
-      requestedSpeed: intent.requestedSpeed,
-      jump: intent.jump,
-    })
+    if (this.config.useV2Streams) {
+      this.net.dispatchReducer('sync_client_frame', {
+        frameNo: BigInt(this.frameNo),
+        regionId: this.config.defaultRegionId,
+        dimensionId: this.config.defaultDimensionId,
+        clientTimeMs: BigInt(Date.now()),
+      })
 
-    const position = motor.readPosition()
+      this.net.dispatchReducer('submit_motion_intent', {
+        intentId: `${identityHex}:${this.frameNo}`,
+        regionId: this.config.defaultRegionId,
+        dimensionId: this.config.defaultDimensionId,
+        frameNo: BigInt(this.frameNo),
+        inputX: intent.inputX,
+        inputZ: intent.inputZ,
+        requestedSpeed: intent.requestedSpeed,
+        jump: intent.jump,
+      })
+    } else {
+      this.net.dispatchReducer('move_to', {
+        requestId: `${identityHex}:${this.frameNo}`,
+        regionId: this.config.defaultRegionId,
+        clientTsMs: BigInt(Date.now()),
+        x: position.x,
+        y: position.y,
+        z: position.z,
+      })
+    }
+
     if (Math.abs(intent.inputX) + Math.abs(intent.inputZ) > 0) {
       this.bus.emit({
         type: 'movement-dust',
@@ -156,7 +176,7 @@ export class OrillusionClientRuntime {
         chunkSize: CHUNK_SIZE,
         identityHex: this.net.getIdentityHex(),
       },
-      this.config.useV2Streams,
+      this.useV2Streams,
     )
 
     const hash = hashQueries(queries)
@@ -164,7 +184,19 @@ export class OrillusionClientRuntime {
       return
     }
 
-    this.net.setSubscription(AOI_SUBSCRIPTION_KEY, queries, this.logger)
+    for (let i = 0; i < queries.length; i += 1) {
+      const query = queries[i]
+      if (!query) {
+        continue
+      }
+      this.net.setSubscription(`${AOI_SUBSCRIPTION_KEY}-${i}`, [query], this.logger)
+    }
+
+    for (let i = queries.length; i < this.lastAoiQueryCount; i += 1) {
+      this.net.removeSubscription(`${AOI_SUBSCRIPTION_KEY}-${i}`)
+    }
+
+    this.lastAoiQueryCount = queries.length
     this.lastAoiHash = hash
   }
 
@@ -174,12 +206,12 @@ export class OrillusionClientRuntime {
       return
     }
 
-    if (this.config.useV2Streams) {
+    if (this.useV2Streams) {
       this.net.setSubscription(
         SESSION_SUBSCRIPTION_KEY,
         [
-          `SELECT * FROM physics_state_v2 p WHERE p.entity_id = 0x${identityHex}`,
-          `SELECT * FROM server_correction_v2 c WHERE c.identity = 0x${identityHex}`,
+          `SELECT * FROM physics_state_v2 WHERE entity_id = 0x${identityHex}`,
+          `SELECT * FROM server_correction_v2 WHERE identity = 0x${identityHex}`,
         ],
         this.logger,
       )
@@ -188,7 +220,7 @@ export class OrillusionClientRuntime {
 
     this.net.setSubscription(
       SESSION_SUBSCRIPTION_KEY,
-      [`SELECT * FROM player_session_view s WHERE s.identity = 0x${identityHex}`],
+      [`SELECT * FROM player_session_view WHERE identity = 0x${identityHex}`],
       this.logger,
     )
   }
@@ -199,7 +231,7 @@ export class OrillusionClientRuntime {
       return
     }
 
-    if (this.authBootstrappedForIdentity !== identityHex && !this.config.useV2Streams) {
+    if (this.authBootstrappedForIdentity !== identityHex && !this.useV2Streams) {
       this.authBootstrappedForIdentity = identityHex
       this.net.dispatchReducer('account_bootstrap', { displayName: this.config.displayName })
       this.net.dispatchReducer('sign_in', { regionId: this.config.defaultRegionId })
@@ -313,6 +345,7 @@ export class OrillusionClientRuntime {
     const position = this.motor?.readPosition()
 
     const fps = Time.frame
+    const streamStats = this.streamVisualizer?.getStats()
     this.hudEl.innerHTML = [
       '<strong>stitch-orillusion-client</strong>',
       `<div>connection: ${connected ? 'connected' : 'disconnected'}</div>`,
@@ -320,10 +353,42 @@ export class OrillusionClientRuntime {
       `<div>frame: ${this.frameNo}</div>`,
       `<div>render-frame: ${fps}</div>`,
       `<div>profile: ${this.config.postFxProfile}</div>`,
-      `<div>streams: ${this.config.useV2Streams ? 'v2' : 'legacy'}</div>`,
+      `<div>streams: ${this.useV2Streams ? 'v2' : 'legacy'} (pref=${this.config.useV2Streams ? 'v2' : 'legacy'})</div>`,
+      `<div>terrain/npc/res/player/v2: ${streamStats ? `${streamStats.terrain}/${streamStats.npc}/${streamStats.resource}/${streamStats.players}/${streamStats.v2}` : '-'}</div>`,
       `<div>pos: ${position ? `${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}` : '-'}</div>`,
       '<div>move: WASD / run: Shift / aim: RMB</div>',
     ].join('')
+  }
+
+  private maybeDowngradeToLegacy(): void {
+    if (!this.useV2Streams) {
+      return
+    }
+
+    const connection = this.net.getConnection()
+    if (!connection?.isActive) {
+      return
+    }
+
+    const db = connection.db as Record<string, unknown>
+    if ('physicsStateV2' in db && 'aoiStreamV2' in db && 'serverCorrectionV2' in db) {
+      return
+    }
+
+    this.logger.warn('v2 stream tables unavailable in published module, fallback to legacy streams')
+    this.useV2Streams = false
+    this.resetStreamSubscriptions()
+  }
+
+  private resetStreamSubscriptions(): void {
+    for (let i = 0; i < this.lastAoiQueryCount; i += 1) {
+      this.net.removeSubscription(`${AOI_SUBSCRIPTION_KEY}-${i}`)
+    }
+    this.net.removeSubscription(SESSION_SUBSCRIPTION_KEY)
+    this.lastAoiHash = ''
+    this.lastAoiQueryCount = 0
+    this.baselineInstalledForIdentity = null
+    this.authBootstrappedForIdentity = null
   }
 }
 

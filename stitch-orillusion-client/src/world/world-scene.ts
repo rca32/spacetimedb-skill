@@ -1,11 +1,11 @@
 import {
   BoxGeometry,
   Color,
-  LitMaterial,
   MeshRenderer,
   Object3D,
   Scene3D,
   SphereGeometry,
+  UnLitMaterial,
 } from '@orillusion/core'
 
 export interface WorldSceneObjects {
@@ -23,10 +23,8 @@ function createPlayer(scene: Scene3D): Object3D {
   const mesh = player.addComponent(MeshRenderer)
   mesh.geometry = new BoxGeometry(0.9, 1.8, 0.9)
 
-  const material = new LitMaterial()
-  material.baseColor = new Color(0.1, 0.65, 0.95, 1.0)
-  material.roughness = 0.55
-  material.metallic = 0.05
+  const material = new UnLitMaterial()
+  material.baseColor = new Color(0.1, 0.95, 0.95, 1.0)
   mesh.material = material
   mesh.castShadow = true
 
@@ -36,10 +34,8 @@ function createPlayer(scene: Scene3D): Object3D {
 }
 
 function createLandmarks(scene: Scene3D): void {
-  const markerMaterial = new LitMaterial()
+  const markerMaterial = new UnLitMaterial()
   markerMaterial.baseColor = new Color(0.88, 0.82, 0.38, 1.0)
-  markerMaterial.roughness = 0.45
-  markerMaterial.metallic = 0.02
 
   for (let i = 0; i < 12; i += 1) {
     const angle = (Math.PI * 2 * i) / 12

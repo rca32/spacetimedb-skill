@@ -2,11 +2,11 @@ import {
   BoxColliderShape,
   ColliderComponent,
   Color,
-  LitMaterial,
   MeshRenderer,
   Object3D,
   PlaneGeometry,
   Scene3D,
+  UnLitMaterial,
   Vector3,
 } from '@orillusion/core'
 import { Rigidbody } from '@orillusion/physics'
@@ -17,12 +17,9 @@ export function createPhysicsGround(scene: Scene3D): Object3D {
 
   mesh.geometry = new PlaneGeometry(600, 600)
 
-  const material = new LitMaterial()
+  const material = new UnLitMaterial()
   material.baseColor = new Color(0.22, 0.26, 0.32, 1.0)
-  material.roughness = 0.95
-  material.metallic = 0.01
   mesh.material = material
-  mesh.receiveShadow = true
 
   const rigidbody = ground.addComponent(Rigidbody)
   rigidbody.mass = 0

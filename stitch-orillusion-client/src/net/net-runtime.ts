@@ -94,6 +94,10 @@ export class NetRuntime {
     }
   }
 
+  removeSubscription(key: string): void {
+    this.subscriptions.remove(key)
+  }
+
   dispatchReducer(reducerName: string, payload: Record<string, unknown>): boolean {
     return this.runtime.dispatchReducer(reducerName, payload)
   }

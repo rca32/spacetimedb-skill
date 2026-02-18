@@ -13,20 +13,24 @@ export function buildAoiQueries(input: AoiQueryInput, useV2Streams: boolean): st
   const maxChunkX = Math.floor((input.centerX + input.chunkRadius * input.chunkSize) / input.chunkSize)
   const minChunkY = Math.floor((input.centerZ - input.chunkRadius * input.chunkSize) / input.chunkSize)
   const maxChunkY = Math.floor((input.centerZ + input.chunkRadius * input.chunkSize) / input.chunkSize)
+  const minHexX = minChunkX * input.chunkSize
+  const maxHexX = (maxChunkX + 1) * input.chunkSize - 1
+  const minHexZ = minChunkY * input.chunkSize
+  const maxHexZ = (maxChunkY + 1) * input.chunkSize - 1
 
   const region = input.regionId.toString()
   const dimension = input.dimensionId
 
   if (useV2Streams) {
     const queries = [
-      `SELECT * FROM aoi_stream_v2 s WHERE s.region_id = ${region} AND s.dimension_id = ${dimension} AND s.chunk_x BETWEEN ${minChunkX} AND ${maxChunkX} AND s.chunk_y BETWEEN ${minChunkY} AND ${maxChunkY}`,
-      `SELECT * FROM physics_state_v2 p WHERE p.region_id = ${region} AND p.dimension_id = ${dimension}`,
-      `SELECT * FROM combat_hit_v2 c WHERE c.region_id = ${region} AND c.dimension_id = ${dimension}`,
+      `SELECT * FROM aoi_stream_v2 WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${minChunkX} AND chunk_x <= ${maxChunkX} AND chunk_y >= ${minChunkY} AND chunk_y <= ${maxChunkY}`,
+      `SELECT * FROM physics_state_v2 WHERE region_id = ${region} AND dimension_id = ${dimension}`,
+      `SELECT * FROM combat_hit_v2 WHERE region_id = ${region} AND dimension_id = ${dimension}`,
     ]
 
     if (input.identityHex) {
       queries.push(
-        `SELECT * FROM server_correction_v2 sc WHERE sc.identity = 0x${input.identityHex} AND sc.region_id = ${region} AND sc.dimension_id = ${dimension}`,
+        `SELECT * FROM server_correction_v2 WHERE identity = 0x${input.identityHex} AND region_id = ${region} AND dimension_id = ${dimension}`,
       )
     }
 
@@ -34,9 +38,10 @@ export function buildAoiQueries(input: AoiQueryInput, useV2Streams: boolean): st
   }
 
   return [
-    `SELECT * FROM terrain_chunk_stream tc WHERE tc.region_id = ${region} AND tc.dimension_id = ${dimension} AND tc.chunk_x BETWEEN ${minChunkX} AND ${maxChunkX} AND tc.chunk_y BETWEEN ${minChunkY} AND ${maxChunkY}`,
-    `SELECT * FROM resource_node rn WHERE rn.region_id = ${region} AND rn.dimension_id = ${dimension}`,
-    `SELECT * FROM npc_state_stream ns WHERE ns.region_id = ${region} AND ns.dimension_id = ${dimension}`,
+    `SELECT * FROM terrain_chunk_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${minChunkX} AND chunk_x <= ${maxChunkX} AND chunk_y >= ${minChunkY} AND chunk_y <= ${maxChunkY}`,
+    `SELECT * FROM resource_node WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
+    `SELECT * FROM npc_state_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
+    `SELECT * FROM transform_state WHERE region_id = ${region} AND dimension_id = ${dimension}`,
   ]
 }
 

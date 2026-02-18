@@ -31,7 +31,13 @@ export async function bootstrapEngine(
   root.appendChild(canvas)
 
   applyEngineSettings(config)
-  await Physics.init({ useSoftBody: false, useDrag: false })
+  let physicsReady = false
+  try {
+    await Physics.init({ useSoftBody: false, useDrag: false })
+    physicsReady = true
+  } catch (error) {
+    console.warn('[stitch-orillusion-client] physics init failed, continue without physics bridge', error)
+  }
 
   await Engine3D.init({
     canvasConfig: {
@@ -40,7 +46,9 @@ export async function bootstrapEngine(
       alpha: false,
     },
     renderLoop: () => {
-      Physics.update()
+      if (physicsReady) {
+        Physics.update()
+      }
       onTick()
     },
   })
@@ -59,7 +67,7 @@ export async function bootstrapEngine(
   lightObj.rotationY = 112
   const light = lightObj.addComponent(DirectLight)
   light.lightColor = KelvinUtil.color_temperature_to_rgb(5400)
-  light.castShadow = true
+  light.castShadow = false
   light.intensity = 3
   light.indirect = 0.32
   scene.addChild(lightObj)
@@ -94,7 +102,9 @@ function applyEngineSettings(config: AppConfig): void {
   Engine3D.setting.pick.enable = false
   Engine3D.setting.pick.mode = 'bound'
 
-  Engine3D.setting.shadow.enable = true
+  // Windows WebGPU + current Orillusion build can fail pipeline validation on Lit+Shadow path.
+  // Keep shadows off by default so scene remains renderable.
+  Engine3D.setting.shadow.enable = false
   Engine3D.setting.shadow.shadowBound = config.postFxProfile === 'high' ? 90 : 60
   Engine3D.setting.shadow.shadowSize = config.postFxProfile === 'high' ? 2048 : 1024
   Engine3D.setting.shadow.shadowBias = 0.03

@@ -29,9 +29,14 @@ export class CharacterMotorComponent extends ComponentBase {
     shape.size = new Vector3(0.7, 1.8, 0.7)
     collider.shape = shape
 
-    this.rigidbody = this.object3D.getOrAddComponent(Rigidbody)
-    this.rigidbody.mass = 1
-    this.rigidbody.isKinematic = true
+    try {
+      this.rigidbody = this.object3D.getOrAddComponent(Rigidbody)
+      this.rigidbody.mass = 1
+      this.rigidbody.isKinematic = true
+    } catch (error) {
+      this.rigidbody = null
+      console.warn('[stitch-orillusion-client] character motor running without rigidbody', error)
+    }
 
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
