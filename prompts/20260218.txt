@@ -52,6 +52,6 @@ orillusion 로 porting을 할려고 해 기본의 호환성은 완전히 무시 
 orillusion-web/docs/guide/interaction
 
 
-현재시스템이 hex-coords 고려하고 있는지 확인해고 처리 해죠.
+현재 stitch-orillusion-client  hex-coords 고려하고 있는지 확인해서 처리 해죠.
 BitCraftPublicDoc/5-hex-grid-coordinate-system.md
 web-client/src/core/hex/hex-coords.ts

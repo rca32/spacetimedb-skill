@@ -1,7 +1,16 @@
-import { Object3D, Time } from '@orillusion/core'
+import {
+  BoxGeometry,
+  Color,
+  MeshRenderer,
+  Object3D,
+  PointerEvent3D,
+  Time,
+  UnLitMaterial,
+} from '@orillusion/core'
 import { CameraAimComponent } from '../camera/camera-aim-component'
 import { CameraCollisionComponent } from '../camera/camera-collision-component'
 import { CameraFollowComponent } from '../camera/camera-follow-component'
+import { worldToHex } from '../core/hex/hex-coords'
 import { bootstrapEngine, EngineRuntime } from '../engine/engine-bootstrap'
 import { FxEventBus } from '../fx/fx-event-bus'
 import { ParticleSystemController } from '../fx/particle-system'
@@ -22,6 +31,7 @@ const AOI_RADIUS_CHUNKS = 2
 const DEFAULT_CHUNK_SIZE = 32
 const NETWORK_TICK_MS = 100
 const PLAYER_FEET_OFFSET_Y = 0.9
+const DEFAULT_BUILDING_DEF_ID = 1n
 
 export class OrillusionClientRuntime {
   private readonly bus = new FxEventBus()
@@ -51,6 +61,71 @@ export class OrillusionClientRuntime {
   private lastAppliedAuthoritativeFrameNo = 0
   private lastMoveDispatchOk = true
   private lastV2DispatchOk = false
+  private lastPlaceDispatchOk = true
+
+  private buildModeEnabled = true
+  private selectedBuildingDefId = DEFAULT_BUILDING_DEF_ID
+  private buildFacing = 0
+  private previewRequestSeq = 0
+  private pendingPreviewRequestId: string | null = null
+  private lastPreviewRequestId: string | null = null
+  private previewHexX: number | null = null
+  private previewHexZ: number | null = null
+  private previewIsValid = false
+  private previewReason = 'idle'
+  private previewCheckedAt = '-'
+  private buildPreviewGhost: Object3D | null = null
+  private buildPreviewMaterial: UnLitMaterial | null = null
+
+  private readonly onKeyDown = (event: KeyboardEvent) => {
+    if (event.repeat) {
+      return
+    }
+
+    if (event.key === 'b' || event.key === 'B') {
+      this.buildModeEnabled = !this.buildModeEnabled
+      if (!this.buildModeEnabled) {
+        this.pendingPreviewRequestId = null
+      }
+      return
+    }
+
+    if (!this.buildModeEnabled) {
+      return
+    }
+
+    if (event.key === 'q' || event.key === 'Q') {
+      this.buildFacing = (this.buildFacing + 5) % 6
+      this.retryLatestPreview()
+      return
+    }
+
+    if (event.key === 'e' || event.key === 'E') {
+      this.buildFacing = (this.buildFacing + 1) % 6
+      this.retryLatestPreview()
+      return
+    }
+
+    if (event.key === 'Enter') {
+      this.tryPlaceFromPreview()
+    }
+  }
+
+  private readonly onPickClick = (event: PointerEvent3D) => {
+    if (!this.buildModeEnabled) {
+      return
+    }
+
+    const picked = event.data?.worldPos
+    if (!picked) {
+      return
+    }
+
+    const hex = worldToHex(Number(picked.x), Number(picked.z), this.activeDimensionId)
+    this.previewHexX = hex.q
+    this.previewHexZ = hex.r
+    this.dispatchBuildPreview(hex.q, hex.r)
+  }
 
   constructor(
     private readonly root: HTMLElement,
@@ -92,12 +167,21 @@ export class OrillusionClientRuntime {
     this.particles = new ParticleSystemController(this.engine.scene, this.bus)
     this.streamVisualizer = new WorldStreamVisualizer(this.engine.scene)
     this.streamVisualizer.setChunkWorldSize(this.activeChunkSize)
+    this.streamVisualizer.setShowFootprintOverlay(this.buildModeEnabled)
+    this.installBuildPreviewGhost()
 
     await this.net.start()
     this.installBaselineSubscriptions()
+    window.addEventListener('keydown', this.onKeyDown)
+    this.engine.view.pickFire.addEventListener(PointerEvent3D.PICK_CLICK, this.onPickClick, this)
   }
 
   stop(): void {
+    window.removeEventListener('keydown', this.onKeyDown)
+    this.engine?.view.pickFire.removeEventListener(PointerEvent3D.PICK_CLICK, this.onPickClick, this)
+    this.buildPreviewGhost?.destroy()
+    this.buildPreviewGhost = null
+    this.buildPreviewMaterial = null
     this.net.stop()
     this.streamVisualizer?.dispose()
     this.particles?.dispose()
@@ -108,6 +192,8 @@ export class OrillusionClientRuntime {
     this.net.poll(this.logger)
     this.maybeDowngradeToLegacy()
     this.ensureIdentityBootstrap()
+    this.syncSelectedBuildingDef()
+    this.syncBuildPreviewFeedback()
     this.syncActiveShardFromSession()
     this.syncWorldGenParams()
     this.syncPlayerFacing()
@@ -121,14 +207,14 @@ export class OrillusionClientRuntime {
 
     this.streamVisualizer?.update(this.net.getConnection(), this.net.getIdentityHex())
     this.syncLocalPlayerGround()
+    this.syncBuildPreviewGhost()
     this.syncAoiSubscription()
     this.syncHud()
   }
 
   private pushNetworkFrame(): void {
     const motor = this.motor
-    const identityHex = this.net.getIdentityHex()
-    if (!motor || !identityHex) {
+    if (!motor || !this.net.getIdentityHex()) {
       return
     }
 
@@ -137,8 +223,9 @@ export class OrillusionClientRuntime {
 
     const intent = motor.readWorldIntentSnapshot()
 
+    const moveRequestId = this.makeShortRequestId('mv', this.frameNo)
     const moveOk = this.net.dispatchReducer('move_to', {
-      requestId: `${identityHex}:${this.frameNo}`,
+      requestId: moveRequestId,
       regionId: this.activeRegionId,
       clientTsMs: BigInt(Date.now()),
       x: position.x,
@@ -155,8 +242,9 @@ export class OrillusionClientRuntime {
         clientTimeMs: BigInt(Date.now()),
       })
 
+      const motionIntentId = this.makeShortRequestId('mi', this.frameNo)
       const intentOk = this.net.dispatchReducer('submit_motion_intent', {
-        intentId: `${identityHex}:${this.frameNo}`,
+        intentId: motionIntentId,
         regionId: this.activeRegionId,
         dimensionId: this.activeDimensionId,
         frameNo: BigInt(this.frameNo),
@@ -200,6 +288,7 @@ export class OrillusionClientRuntime {
         chunkRadius: AOI_RADIUS_CHUNKS,
         chunkSize: this.activeChunkSize,
         identityHex: this.net.getIdentityHex(),
+        includeFootprintOverlay: this.buildModeEnabled,
       },
       this.useV2Streams,
     )
@@ -225,6 +314,184 @@ export class OrillusionClientRuntime {
     this.lastAoiHash = hash
   }
 
+  private installBuildPreviewGhost(): void {
+    if (!this.engine) {
+      return
+    }
+
+    const ghost = new Object3D()
+    const mesh = ghost.addComponent(MeshRenderer)
+    mesh.geometry = new BoxGeometry(1.2, 1.2, 1.2)
+
+    const material = new UnLitMaterial()
+    material.baseColor = new Color(0.95, 0.8, 0.18, 0.55)
+    mesh.material = material
+    ghost.transform.enable = false
+
+    this.engine.scene.addChild(ghost)
+    this.buildPreviewGhost = ghost
+    this.buildPreviewMaterial = material
+  }
+
+  private syncSelectedBuildingDef(): void {
+    const connection = this.net.getConnection()
+    if (!connection?.isActive) {
+      return
+    }
+
+    const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>).buildingDef
+    if (!table) {
+      return
+    }
+
+    let smallest = -1n
+    let selectedFound = false
+    for (const row of table.iter()) {
+      const id = toU64BigInt(row.buildingDefId, -1n)
+      if (id <= 0n) {
+        continue
+      }
+
+      if (smallest < 0n || id < smallest) {
+        smallest = id
+      }
+      if (id === this.selectedBuildingDefId) {
+        selectedFound = true
+      }
+    }
+
+    if (selectedFound || smallest <= 0n) {
+      return
+    }
+    this.selectedBuildingDefId = smallest
+  }
+
+  private dispatchBuildPreview(hexX: number, hexZ: number): void {
+    if (!this.net.getIdentityHex()) {
+      return
+    }
+
+    this.previewRequestSeq += 1
+    const requestId = this.makeShortRequestId('bp', this.previewRequestSeq)
+    this.pendingPreviewRequestId = requestId
+    this.lastPreviewRequestId = requestId
+    this.previewReason = 'pending'
+    this.previewCheckedAt = '-'
+
+    const ok = this.net.dispatchReducer('building_validate_preview', {
+      requestId,
+      buildingDefId: this.selectedBuildingDefId,
+      regionId: this.activeRegionId,
+      dimensionId: this.activeDimensionId,
+      hexX,
+      hexZ,
+      facing: this.buildFacing,
+    })
+
+    if (!ok) {
+      this.previewIsValid = false
+      this.previewReason = 'dispatch_failed'
+      this.pendingPreviewRequestId = null
+    }
+  }
+
+  private retryLatestPreview(): void {
+    if (this.previewHexX === null || this.previewHexZ === null) {
+      return
+    }
+    this.dispatchBuildPreview(this.previewHexX, this.previewHexZ)
+  }
+
+  private syncBuildPreviewFeedback(): void {
+    const connection = this.net.getConnection()
+    const identityHex = this.net.getIdentityHex()
+    if (!connection?.isActive || !identityHex) {
+      return
+    }
+
+    const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>)
+      .buildingPreviewFeedbackView
+    if (!table) {
+      return
+    }
+
+    let latestMatched: Record<string, unknown> | null = null
+    let latestAny: Record<string, unknown> | null = null
+    for (const row of table.iter()) {
+      const rowIdentity = toIdentityHex(row.identity)
+      if (rowIdentity !== identityHex) {
+        continue
+      }
+
+      latestAny = row
+      if (this.pendingPreviewRequestId && String(row.requestId ?? '') === this.pendingPreviewRequestId) {
+        latestMatched = row
+      }
+    }
+
+    const next = latestMatched ?? latestAny
+    if (!next) {
+      return
+    }
+
+    const requestId = String(next.requestId ?? '')
+    if (this.pendingPreviewRequestId && requestId === this.pendingPreviewRequestId) {
+      this.pendingPreviewRequestId = null
+    }
+    this.lastPreviewRequestId = requestId || this.lastPreviewRequestId
+    this.previewHexX = toI32Number(next.hexX)
+    this.previewHexZ = toI32Number(next.hexZ)
+    this.previewIsValid = Boolean(next.isValid)
+    this.previewReason = String(next.reasonCode ?? 'unknown')
+    this.previewCheckedAt = String(next.checkedAt ?? '-')
+  }
+
+  private tryPlaceFromPreview(): void {
+    if (!this.buildModeEnabled || !this.previewIsValid || !this.lastPreviewRequestId) {
+      return
+    }
+
+    const ok = this.net.dispatchReducer('building_place_from_preview', {
+      requestId: this.lastPreviewRequestId,
+    })
+    this.lastPlaceDispatchOk = ok
+    if (!ok) {
+      return
+    }
+    this.pendingPreviewRequestId = null
+    this.previewReason = 'place_dispatched'
+  }
+
+  private syncBuildPreviewGhost(): void {
+    const ghost = this.buildPreviewGhost
+    const material = this.buildPreviewMaterial
+    this.streamVisualizer?.setShowFootprintOverlay(this.buildModeEnabled)
+    if (!ghost || !material || this.previewHexX === null || this.previewHexZ === null || !this.buildModeEnabled) {
+      if (ghost) {
+        ghost.transform.enable = false
+      }
+      return
+    }
+
+    ghost.transform.enable = true
+    ghost.x = this.previewHexX
+    ghost.z = this.previewHexZ
+
+    const groundY = this.streamVisualizer?.sampleTerrainHeight(ghost.x, ghost.z)
+    ghost.y = (groundY ?? 0) + 0.6
+
+    if (this.pendingPreviewRequestId) {
+      material.baseColor = new Color(0.95, 0.8, 0.18, 0.55)
+      return
+    }
+
+    if (this.previewIsValid) {
+      material.baseColor = new Color(0.15, 0.92, 0.35, 0.55)
+      return
+    }
+    material.baseColor = new Color(0.92, 0.22, 0.2, 0.55)
+  }
+
   private installBaselineSubscriptions(): void {
     const identityHex = this.net.getIdentityHex()
     if (!identityHex) {
@@ -238,6 +505,7 @@ export class OrillusionClientRuntime {
           `SELECT * FROM physics_state_v2 WHERE entity_id = 0x${identityHex}`,
           `SELECT * FROM server_correction_v2 WHERE identity = 0x${identityHex} AND region_id = ${this.activeRegionId.toString()} AND dimension_id = ${this.activeDimensionId}`,
           `SELECT * FROM player_session_view WHERE identity = 0x${identityHex}`,
+          `SELECT * FROM building_preview_feedback_view WHERE identity = 0x${identityHex}`,
         ],
         this.logger,
       )
@@ -246,7 +514,10 @@ export class OrillusionClientRuntime {
 
     this.net.setSubscription(
       SESSION_SUBSCRIPTION_KEY,
-      [`SELECT * FROM player_session_view WHERE identity = 0x${identityHex}`],
+      [
+        `SELECT * FROM player_session_view WHERE identity = 0x${identityHex}`,
+        `SELECT * FROM building_preview_feedback_view WHERE identity = 0x${identityHex}`,
+      ],
       this.logger,
     )
   }
@@ -449,6 +720,7 @@ export class OrillusionClientRuntime {
 
     const fps = Time.frame
     const streamStats = this.streamVisualizer?.getStats()
+    const projectLabels = this.streamVisualizer?.getProjectLabels(4) ?? []
     this.hudEl.innerHTML = [
       '<strong>stitch-orillusion-client</strong>',
       `<div>connection: ${connected ? 'connected' : 'disconnected'}</div>`,
@@ -459,14 +731,21 @@ export class OrillusionClientRuntime {
       `<div>streams: ${this.useV2Streams ? 'v2' : 'legacy'} (pref=${this.config.useV2Streams ? 'v2' : 'legacy'})</div>`,
       `<div>region/dimension: ${this.activeRegionId.toString()}/${this.activeDimensionId}</div>`,
       `<div>chunk-size: ${this.activeChunkSize}</div>`,
-      `<div>terrain/npc/res/bld/player/v2: ${streamStats ? `${streamStats.terrain}/${streamStats.npc}/${streamStats.resource}/${streamStats.building}/${streamStats.players}/${streamStats.v2}` : '-'}</div>`,
+      `<div>terrain/npc/res/bld/prj/fpt/player/v2: ${streamStats ? `${streamStats.terrain}/${streamStats.npc}/${streamStats.resource}/${streamStats.building}/${streamStats.project}/${streamStats.footprint}/${streamStats.players}/${streamStats.v2}` : '-'}</div>`,
+      `<div>project labels: ${projectLabels.length > 0 ? projectLabels.join(' | ') : '-'}</div>`,
       `<div>terrain detail/fallback: ${streamStats ? `${streamStats.terrainDetailed}/${streamStats.terrainFallback}` : '-'}</div>`,
-      `<div>dispatch move/v2: ${this.lastMoveDispatchOk ? 'ok' : 'fail'}/${this.lastV2DispatchOk ? 'ok' : '-'}</div>`,
+      `<div>dispatch move/v2/place: ${this.lastMoveDispatchOk ? 'ok' : 'fail'}/${this.lastV2DispatchOk ? 'ok' : '-'}/${this.lastPlaceDispatchOk ? 'ok' : 'fail'}</div>`,
       `<div>authoritative frame: ${this.lastAppliedAuthoritativeFrameNo}</div>`,
       `<div>pending corrections: ${this.seenCorrectionIds.size}</div>`,
+      `<div>build mode: ${this.buildModeEnabled ? 'on' : 'off'} (B toggle)</div>`,
+      `<div>build def/facing: ${this.selectedBuildingDefId.toString()}/${this.buildFacing}</div>`,
+      `<div>build preview: ${this.previewHexX !== null && this.previewHexZ !== null ? `${this.previewHexX},${this.previewHexZ}` : '-'}</div>`,
+      `<div>build valid/reason: ${this.previewIsValid ? 'valid' : 'invalid'} / ${this.previewReason}</div>`,
+      `<div>build checked_at: ${this.previewCheckedAt}</div>`,
       `<div>input xz: ${intent ? `${intent.inputX}/${intent.inputZ}` : '-'}</div>`,
       `<div>pos: ${position ? `${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}` : '-'}</div>`,
       '<div>move: WASD / run: Shift / look: LMB,RMB drag / zoom: wheel</div>',
+      '<div>build: click world -> preview / Q,E rotate / Enter place</div>',
     ].join('')
   }
 
@@ -551,6 +830,18 @@ export class OrillusionClientRuntime {
     }
     this.lastAppliedAuthoritativeFrameNo = 0
     this.seenCorrectionIds.clear()
+    this.pendingPreviewRequestId = null
+  }
+
+  private makeShortRequestId(prefix: string, seq: number): string {
+    const safePrefix = prefix.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'req'
+    const ts = Date.now().toString(36)
+    const counter = Math.max(0, Math.trunc(seq)).toString(36)
+    const raw = `${safePrefix}_${counter}_${ts}`
+    if (raw.length <= 64) {
+      return raw
+    }
+    return raw.slice(0, 64)
   }
 }
 
@@ -578,6 +869,27 @@ function toIdentityHex(value: unknown): string | null {
 function toU64Number(value: unknown): number {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : 0
+  }
+  if (typeof value === 'bigint') {
+    return Number(value)
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  if (typeof value === 'object' && value !== null && 'toString' in value) {
+    const parsed = Number.parseInt(String(value), 10)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+function toI32Number(value: unknown): number {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return 0
+    }
+    return Math.trunc(value)
   }
   if (typeof value === 'bigint') {
     return Number(value)

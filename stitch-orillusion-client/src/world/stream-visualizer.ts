@@ -36,6 +36,8 @@ interface VisualizerStats {
   npc: number
   resource: number
   building: number
+  project: number
+  footprint: number
   players: number
   v2: number
 }
@@ -48,10 +50,14 @@ export class WorldStreamVisualizer {
   private readonly npcObjects = new Map<string, Object3D>()
   private readonly resourceObjects = new Map<string, Object3D>()
   private readonly buildingObjects = new Map<string, Object3D>()
+  private readonly projectSiteObjects = new Map<string, Object3D>()
+  private readonly footprintObjects = new Map<string, Object3D>()
   private readonly playerObjects = new Map<string, Object3D>()
   private readonly v2Objects = new Map<string, Object3D>()
   private terrainCellsByCoord = new Map<string, DecodedTerrainCells>()
   private terrainChunkSizeHint = DEFAULT_CHUNK_WORLD_SIZE
+  private showFootprintOverlay = false
+  private projectLabels: string[] = []
 
   private chunkWorldSize = DEFAULT_CHUNK_WORLD_SIZE
 
@@ -62,6 +68,8 @@ export class WorldStreamVisualizer {
     npc: 0,
     resource: 0,
     building: 0,
+    project: 0,
+    footprint: 0,
     players: 0,
     v2: 0,
   }
@@ -85,6 +93,20 @@ export class WorldStreamVisualizer {
     return this.stats
   }
 
+  setShowFootprintOverlay(enabled: boolean): void {
+    this.showFootprintOverlay = enabled
+    if (!enabled) {
+      this.prune(this.footprintObjects, new Set())
+    }
+  }
+
+  getProjectLabels(maxItems = 4): string[] {
+    if (maxItems <= 0) {
+      return []
+    }
+    return this.projectLabels.slice(0, Math.trunc(maxItems))
+  }
+
   sampleTerrainHeight(x: number, z: number): number | null {
     return sampleTerrainHeightAtWorld(x, z, this.terrainChunkSizeHint, this.terrainCellsByCoord)
   }
@@ -101,6 +123,12 @@ export class WorldStreamVisualizer {
     this.syncNpcs(db)
     this.syncResources(db)
     this.syncBuildings(db)
+    this.syncProjectSites(db)
+    if (this.showFootprintOverlay) {
+      this.syncBuildingFootprints(db)
+    } else {
+      this.prune(this.footprintObjects, new Set())
+    }
     this.syncPlayers(db, localIdentityHex)
     this.syncV2Streams(db)
 
@@ -111,6 +139,8 @@ export class WorldStreamVisualizer {
       npc: this.npcObjects.size,
       resource: this.resourceObjects.size,
       building: this.buildingObjects.size,
+      project: this.projectSiteObjects.size,
+      footprint: this.footprintObjects.size,
       players: this.playerObjects.size,
       v2: this.v2Objects.size,
     }
@@ -406,6 +436,118 @@ export class WorldStreamVisualizer {
     this.prune(this.buildingObjects, seen)
   }
 
+  private syncProjectSites(db: Record<string, unknown>): void {
+    const table = getTableRows(db, 'projectSiteState')
+    if (!table) {
+      this.prune(this.projectSiteObjects, new Set())
+      return
+    }
+
+    const seen = new Set<string>()
+    const labels: Array<{ id: string; percent: number; actions: number; total: number }> = []
+    for (const row of table) {
+      const id = String(row.entityId ?? '')
+      if (!id) {
+        continue
+      }
+      seen.add(id)
+
+      const hexX = toNumber(row.hexX)
+      const hexZ = toNumber(row.hexZ)
+      const world = hexToWorldXZ({ q: hexX, r: hexZ, dimension: Math.max(1, toNumber(row.dimensionId)) })
+      const currentActions = Math.max(0, toNumber(row.currentActions))
+      const totalActions = Math.max(1, toNumber(row.totalActions))
+      const progressRatio = Math.max(0, Math.min(1, currentActions / totalActions))
+      labels.push({
+        id,
+        percent: Math.round(progressRatio * 100),
+        actions: Math.trunc(currentActions),
+        total: Math.trunc(totalActions),
+      })
+
+      let object = this.projectSiteObjects.get(id)
+      if (!object) {
+        object = new Object3D()
+        const mesh = object.addComponent(MeshRenderer)
+        mesh.geometry = new BoxGeometry(1, 1, 1)
+        if (!setMaterialSafe(mesh, createUnlitMaterial(0.2, 0.72, 0.95))) {
+          object.destroy()
+          continue
+        }
+        this.root.addChild(object)
+        this.projectSiteObjects.set(id, object)
+      }
+
+      const phase = stablePhase(id)
+      const pulse =
+        progressRatio >= 1
+          ? 0
+          : (Math.sin(Date.now() * 0.008 + phase) + 1) * 0.06
+      const scaleY = 0.4 + progressRatio * 1.0 + pulse
+      const groundY = this.sampleTerrainHeight(world.x, world.z)
+      object.x = world.x
+      object.y = (groundY ?? 0) + scaleY * 0.5
+      object.z = world.z
+      object.scaleX = 1.05
+      object.scaleY = scaleY
+      object.scaleZ = 1.05
+    }
+
+    this.prune(this.projectSiteObjects, seen)
+    labels.sort((a, b) => b.percent - a.percent)
+    this.projectLabels = labels.map((entry) => {
+      return `${entry.id}:${entry.percent}%(${entry.actions}/${entry.total})`
+    })
+  }
+
+  private syncBuildingFootprints(db: Record<string, unknown>): void {
+    const table = getTableRows(db, 'buildingFootprint')
+    if (!table) {
+      this.prune(this.footprintObjects, new Set())
+      return
+    }
+
+    const seen = new Set<string>()
+    for (const row of table) {
+      const key = String(row.tileKey ?? '')
+      if (!key) {
+        continue
+      }
+      seen.add(key)
+
+      const hexX = toNumber(row.hexX)
+      const hexZ = toNumber(row.hexZ)
+      const world = hexToWorldXZ({ q: hexX, r: hexZ, dimension: Math.max(1, toNumber(row.dimensionId)) })
+      const isPerimeter = Boolean(row.isPerimeter)
+      const tileType = Math.max(0, toNumber(row.tileType))
+
+      let object = this.footprintObjects.get(key)
+      if (!object) {
+        object = new Object3D()
+        const mesh = object.addComponent(MeshRenderer)
+        mesh.geometry = new BoxGeometry(1, 1, 1)
+        const [r, g, b] = footprintColor(tileType, isPerimeter)
+        if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
+          object.destroy()
+          continue
+        }
+        this.root.addChild(object)
+        this.footprintObjects.set(key, object)
+      }
+
+      const scaleY = isPerimeter ? 0.03 : 0.06
+      const groundY = this.sampleTerrainHeight(world.x, world.z)
+      object.x = world.x
+      object.y = (groundY ?? 0) + scaleY * 0.5 + 0.02
+      object.z = world.z
+      object.scaleX = isPerimeter ? 0.9 : 0.94
+      object.scaleY = scaleY
+      object.scaleZ = isPerimeter ? 0.9 : 0.94
+    }
+
+    this.prune(this.footprintObjects, seen)
+  }
+
   private syncPlayers(db: Record<string, unknown>, localIdentityHex: string | null): void {
     const table = getTableRows(db, 'transformState')
     if (!table) {
@@ -518,6 +660,8 @@ export class WorldStreamVisualizer {
     this.prune(this.npcObjects, new Set())
     this.prune(this.resourceObjects, new Set())
     this.prune(this.buildingObjects, new Set())
+    this.prune(this.projectSiteObjects, new Set())
+    this.prune(this.footprintObjects, new Set())
     this.prune(this.playerObjects, new Set())
     this.prune(this.v2Objects, new Set())
     this.terrainCellsByCoord.clear()
@@ -529,6 +673,8 @@ export class WorldStreamVisualizer {
       npc: 0,
       resource: 0,
       building: 0,
+      project: 0,
+      footprint: 0,
       players: 0,
       v2: 0,
     }
@@ -905,6 +1051,28 @@ function v2ColorByEntityType(entityType: number): readonly [number, number, numb
     [0.75, 0.35, 0.82],
   ]
   return colors[Math.abs(entityType) % colors.length] ?? [0.85, 0.2, 0.2]
+}
+
+function stablePhase(value: string): number {
+  let hash = 0
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0
+  }
+  return (Math.abs(hash) % 628) / 100
+}
+
+function footprintColor(tileType: number, isPerimeter: boolean): readonly [number, number, number] {
+  if (isPerimeter) {
+    return [0.95, 0.2, 0.2]
+  }
+
+  const colors: ReadonlyArray<readonly [number, number, number]> = [
+    [0.95, 0.54, 0.22], // hitbox
+    [0.24, 0.9, 0.32],  // walkable
+    [0.22, 0.75, 0.95], // decorative
+    [0.86, 0.84, 0.28], // interaction
+  ]
+  return colors[Math.abs(tileType) % colors.length] ?? [0.95, 0.54, 0.22]
 }
 
 function toNumber(value: unknown): number {

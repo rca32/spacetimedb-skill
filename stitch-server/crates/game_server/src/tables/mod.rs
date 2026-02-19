@@ -1,6 +1,8 @@
 pub mod account;
 pub mod account_profile;
 pub mod agent_timers;
+pub mod building_footprint;
+pub mod building_preview_feedback_view;
 pub mod building_state;
 pub mod claim_state;
 pub mod combat;
@@ -23,6 +25,7 @@ pub mod permission_state;
 pub mod player_progression;
 pub mod player_state;
 pub mod player_views;
+pub mod project_site_state;
 pub mod role_binding;
 pub mod session_state;
 pub mod social;
@@ -39,6 +42,8 @@ pub use agent_timers::{
     EnvironmentEffectLoopTimer, NpcAiLoopTimer, PlayerRegenLoopTimer, ResourceRegenLoopTimer,
     SessionCleanupLoopTimer,
 };
+pub use building_footprint::BuildingFootprint;
+pub use building_preview_feedback_view::BuildingPreviewFeedbackView;
 pub use building_state::BuildingState;
 pub use claim_state::ClaimState;
 pub use combat::{AttackOutcome, AttackScheduled, CombatState, ThreatState};
@@ -83,6 +88,7 @@ pub use player_views::{
     PlayerInventoryContainerView, PlayerInventoryItemView, PlayerInventorySlotView,
     PlayerMovementFeedbackView, PlayerSessionView, PlayerWalletView,
 };
+pub use project_site_state::ProjectSiteState;
 pub use role_binding::RoleBinding;
 pub use session_state::SessionState;
 pub use social::{

@@ -1,0 +1,22 @@
+사용스킬[$orillusion-best-practices,$spacetimedb-korean]
+
+[최근작업]
+prompts/20260218_worklog.md
+stitch-orillusion-client
+
+
+[직업기록]
+prompts/20260220_worklog.md
+
+
+DESIGN/DETAIL/building-system-design.md 에 의해 설계된 stitch-server 을
+현재 구현된 stitch-orillusion-client 이외에
+orillusion을 통해서 구현할때 적용 가능한 항목들 조사하고 적용방법을 고안해보자.
+
+예)
+orillusion-web/docs/guide/core/object.md
+orillusion-web/docs/guide/core/script.md
+orillusion-web/docs/guide/interaction/pickfire.md
+
+
+prompts/20260220_plan.md

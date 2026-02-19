@@ -101,7 +101,7 @@ export async function bootstrapEngine(
 function applyEngineSettings(config: AppConfig): void {
   Engine3D.setting.light.maxLight = 256
   Engine3D.setting.render.useLogDepth = true
-  Engine3D.setting.pick.enable = false
+  Engine3D.setting.pick.enable = true
   Engine3D.setting.pick.mode = 'bound'
 
   // Windows WebGPU + current Orillusion build can fail pipeline validation on Lit+Shadow path.

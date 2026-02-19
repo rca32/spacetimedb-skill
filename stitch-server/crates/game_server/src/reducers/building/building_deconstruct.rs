@@ -3,7 +3,9 @@ use spacetimedb::ReducerContext;
 use crate::services::permissions;
 use crate::tables::building_state::building_state;
 
-use super::building_place::add_items_to_main_inventory;
+use super::building_place::{
+    add_items_to_main_inventory, delete_building_footprint, delete_project_site_state,
+};
 
 #[spacetimedb::reducer]
 pub fn building_deconstruct(ctx: &ReducerContext, building_id: u64) -> Result<(), String> {
@@ -31,6 +33,8 @@ pub fn building_deconstruct(ctx: &ReducerContext, building_id: u64) -> Result<()
     building.state = 2;
     building.updated_at = ctx.timestamp;
     ctx.db.building_state().entity_id().update(building);
+    delete_project_site_state(ctx, building_id);
+    delete_building_footprint(ctx, building_id);
 
     Ok(())
 }

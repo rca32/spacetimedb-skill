@@ -52,8 +52,12 @@ import BuildingNextIdReducer from "./building_next_id_reducer";
 export { BuildingNextIdReducer };
 import BuildingPlaceReducer from "./building_place_reducer";
 export { BuildingPlaceReducer };
+import BuildingPlaceFromPreviewReducer from "./building_place_from_preview_reducer";
+export { BuildingPlaceFromPreviewReducer };
 import BuildingPlaceInDimensionReducer from "./building_place_in_dimension_reducer";
 export { BuildingPlaceInDimensionReducer };
+import BuildingValidatePreviewReducer from "./building_validate_preview_reducer";
+export { BuildingValidatePreviewReducer };
 import ChatSendMessageReducer from "./chat_send_message_reducer";
 export { ChatSendMessageReducer };
 import ClaimExpandReducer from "./claim_expand_reducer";
@@ -254,6 +258,10 @@ import BuffStateRow from "./buff_state_table";
 export { BuffStateRow };
 import BuildingDefRow from "./building_def_table";
 export { BuildingDefRow };
+import BuildingFootprintRow from "./building_footprint_table";
+export { BuildingFootprintRow };
+import BuildingPreviewFeedbackViewRow from "./building_preview_feedback_view_table";
+export { BuildingPreviewFeedbackViewRow };
 import BuildingStateRow from "./building_state_table";
 export { BuildingStateRow };
 import CharacterStatsRow from "./character_stats_table";
@@ -426,6 +434,8 @@ import PlayerWalletViewRow from "./player_wallet_view_table";
 export { PlayerWalletViewRow };
 import PriceIndexRow from "./price_index_table";
 export { PriceIndexRow };
+import ProjectSiteStateRow from "./project_site_state_table";
+export { ProjectSiteStateRow };
 import QuestChainDefRow from "./quest_chain_def_table";
 export { QuestChainDefRow };
 import QuestChainStateRow from "./quest_chain_state_table";
@@ -530,6 +540,10 @@ import BuffState from "./buff_state_type";
 export { BuffState };
 import BuildingDef from "./building_def_type";
 export { BuildingDef };
+import BuildingFootprint from "./building_footprint_type";
+export { BuildingFootprint };
+import BuildingPreviewFeedbackView from "./building_preview_feedback_view_type";
+export { BuildingPreviewFeedbackView };
 import BuildingState from "./building_state_type";
 export { BuildingState };
 import CharacterStats from "./character_stats_type";
@@ -702,6 +716,8 @@ import PlayerWalletView from "./player_wallet_view_type";
 export { PlayerWalletView };
 import PriceIndex from "./price_index_type";
 export { PriceIndex };
+import ProjectSiteState from "./project_site_state_type";
+export { ProjectSiteState };
 import QuestChainDef from "./quest_chain_def_type";
 export { QuestChainDef };
 import QuestChainState from "./quest_chain_state_type";
@@ -978,6 +994,28 @@ const tablesSchema = __schema(
       { name: 'building_def_building_def_id_key', constraint: 'unique', columns: ['buildingDefId'] },
     ],
   }, BuildingDefRow),
+  __table({
+    name: 'building_footprint',
+    indexes: [
+      { name: 'tile_key', algorithm: 'btree', columns: [
+        'tileKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'building_footprint_tile_key_key', constraint: 'unique', columns: ['tileKey'] },
+    ],
+  }, BuildingFootprintRow),
+  __table({
+    name: 'building_preview_feedback_view',
+    indexes: [
+      { name: 'request_key', algorithm: 'btree', columns: [
+        'requestKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'building_preview_feedback_view_request_key_key', constraint: 'unique', columns: ['requestKey'] },
+    ],
+  }, BuildingPreviewFeedbackViewRow),
   __table({
     name: 'building_state',
     indexes: [
@@ -1925,6 +1963,17 @@ const tablesSchema = __schema(
     ],
   }, PriceIndexRow),
   __table({
+    name: 'project_site_state',
+    indexes: [
+      { name: 'entity_id', algorithm: 'btree', columns: [
+        'entityId',
+      ] },
+    ],
+    constraints: [
+      { name: 'project_site_state_entity_id_key', constraint: 'unique', columns: ['entityId'] },
+    ],
+  }, ProjectSiteStateRow),
+  __table({
     name: 'quest_chain_def',
     indexes: [
       { name: 'chain_id', algorithm: 'btree', columns: [
@@ -2290,7 +2339,9 @@ const reducersSchema = __reducers(
   __reducerSchema("building_deconstruct", BuildingDeconstructReducer),
   __reducerSchema("building_next_id", BuildingNextIdReducer),
   __reducerSchema("building_place", BuildingPlaceReducer),
+  __reducerSchema("building_place_from_preview", BuildingPlaceFromPreviewReducer),
   __reducerSchema("building_place_in_dimension", BuildingPlaceInDimensionReducer),
+  __reducerSchema("building_validate_preview", BuildingValidatePreviewReducer),
   __reducerSchema("chat_send_message", ChatSendMessageReducer),
   __reducerSchema("claim_expand", ClaimExpandReducer),
   __reducerSchema("claim_next_id", ClaimNextIdReducer),

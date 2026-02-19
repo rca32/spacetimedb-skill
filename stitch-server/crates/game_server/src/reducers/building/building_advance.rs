@@ -2,6 +2,7 @@ use spacetimedb::ReducerContext;
 
 use crate::services::permissions;
 use crate::tables::building_state::building_state;
+use crate::tables::project_site_state::project_site_state;
 
 #[spacetimedb::reducer]
 pub fn building_advance(ctx: &ReducerContext, building_id: u64, steps: u32) -> Result<(), String> {
@@ -33,6 +34,16 @@ pub fn building_advance(ctx: &ReducerContext, building_id: u64, steps: u32) -> R
     }
     building.updated_at = ctx.timestamp;
     ctx.db.building_state().entity_id().update(building);
+
+    if let Some(mut project) = ctx.db.project_site_state().entity_id().find(building_id) {
+        project.current_actions = project.current_actions.saturating_add(steps);
+        if project.current_actions >= project.total_actions {
+            ctx.db.project_site_state().entity_id().delete(building_id);
+        } else {
+            project.updated_at = ctx.timestamp;
+            ctx.db.project_site_state().entity_id().update(project);
+        }
+    }
 
     Ok(())
 }
