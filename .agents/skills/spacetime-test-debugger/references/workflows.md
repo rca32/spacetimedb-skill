@@ -61,7 +61,7 @@
 ### D. 수정/검증
 
 1. 서버 스키마를 `server_x/server_y/server_z`로 변경
-2. `cd web-client && bun run spacetime:generate`
+2. `cd stitch-orillusion-client && bun run spacetime:generate`
 3. 클라이언트 runtime(`sync`, `ui`, `net`)를 새 컬럼명으로 맞춤
 4. publish (로컬 디버그):
 - `spacetime publish --server 127.0.0.1:3000 --delete-data=always --yes stitch-server`

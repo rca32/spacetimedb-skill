@@ -5,6 +5,7 @@
 - [WSL 브라우저 자동화 규칙](#wsl-브라우저-자동화-규칙)
 - [stitch-server Workflow Cheat Sheet](#stitch-server-workflow-cheat-sheet)
 - [stitch-web-client 기본 안내](#stitch-web-client-기본-안내)
+- [stitch-orillusion-client 기본 안내](#stitch-orillusion-client-기본-안내)
 - [데이터 초기화 및 기본값 로딩 규칙](#데이터-초기화-및-기본값-로딩-규칙)
 - [assetdirectory 안내](#assetdirectory-안내)
 
@@ -60,20 +61,33 @@ spacetime publish stitch-server
 
 Replace `<name>` with the published database name (e.g., `stitch-server`).
 
-## stitch-web-client 기본 안내
-- Web client root: `/home/rca32/workspaces/spacetimedb-skill/web-client`
-- 목적: SpacetimeDB(`stitch-server`)에 연결해 월드/캐릭터/도메인 UI를 실시간으로 렌더링한다.
-- 로컬 실행: `cd web-client && bun run dev`
-- 빌드: `cd web-client && bun run build`
-- 타입 점검: `cd web-client && bun run typecheck`
-- 핵심 설계 문서 앵커:
-- `WEBCLIENTDESIGN/00-master.md`
-- `WEBCLIENTDESIGN/11-implementation-order.md`
-- `WEBCLIENTDESIGN/09-domain-social-npc-quest.md`
+
 
 ## assetdirectory 안내
 - 외부 에셋 수집(모델/텍스처/오디오) 상세는 [`assetdirectory/README.md`](assetdirectory/README.md)를 참조.
 - `assetdirectory`는 실험/테스트용으로만 보관하며 `web-client` 빌드 경로에는 강제 연결하지 않음.
+
+## stitch-orillusion-client 기본 안내
+- 프로젝트 루트: `stitch-orillusion-client`
+- 실시간 3D 렌더링 실험 클라이언트(Orillusion + SpacetimeDB) 가이드
+- 기본 실행:
+```bash
+cd stitch-orillusion-client
+bun install
+bun run spacetime:generate
+bun run dev
+```
+- 빌드/타입 점검:
+```bash
+bun run typecheck
+bun run build
+```
+- 환경 변수:
+  - `VITE_SPACETIME_URI` (기본: `ws://127.0.0.1:3000`)
+  - `VITE_SPACETIME_MODULE` (기본: `stitch-server`)
+  - `VITE_POSTFX_PROFILE` (`low|medium|high`)
+  - `VITE_DEVICE_PIXEL_RATIO` (기본: `1`)
+  - `VITE_DEBUG_BUILDING_MODELS` (`1`일 때 빌딩 모델/부착 디버그 로그 출력)
 
 ## 데이터 초기화 및 기본값 로딩 규칙
 - 개발 중 데이터 삭제(`--delete-data`)는 필요 시 언제든 수행할 수 있다.
