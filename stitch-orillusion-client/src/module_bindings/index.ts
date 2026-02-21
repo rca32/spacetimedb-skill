@@ -377,6 +377,8 @@ import NpcActionScheduleRow from "./npc_action_schedule_table";
 export { NpcActionScheduleRow };
 import NpcAiLoopTimerRow from "./npc_ai_loop_timer_table";
 export { NpcAiLoopTimerRow };
+import NpcAiStatusViewRow from "./npc_ai_status_view_table";
+export { NpcAiStatusViewRow };
 import NpcAnchorStateRow from "./npc_anchor_state_table";
 export { NpcAnchorStateRow };
 import NpcConversationSessionRow from "./npc_conversation_session_table";
@@ -663,6 +665,8 @@ import NpcActionSchedule from "./npc_action_schedule_type";
 export { NpcActionSchedule };
 import NpcAiLoopTimer from "./npc_ai_loop_timer_type";
 export { NpcAiLoopTimer };
+import NpcAiStatusView from "./npc_ai_status_view_type";
+export { NpcAiStatusView };
 import NpcAnchorState from "./npc_anchor_state_type";
 export { NpcAnchorState };
 import NpcConversationSession from "./npc_conversation_session_type";
@@ -1607,6 +1611,17 @@ const tablesSchema = __schema(
       { name: 'npc_ai_loop_timer_scheduled_id_key', constraint: 'unique', columns: ['scheduledId'] },
     ],
   }, NpcAiLoopTimerRow),
+  __table({
+    name: 'npc_ai_status_view',
+    indexes: [
+      { name: 'status_key', algorithm: 'btree', columns: [
+        'statusKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'npc_ai_status_view_status_key_key', constraint: 'unique', columns: ['statusKey'] },
+    ],
+  }, NpcAiStatusViewRow),
   __table({
     name: 'npc_anchor_state',
     indexes: [

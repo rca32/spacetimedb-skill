@@ -253,7 +253,7 @@ const RESOURCE_MARKER_MODEL: MarkerModelProfile = {
   key: 'resource',
   url: '/castle-tree-small.gltf',
   scale: 0.95,
-  offsetY: 0.5,
+  offsetY: 0,
   modelColor: [0.2, 0.88, 0.42],
   fallback: {
     kind: 'box',
@@ -386,6 +386,7 @@ export class WorldStreamVisualizer {
     waterFlag: TERRAIN_WATER_FLAG,
   })
   private terrainCellsByCoord = new Map<string, DecodedTerrainCells>()
+  private terrainFallbackHeightByChunkCoord = new Map<string, number>()
   private terrainChunkSizeHint = DEFAULT_CHUNK_WORLD_SIZE
   private showFootprintOverlay = false
   private projectLabels: string[] = []
@@ -451,7 +452,11 @@ export class WorldStreamVisualizer {
   }
 
   sampleTerrainHeight(x: number, z: number): number | null {
-    return this.terrainHeightIndex.sampleHeight(x, z)
+    const detailed = this.terrainHeightIndex.sampleHeight(x, z)
+    if (detailed !== null) {
+      return detailed
+    }
+    return this.sampleTerrainFallbackHeight(x, z)
   }
 
   sampleTerrainTraversable(x: number, z: number): boolean | null {
@@ -502,6 +507,7 @@ export class WorldStreamVisualizer {
       this.terrainStamps.clear()
       this.terrainCellsByCoord.clear()
       this.terrainHeightIndex.clear()
+      this.terrainFallbackHeightByChunkCoord.clear()
       return
     }
     const streamRows = Array.from(streamTable)
@@ -521,6 +527,7 @@ export class WorldStreamVisualizer {
     const payloadCellsByCoord = new Map<string, DecodedTerrainCells>()
     const payloadSignatureByCoord = new Map<string, string>()
     this.terrainHeightIndex.clear()
+    this.terrainFallbackHeightByChunkCoord.clear()
     for (const row of streamRows) {
       const chunkKey = String(row.chunkKey ?? '')
       if (!chunkKey) {
@@ -528,8 +535,14 @@ export class WorldStreamVisualizer {
       }
       const chunkX = Math.trunc(toNumber(row.chunkX))
       const chunkY = Math.trunc(toNumber(row.chunkY))
+      const heightMin = toNumber(row.heightMin)
+      const heightMax = toNumber(row.heightMax)
       const coord = chunkCoordKey(chunkX, chunkY)
       const payloadRow = payloadByChunkKey.get(chunkKey) ?? null
+      this.terrainFallbackHeightByChunkCoord.set(
+        coord,
+        elevationToWorldY((heightMin + heightMax) * 0.5),
+      )
       payloadSignatureByCoord.set(coord, terrainPayloadSignature(payloadRow))
       const cells = decodeTerrainPayload(payloadRow)
       if (cells) {
@@ -820,7 +833,9 @@ export class WorldStreamVisualizer {
       object.x = world.x
       const halfHeight = depleted ? 0.09 : 0.4
       const groundY = this.sampleTerrainHeight(world.x, world.z)
-      object.y = (groundY ?? 0) + halfHeight
+      const visualState = this.markerVisualStates.get(object)
+      const modelState = `model:${RESOURCE_MARKER_MODEL.key}`
+      object.y = (groundY ?? 0) + (visualState === modelState ? 0 : halfHeight)
       object.z = world.z
       object.scaleX = 0.55
       object.scaleY = depleted ? 0.18 : 0.8
@@ -1512,6 +1527,7 @@ export class WorldStreamVisualizer {
     this.prune(this.v2Objects, new Set())
     this.terrainCellsByCoord.clear()
     this.terrainHeightIndex.clear()
+    this.terrainFallbackHeightByChunkCoord.clear()
     this.waterResourcesByChunkKey.clear()
 
     this.stats = {
@@ -1526,6 +1542,21 @@ export class WorldStreamVisualizer {
       players: 0,
       v2: 0,
     }
+  }
+
+  private sampleTerrainFallbackHeight(worldX: number, worldZ: number): number | null {
+    if (
+      !Number.isFinite(worldX) ||
+      !Number.isFinite(worldZ) ||
+      this.terrainFallbackHeightByChunkCoord.size === 0
+    ) {
+      return null
+    }
+
+    const chunkSize = Math.max(1, Math.trunc(this.terrainChunkSizeHint))
+    const chunkX = Math.floor(worldX / chunkSize)
+    const chunkY = Math.floor(worldZ / chunkSize)
+    return this.terrainFallbackHeightByChunkCoord.get(chunkCoordKey(chunkX, chunkY)) ?? null
   }
 }
 

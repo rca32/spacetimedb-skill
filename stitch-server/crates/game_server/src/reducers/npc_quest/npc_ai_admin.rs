@@ -1,6 +1,7 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::services::permissions;
+use crate::services::projection_views;
 use crate::tables::item_def::item_def;
 use crate::tables::live_ops::feature_flags;
 use crate::tables::npc_quest::npc_trade_order_def;
@@ -27,6 +28,9 @@ fn upsert_feature_flag_row(ctx: &ReducerContext, flag_key: &str, enabled: bool) 
         ctx.db.feature_flags().flag_key().update(row);
     } else {
         ctx.db.feature_flags().insert(row);
+    }
+    if flag_key.trim() == "npc_ai_enabled" {
+        projection_views::sync_npc_ai_status_view(ctx, enabled);
     }
 }
 

@@ -8,7 +8,7 @@ use crate::tables::inventory_slot::inventory_slot;
 use crate::tables::item_instance::item_instance;
 use crate::tables::item_stack::item_stack;
 use crate::tables::movement::movement_request_log;
-use crate::tables::npc_quest::{npc_state, npc_state_stream};
+use crate::tables::npc_quest::{npc_ai_status_view, npc_state, npc_state_stream};
 use crate::tables::player_views::player_inventory_container_view;
 use crate::tables::player_views::player_inventory_item_view;
 use crate::tables::player_views::player_inventory_slot_view;
@@ -18,8 +18,9 @@ use crate::tables::player_views::player_wallet_view;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
 use crate::tables::{
-    NpcState, NpcStateStream, PlayerInventoryContainerView, PlayerInventoryItemView,
-    PlayerInventorySlotView, PlayerMovementFeedbackView, PlayerSessionView, PlayerWalletView,
+    NpcAiStatusView, NpcState, NpcStateStream, PlayerInventoryContainerView,
+    PlayerInventoryItemView, PlayerInventorySlotView, PlayerMovementFeedbackView,
+    PlayerSessionView, PlayerWalletView,
 };
 use crate::validation::anti_cheat;
 
@@ -214,6 +215,20 @@ pub fn sync_player_session_view(ctx: &ReducerContext, identity: Identity) {
             "player_session_view synced: identity={} mode=delete",
             identity
         );
+    }
+}
+
+pub fn sync_npc_ai_status_view(ctx: &ReducerContext, enabled: bool) {
+    let row = NpcAiStatusView {
+        status_key: 1,
+        enabled,
+        updated_at: ctx.timestamp,
+    };
+
+    if ctx.db.npc_ai_status_view().status_key().find(1).is_some() {
+        ctx.db.npc_ai_status_view().status_key().update(row);
+    } else {
+        ctx.db.npc_ai_status_view().insert(row);
     }
 }
 

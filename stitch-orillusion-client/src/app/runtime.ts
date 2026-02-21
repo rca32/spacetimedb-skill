@@ -594,7 +594,7 @@ export class OrillusionClientRuntime {
         `SELECT * FROM player_session_view WHERE identity = 0x${identityHex}`,
         `SELECT * FROM building_preview_feedback_view WHERE identity = 0x${identityHex}`,
         `SELECT * FROM npc_interaction_log WHERE caller_identity = 0x${identityHex}`,
-        'SELECT * FROM feature_flags',
+        'SELECT * FROM npc_ai_status_view',
       ],
       this.logger,
     )
@@ -701,7 +701,7 @@ export class OrillusionClientRuntime {
       return
     }
 
-    const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>).featureFlags
+    const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>).npcAiStatusView
     if (!table) {
       this.npcAiEnabled = true
       return
@@ -709,7 +709,7 @@ export class OrillusionClientRuntime {
 
     let found = false
     for (const row of table.iter()) {
-      if (String(row.flagKey ?? '') !== 'npc_ai_enabled') {
+      if (toU64Number(row.statusKey) !== 1) {
         continue
       }
       found = true

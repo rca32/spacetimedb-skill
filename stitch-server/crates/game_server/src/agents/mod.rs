@@ -97,16 +97,20 @@ fn upsert_feature_flag(ctx: &ReducerContext, flag_key: &str, enabled: bool) {
     } else {
         ctx.db.feature_flags().insert(row);
     }
+    if flag_key == NPC_AI_FEATURE_FLAG_KEY {
+        projection_views::sync_npc_ai_status_view(ctx, enabled);
+    }
 }
 
 fn ensure_default_npc_ai_feature_flag(ctx: &ReducerContext) {
-    if ctx
+    if let Some(row) = ctx
         .db
         .feature_flags()
         .flag_key()
         .find(NPC_AI_FEATURE_FLAG_KEY.to_string())
-        .is_none()
     {
+        projection_views::sync_npc_ai_status_view(ctx, row.enabled);
+    } else {
         upsert_feature_flag(ctx, NPC_AI_FEATURE_FLAG_KEY, true);
     }
 }

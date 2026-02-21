@@ -111,6 +111,14 @@ pub struct NpcInteractionLog {
     pub updated_at: Timestamp,
 }
 
+#[spacetimedb::table(name = npc_ai_status_view, public)]
+pub struct NpcAiStatusView {
+    #[primary_key]
+    pub status_key: u8,
+    pub enabled: bool,
+    pub updated_at: Timestamp,
+}
+
 #[spacetimedb::table(name = quest_chain_state, public)]
 pub struct QuestChainState {
     #[primary_key]
