@@ -235,6 +235,8 @@ export class OrillusionClientRuntime {
       postFxProfile: this.config.postFxProfile,
       waterQuality: this.config.postFxProfile === 'high' ? 'high' : 'balanced',
       resourceInstancingEnabled: this.config.resourceInstancingEnabled,
+      grassEnabled: this.config.grassEnabled,
+      grassBiomeIds: this.config.grassBiomeIds,
     })
     this.streamVisualizer.setChunkWorldSize(this.activeChunkSize)
     this.streamVisualizer.setShowFootprintOverlay(this.buildModeEnabled)
@@ -944,6 +946,7 @@ export class OrillusionClientRuntime {
       `<div>resource sync interval: 120ms</div>`,
       `<div>project labels: ${projectLabels.length > 0 ? projectLabels.join(' | ') : '-'}</div>`,
       `<div>terrain detail/fallback: ${streamStats ? `${streamStats.terrainDetailed}/${streamStats.terrainFallback}` : '-'}</div>`,
+      `<div>grass chunks/blades: ${streamStats ? `${streamStats.grassChunks}/${streamStats.grassBladesApprox}` : '-'}</div>`,
       `<div>build mode: ${this.buildModeEnabled ? 'on' : 'off'} (B toggle)</div>`,
       `<div>build def/facing: ${this.selectedBuildingDefId.toString()}/${this.buildFacing}</div>`,
       `<div>build preview: ${this.previewHexX !== null && this.previewHexZ !== null ? `${this.previewHexX},${this.previewHexZ}` : '-'}</div>`,

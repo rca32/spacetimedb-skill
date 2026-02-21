@@ -3,6 +3,7 @@ import {
   BoxGeometry,
   Color,
   Engine3D,
+  type Texture,
   InstanceDrawComponent,
   LitMaterial,
   Material,
@@ -15,25 +16,27 @@ import {
   Time,
   Float16ArrayTexture,
   UnLitMaterial,
+  Vector3,
   VertexAttributeName,
-} from '@orillusion/core'
-import { TerrainGeometry } from '@orillusion/geometry'
-import { hexToWorldXZ } from '../core/hex/hex-coords'
-import type { DbConnection } from '../module_bindings'
-import { TerrainHeightfieldIndex } from '../physics/terrain-heightfield-index'
+} from "@orillusion/core";
+import { TerrainGeometry } from "@orillusion/geometry";
+import { hexToWorldXZ } from "../core/hex/hex-coords";
+import type { DbConnection } from "../module_bindings";
+import { TerrainHeightfieldIndex } from "../physics/terrain-heightfield-index";
+import { LocalGrassComponent } from "./local-grass-component";
 import {
   createWaterSurfaceMaterial,
   WaterSurfaceMaterial,
   type WaterQualityLevel,
   type WaterRenderProfile,
-} from './materials/water-material'
+} from "./materials/water-material";
 
-const DEFAULT_CHUNK_WORLD_SIZE = 32
-const TERRAIN_PAYLOAD_VERSION_V1 = 1
-const TERRAIN_PAYLOAD_VERSION_V2 = 2
-const TERRAIN_WATER_FLAG = 1
-const TERRAIN_HEIGHT_SCALE = 0.2
-const TERRAIN_SEA_LEVEL_BASE = 12
+const DEFAULT_CHUNK_WORLD_SIZE = 32;
+const TERRAIN_PAYLOAD_VERSION_V1 = 1;
+const TERRAIN_PAYLOAD_VERSION_V2 = 2;
+const TERRAIN_WATER_FLAG = 1;
+const TERRAIN_HEIGHT_SCALE = 0.2;
+const TERRAIN_SEA_LEVEL_BASE = 12;
 const TERRAIN_NEIGHBOR_OFFSETS: ReadonlyArray<readonly [number, number]> = [
   [-1, -1],
   [0, -1],
@@ -43,106 +46,127 @@ const TERRAIN_NEIGHBOR_OFFSETS: ReadonlyArray<readonly [number, number]> = [
   [-1, 1],
   [0, 1],
   [1, 1],
-]
-const TERRAIN_SAMPLE_BASEMAP_URL = 'terrain/test01/bitmap.png'
-type TerrainBaseMap = NonNullable<LitMaterial['baseMap']>
-let terrainSampleBaseMap: TerrainBaseMap | null = null
-let terrainSampleBaseMapPromise: Promise<TerrainBaseMap | null> | null = null
-const WATER_SURFACE_OBJECT_NAME = '__terrain-water-surface__'
-const WATER_SURFACE_OFFSET = 0.06
-const WATER_SURFACE_HIDDEN_DEPTH = 0.04
-const WATER_WAVE_TIME_SCALE = 0.0018
-const WATER_DEPTH_MAX_WORLD = 2.4
-const RESOURCE_SYNC_INTERVAL_MS = 120
+];
+const TERRAIN_SAMPLE_BASEMAP_URL: string | null = null;
+type TerrainBaseMap = NonNullable<LitMaterial["baseMap"]>;
+let terrainSampleBaseMap: TerrainBaseMap | null = null;
+let terrainSampleBaseMapPromise: Promise<TerrainBaseMap | null> | null = null;
+const TERRAIN_GRASS_BLADE_TEXTURE_URL = "/terrain/grass/GrassThick.png";
+const TERRAIN_GRASS_OBJECT_NAME = "__terrain-grass__";
+const TERRAIN_GRASS_DEFAULT_BIOME_IDS: ReadonlyArray<number> = [0, 1];
+const TERRAIN_GRASS_HEIGHT_OFFSET = 0.04;
+const TERRAIN_GRASS_CELL_JITTER = 0.34;
+const TERRAIN_GRASS_SEGMENTS = 4;
+const TERRAIN_GRASS_DENSITY = 1;
+const TERRAIN_GRASS_MIN_SCALE = 0.45;
+const TERRAIN_GRASS_MAX_SCALE = 0.9;
+const TERRAIN_GRASS_Y_SCALE_RATIO = 0.005;
+const TERRAIN_GRASS_SHADER_HEIGHT_RATIO = 0.1;
+const TERRAIN_GRASS_BASE_HEIGHT_REFERENCE = 0.2;
+const WATER_SURFACE_OBJECT_NAME = "__terrain-water-surface__";
+const WATER_SURFACE_OFFSET = 0.06;
+const WATER_SURFACE_HIDDEN_DEPTH = 0.04;
+const WATER_WAVE_TIME_SCALE = 0.0018;
+const WATER_DEPTH_MAX_WORLD = 2.4;
+const RESOURCE_SYNC_INTERVAL_MS = 120;
+
+interface GrassTextureBundle {
+  readonly blade: Texture;
+  readonly windNoise: Texture;
+}
+
+let terrainGrassTextures: GrassTextureBundle | null = null;
+let terrainGrassTexturesPromise: Promise<GrassTextureBundle | null> | null =
+  null;
 
 interface BuildingModelVariant {
-  readonly key: string
-  readonly pieces: ReadonlyArray<BuildingModelPiece>
+  readonly key: string;
+  readonly pieces: ReadonlyArray<BuildingModelPiece>;
 }
 
 interface BuildingModelPiece {
-  readonly key: string
-  readonly url: string
-  readonly offsetX?: number
-  readonly offsetY?: number
-  readonly offsetZ?: number
-  readonly rotationY?: number
-  readonly scale?: number
+  readonly key: string;
+  readonly url: string;
+  readonly offsetX?: number;
+  readonly offsetY?: number;
+  readonly offsetZ?: number;
+  readonly rotationY?: number;
+  readonly scale?: number;
 }
 
 interface BuildingTierProfile {
-  readonly fallbackScaleY: number
-  readonly variants: ReadonlyArray<BuildingModelVariant>
+  readonly fallbackScaleY: number;
+  readonly variants: ReadonlyArray<BuildingModelVariant>;
 }
 
 interface MarkerModelProfile {
-  readonly key: string
-  readonly url: string
-  readonly scale: number
-  readonly offsetY?: number
-  readonly rotationY?: number
-  readonly modelColor: readonly [number, number, number]
-  readonly preserveMaterials?: boolean
-  readonly shadowSafePbr?: boolean
-  readonly rootObjectName?: string
-  readonly defaultAnimation?: string
-  readonly defaultAnimationIndex?: number
+  readonly key: string;
+  readonly url: string;
+  readonly scale: number;
+  readonly offsetY?: number;
+  readonly rotationY?: number;
+  readonly modelColor: readonly [number, number, number];
+  readonly preserveMaterials?: boolean;
+  readonly shadowSafePbr?: boolean;
+  readonly rootObjectName?: string;
+  readonly defaultAnimation?: string;
+  readonly defaultAnimationIndex?: number;
   readonly fallback:
     | {
-      readonly kind: 'box'
-      readonly width: number
-      readonly height: number
-      readonly depth: number
-      readonly color: readonly [number, number, number]
-    }
+        readonly kind: "box";
+        readonly width: number;
+        readonly height: number;
+        readonly depth: number;
+        readonly color: readonly [number, number, number];
+      }
     | {
-      readonly kind: 'sphere'
-      readonly radius: number
-      readonly segments?: number
-      readonly color: readonly [number, number, number]
-    }
+        readonly kind: "sphere";
+        readonly radius: number;
+        readonly segments?: number;
+        readonly color: readonly [number, number, number];
+      };
 }
 
 const BUILDING_PIECE_FLOOR: BuildingModelPiece = {
-  key: 'floor',
-  url: '/floor.gltf',
+  key: "floor",
+  url: "/floor.gltf",
   offsetY: 0.02,
-}
+};
 
 const BUILDING_PIECE_ROOF: BuildingModelPiece = {
-  key: 'roof',
-  url: '/roof-flat-square.gltf',
+  key: "roof",
+  url: "/roof-flat-square.gltf",
   offsetY: 2.36,
   scale: 0.84,
-}
+};
 
 const BUILDING_PIECE_COLUMN_NW: BuildingModelPiece = {
-  key: 'column-nw',
-  url: '/column-wide.gltf',
+  key: "column-nw",
+  url: "/column-wide.gltf",
   offsetX: -0.88,
   offsetZ: -0.88,
-}
+};
 
 const BUILDING_PIECE_COLUMN_NE: BuildingModelPiece = {
-  key: 'column-ne',
-  url: '/column-wide.gltf',
+  key: "column-ne",
+  url: "/column-wide.gltf",
   offsetX: 0.88,
   offsetZ: -0.88,
-}
+};
 
 const BUILDING_PIECE_COLUMN_SW: BuildingModelPiece = {
-  key: 'column-sw',
-  url: '/column-wide.gltf',
+  key: "column-sw",
+  url: "/column-wide.gltf",
   offsetX: -0.88,
   offsetZ: 0.88,
-}
+};
 
 const BUILDING_PIECE_COLUMN_SE: BuildingModelPiece = {
-  key: 'column-se',
-  url: '/column-wide.gltf',
+  key: "column-se",
+  url: "/column-wide.gltf",
   offsetX: 0.88,
   offsetZ: 0.88,
-}
+};
 
 function wallRingPieces(
   westUrl: string,
@@ -151,11 +175,11 @@ function wallRingPieces(
   northUrl: string,
 ): BuildingModelPiece[] {
   return [
-    { key: 'wall-west', url: westUrl, offsetX: -0.96 },
-    { key: 'wall-east', url: eastUrl, offsetX: 0.96 },
-    { key: 'wall-south', url: southUrl, offsetZ: -0.96, rotationY: 90 },
-    { key: 'wall-north', url: northUrl, offsetZ: 0.96, rotationY: 90 },
-  ]
+    { key: "wall-west", url: westUrl, offsetX: -0.96 },
+    { key: "wall-east", url: eastUrl, offsetX: 0.96 },
+    { key: "wall-south", url: southUrl, offsetZ: -0.96, rotationY: 90 },
+    { key: "wall-north", url: northUrl, offsetZ: 0.96, rotationY: 90 },
+  ];
 }
 
 const BUILDING_TIER_PROFILES: ReadonlyArray<BuildingTierProfile> = [
@@ -163,13 +187,11 @@ const BUILDING_TIER_PROFILES: ReadonlyArray<BuildingTierProfile> = [
     fallbackScaleY: 1.2,
     variants: [
       {
-        key: 'foundation-a',
-        pieces: [
-          BUILDING_PIECE_FLOOR,
-        ],
+        key: "foundation-a",
+        pieces: [BUILDING_PIECE_FLOOR],
       },
       {
-        key: 'foundation-b',
+        key: "foundation-b",
         pieces: [
           BUILDING_PIECE_FLOOR,
           BUILDING_PIECE_COLUMN_NW,
@@ -182,21 +204,26 @@ const BUILDING_TIER_PROFILES: ReadonlyArray<BuildingTierProfile> = [
     fallbackScaleY: 1.9,
     variants: [
       {
-        key: 'frame-a',
-        pieces: [
-          BUILDING_PIECE_FLOOR,
-          ...wallRingPieces('/wall.gltf', '/wall.gltf', '/wall-doorway-square.gltf', '/wall-window-square.gltf'),
-        ],
-      },
-      {
-        key: 'frame-b',
+        key: "frame-a",
         pieces: [
           BUILDING_PIECE_FLOOR,
           ...wallRingPieces(
-            '/wall-window-square.gltf',
-            '/wall-window-square.gltf',
-            '/wall-doorway-square.gltf',
-            '/wall.gltf',
+            "/wall.gltf",
+            "/wall.gltf",
+            "/wall-doorway-square.gltf",
+            "/wall-window-square.gltf",
+          ),
+        ],
+      },
+      {
+        key: "frame-b",
+        pieces: [
+          BUILDING_PIECE_FLOOR,
+          ...wallRingPieces(
+            "/wall-window-square.gltf",
+            "/wall-window-square.gltf",
+            "/wall-doorway-square.gltf",
+            "/wall.gltf",
           ),
         ],
       },
@@ -206,10 +233,15 @@ const BUILDING_TIER_PROFILES: ReadonlyArray<BuildingTierProfile> = [
     fallbackScaleY: 2.6,
     variants: [
       {
-        key: 'house-a',
+        key: "house-a",
         pieces: [
           BUILDING_PIECE_FLOOR,
-          ...wallRingPieces('/wall.gltf', '/wall.gltf', '/wall-doorway-square.gltf', '/wall-window-square.gltf'),
+          ...wallRingPieces(
+            "/wall.gltf",
+            "/wall.gltf",
+            "/wall-doorway-square.gltf",
+            "/wall-window-square.gltf",
+          ),
           BUILDING_PIECE_ROOF,
           BUILDING_PIECE_COLUMN_NW,
           BUILDING_PIECE_COLUMN_NE,
@@ -218,14 +250,14 @@ const BUILDING_TIER_PROFILES: ReadonlyArray<BuildingTierProfile> = [
         ],
       },
       {
-        key: 'house-b',
+        key: "house-b",
         pieces: [
           BUILDING_PIECE_FLOOR,
           ...wallRingPieces(
-            '/wall-window-square.gltf',
-            '/wall-window-square.gltf',
-            '/wall-doorway-square.gltf',
-            '/wall.gltf',
+            "/wall-window-square.gltf",
+            "/wall-window-square.gltf",
+            "/wall-doorway-square.gltf",
+            "/wall.gltf",
           ),
           BUILDING_PIECE_ROOF,
           BUILDING_PIECE_COLUMN_NW,
@@ -234,178 +266,198 @@ const BUILDING_TIER_PROFILES: ReadonlyArray<BuildingTierProfile> = [
       },
     ],
   },
-]
+];
 
 const NPC_MARKER_MODEL: MarkerModelProfile = {
-  key: 'npc',
-  url: '/blocky-character-c.gltf',
+  key: "npc",
+  url: "/blocky-character-c.gltf",
   scale: 0.17,
   offsetY: -0.43,
   rotationY: 180,
   modelColor: [0.95, 0.55, 0.2],
   fallback: {
-    kind: 'sphere',
+    kind: "sphere",
     radius: 0.45,
     segments: 14,
     color: [0.95, 0.55, 0.2],
   },
-}
+};
 
 const RESOURCE_MARKER_MODEL: MarkerModelProfile = {
-  key: 'resource',
-  url: '/castle-tree-small.gltf',
+  key: "resource",
+  url: "/castle-tree-small.gltf",
   scale: 0.95,
   offsetY: 0,
   modelColor: [0.2, 0.88, 0.42],
   fallback: {
-    kind: 'box',
+    kind: "box",
     width: 1,
     height: 1,
     depth: 1,
     color: [0.2, 0.88, 0.42],
   },
-}
+};
 
 const PROJECT_SITE_MARKER_MODEL: MarkerModelProfile = {
-  key: 'project-site',
-  url: '/castle-flag-banner-short.gltf',
+  key: "project-site",
+  url: "/castle-flag-banner-short.gltf",
   scale: 0.75,
   offsetY: 0.1,
   modelColor: [0.2, 0.72, 0.95],
   fallback: {
-    kind: 'box',
+    kind: "box",
     width: 1,
     height: 1,
     depth: 1,
     color: [0.2, 0.72, 0.95],
   },
-}
+};
 
 const PLAYER_LOCAL_MARKER_MODEL: MarkerModelProfile = {
-  key: 'player-local',
-  url: '/Soldier_draco.glb',
+  key: "player-local",
+  url: "/Soldier_draco.glb",
   scale: 0.3,
   offsetY: -0.9,
   rotationY: 180,
   modelColor: [0.08, 0.95, 0.9],
   preserveMaterials: true,
   shadowSafePbr: true,
-  rootObjectName: 'Character',
+  rootObjectName: "Character",
   defaultAnimationIndex: 1,
   fallback: {
-    kind: 'box',
+    kind: "box",
     width: 0.7,
     height: 1.8,
     depth: 0.7,
     color: [0.08, 0.95, 0.9],
   },
-}
+};
 
 const PLAYER_REMOTE_MARKER_MODEL: MarkerModelProfile = {
-  key: 'player-remote',
-  url: '/Soldier_draco.glb',
+  key: "player-remote",
+  url: "/Soldier_draco.glb",
   scale: 0.3,
   offsetY: -0.9,
   rotationY: 180,
   modelColor: [0.52, 0.74, 0.98],
   preserveMaterials: true,
   shadowSafePbr: true,
-  rootObjectName: 'Character',
+  rootObjectName: "Character",
   defaultAnimationIndex: 1,
   fallback: {
-    kind: 'box',
+    kind: "box",
     width: 0.7,
     height: 1.8,
     depth: 0.7,
     color: [0.52, 0.74, 0.98],
   },
-}
+};
 
 interface VisualizerStats {
-  terrain: number
-  terrainDetailed: number
-  terrainFallback: number
-  npc: number
-  resource: number
-  building: number
-  project: number
-  footprint: number
-  players: number
-  v2: number
+  terrain: number;
+  terrainDetailed: number;
+  terrainFallback: number;
+  grassChunks: number;
+  grassBladesApprox: number;
+  npc: number;
+  resource: number;
+  building: number;
+  project: number;
+  footprint: number;
+  players: number;
+  v2: number;
 }
 
 export interface NpcStateSnapshot {
-  readonly npcId: bigint
-  readonly regionId: bigint
-  readonly dimensionId: number
-  readonly worldX: number
-  readonly worldZ: number
+  readonly npcId: bigint;
+  readonly regionId: bigint;
+  readonly dimensionId: number;
+  readonly worldX: number;
+  readonly worldZ: number;
 }
 
 export interface WorldStreamVisualizerOptions {
-  readonly debugBuildingModels?: boolean
-  readonly postFxProfile?: WaterRenderProfile
-  readonly waterQuality?: WaterQualityLevel
-  readonly resourceInstancingEnabled?: boolean
+  readonly debugBuildingModels?: boolean;
+  readonly postFxProfile?: WaterRenderProfile;
+  readonly waterQuality?: WaterQualityLevel;
+  readonly resourceInstancingEnabled?: boolean;
+  readonly grassEnabled?: boolean;
+  readonly grassBiomeIds?: readonly number[];
 }
 
 interface WaterSurfaceChunkResources {
-  readonly material: WaterSurfaceMaterial
-  readonly depthTexture: Float16ArrayTexture
+  readonly material: WaterSurfaceMaterial;
+  readonly depthTexture: Float16ArrayTexture;
 }
 
-type ResourceRenderMode = 'instanced' | 'legacy'
+interface TerrainChunkBuildResult {
+  readonly object: Object3D;
+  readonly grassBladeCount: number;
+}
+
+type ResourceRenderMode = "instanced" | "legacy";
 
 export class WorldStreamVisualizer {
-  private readonly root = new Object3D()
-  private readonly resourceInstanceRoot = new Object3D()
-  private readonly debugBuildingModels: boolean
-  private readonly waterProfile: WaterRenderProfile
-  private readonly waterQuality: WaterQualityLevel
-  private readonly resourceInstancingEnabled: boolean
+  private readonly root = new Object3D();
+  private readonly resourceInstanceRoot = new Object3D();
+  private readonly debugBuildingModels: boolean;
+  private readonly waterProfile: WaterRenderProfile;
+  private readonly waterQuality: WaterQualityLevel;
+  private readonly resourceInstancingEnabled: boolean;
+  private readonly grassEnabled: boolean;
+  private readonly grassBiomeIds: Set<number>;
 
-  private readonly terrainObjects = new Map<string, Object3D>()
-  private readonly terrainStamps = new Map<string, string>()
-  private readonly waterResourcesByChunkKey = new Map<string, WaterSurfaceChunkResources>()
-  private readonly npcObjects = new Map<string, Object3D>()
-  private readonly npcStateSnapshots = new Map<string, NpcStateSnapshot>()
-  private readonly resourceObjects = new Map<string, Object3D>()
-  private readonly buildingObjects = new Map<string, Object3D>()
-  private readonly buildingVisualVersions = new Map<string, string>()
-  private readonly buildingModelAppliedVersions = new Map<string, string>()
-  private readonly buildingModelPendingVersions = new Map<string, string>()
-  private readonly buildingPrefabByUrl = new Map<string, Object3D>()
-  private readonly buildingPrefabLoadPromises = new Map<string, Promise<Object3D | null>>()
-  private readonly buildingPrefabFailedUrls = new Set<string>()
-  private readonly markerPrefabByKey = new Map<string, Object3D>()
-  private readonly markerPrefabLoadPromises = new Map<string, Promise<void>>()
-  private readonly markerPrefabFailedKeys = new Set<string>()
-  private readonly markerVisualStates = new WeakMap<Object3D, string>()
-  private readonly buildingDefByEntityId = new Map<string, string>()
-  private readonly buildingDefByRequirementKey = new Map<string, string>()
-  private readonly projectSiteObjects = new Map<string, Object3D>()
-  private readonly footprintObjects = new Map<string, Object3D>()
-  private readonly playerObjects = new Map<string, Object3D>()
-  private readonly v2Objects = new Map<string, Object3D>()
+  private readonly terrainObjects = new Map<string, Object3D>();
+  private readonly terrainStamps = new Map<string, string>();
+  private readonly grassBladeCountByChunkKey = new Map<string, number>();
+  private readonly waterResourcesByChunkKey = new Map<
+    string,
+    WaterSurfaceChunkResources
+  >();
+  private readonly npcObjects = new Map<string, Object3D>();
+  private readonly npcStateSnapshots = new Map<string, NpcStateSnapshot>();
+  private readonly resourceObjects = new Map<string, Object3D>();
+  private readonly buildingObjects = new Map<string, Object3D>();
+  private readonly buildingVisualVersions = new Map<string, string>();
+  private readonly buildingModelAppliedVersions = new Map<string, string>();
+  private readonly buildingModelPendingVersions = new Map<string, string>();
+  private readonly buildingPrefabByUrl = new Map<string, Object3D>();
+  private readonly buildingPrefabLoadPromises = new Map<
+    string,
+    Promise<Object3D | null>
+  >();
+  private readonly buildingPrefabFailedUrls = new Set<string>();
+  private readonly markerPrefabByKey = new Map<string, Object3D>();
+  private readonly markerPrefabLoadPromises = new Map<string, Promise<void>>();
+  private readonly markerPrefabFailedKeys = new Set<string>();
+  private readonly markerVisualStates = new WeakMap<Object3D, string>();
+  private readonly buildingDefByEntityId = new Map<string, string>();
+  private readonly buildingDefByRequirementKey = new Map<string, string>();
+  private readonly projectSiteObjects = new Map<string, Object3D>();
+  private readonly footprintObjects = new Map<string, Object3D>();
+  private readonly playerObjects = new Map<string, Object3D>();
+  private readonly v2Objects = new Map<string, Object3D>();
   private readonly terrainHeightIndex = new TerrainHeightfieldIndex({
     heightScale: TERRAIN_HEIGHT_SCALE,
     seaLevelBase: TERRAIN_SEA_LEVEL_BASE,
     waterFlag: TERRAIN_WATER_FLAG,
-  })
-  private terrainCellsByCoord = new Map<string, DecodedTerrainCells>()
-  private terrainFallbackHeightByChunkCoord = new Map<string, number>()
-  private terrainChunkSizeHint = DEFAULT_CHUNK_WORLD_SIZE
-  private showFootprintOverlay = false
-  private projectLabels: string[] = []
-  private resourceRenderMode: ResourceRenderMode = 'legacy'
-  private lastResourceSyncAtMs = 0
+  });
+  private terrainCellsByCoord = new Map<string, DecodedTerrainCells>();
+  private terrainFallbackHeightByChunkCoord = new Map<string, number>();
+  private terrainChunkSizeHint = DEFAULT_CHUNK_WORLD_SIZE;
+  private showFootprintOverlay = false;
+  private projectLabels: string[] = [];
+  private resourceRenderMode: ResourceRenderMode = "legacy";
+  private lastResourceSyncAtMs = 0;
 
-  private chunkWorldSize = DEFAULT_CHUNK_WORLD_SIZE
+  private chunkWorldSize = DEFAULT_CHUNK_WORLD_SIZE;
 
   private stats: VisualizerStats = {
     terrain: 0,
     terrainDetailed: 0,
     terrainFallback: 0,
+    grassChunks: 0,
+    grassBladesApprox: 0,
     npc: 0,
     resource: 0,
     building: 0,
@@ -413,103 +465,114 @@ export class WorldStreamVisualizer {
     footprint: 0,
     players: 0,
     v2: 0,
-  }
+  };
 
   constructor(scene: Scene3D, options: WorldStreamVisualizerOptions = {}) {
-    this.debugBuildingModels = options.debugBuildingModels === true
-    this.waterProfile = options.postFxProfile ?? 'low'
-    this.waterQuality = options.waterQuality ?? 'balanced'
-    this.resourceInstancingEnabled = options.resourceInstancingEnabled !== false
-    scene.addChild(this.root)
-    this.root.addChild(this.resourceInstanceRoot)
+    this.debugBuildingModels = options.debugBuildingModels === true;
+    this.waterProfile = options.postFxProfile ?? "low";
+    this.waterQuality = options.waterQuality ?? "balanced";
+    this.resourceInstancingEnabled =
+      options.resourceInstancingEnabled !== false;
+    this.grassEnabled = options.grassEnabled !== false;
+    this.grassBiomeIds = normalizeBiomeIdSet(
+      options.grassBiomeIds,
+      TERRAIN_GRASS_DEFAULT_BIOME_IDS,
+    );
+    scene.addChild(this.root);
+    this.root.addChild(this.resourceInstanceRoot);
     this.resourceRenderMode = this.resourceInstancingEnabled
       ? this.ensureResourceInstancingReady()
-        ? 'instanced'
-        : 'legacy'
-      : 'legacy'
+        ? "instanced"
+        : "legacy"
+      : "legacy";
   }
 
   dispose(): void {
-    this.clearAll()
-    this.root.destroy()
+    this.clearAll();
+    this.root.destroy();
   }
 
   setChunkWorldSize(size: number): void {
     if (!Number.isFinite(size) || size <= 0) {
-      return
+      return;
     }
-    this.chunkWorldSize = Math.max(1, Math.trunc(size))
+    this.chunkWorldSize = Math.max(1, Math.trunc(size));
   }
 
   getStats(): VisualizerStats {
-    return this.stats
+    return this.stats;
   }
 
   getResourceRenderMode(): ResourceRenderMode {
-    return this.resourceRenderMode
+    return this.resourceRenderMode;
   }
 
   setShowFootprintOverlay(enabled: boolean): void {
-    this.showFootprintOverlay = enabled
+    this.showFootprintOverlay = enabled;
     if (!enabled) {
-      this.prune(this.footprintObjects, new Set())
+      this.prune(this.footprintObjects, new Set());
     }
   }
 
   getProjectLabels(maxItems = 4): string[] {
     if (maxItems <= 0) {
-      return []
+      return [];
     }
-    return this.projectLabels.slice(0, Math.trunc(maxItems))
+    return this.projectLabels.slice(0, Math.trunc(maxItems));
   }
 
   getNpcStateSnapshot(npcId: bigint): NpcStateSnapshot | null {
-    return this.npcStateSnapshots.get(npcId.toString()) ?? null
+    return this.npcStateSnapshots.get(npcId.toString()) ?? null;
   }
 
   getNpcStateSnapshots(): NpcStateSnapshot[] {
-    return [...this.npcStateSnapshots.values()]
+    return [...this.npcStateSnapshots.values()];
   }
 
   sampleTerrainHeight(x: number, z: number): number | null {
-    const detailed = this.terrainHeightIndex.sampleHeight(x, z)
+    const detailed = this.terrainHeightIndex.sampleHeight(x, z);
     if (detailed !== null) {
-      return detailed
+      return detailed;
     }
-    return this.sampleTerrainFallbackHeight(x, z)
+    return this.sampleTerrainFallbackHeight(x, z);
   }
 
   sampleTerrainTraversable(x: number, z: number): boolean | null {
-    return this.terrainHeightIndex.sampleTraversable(x, z)
+    return this.terrainHeightIndex.sampleTraversable(x, z);
   }
 
-  update(connection: DbConnection | null, localIdentityHex: string | null): void {
+  update(
+    connection: DbConnection | null,
+    localIdentityHex: string | null,
+  ): void {
     if (!connection?.isActive) {
-      this.clearAll()
-      return
+      this.clearAll();
+      return;
     }
 
-    const db = connection.db as Record<string, unknown>
+    const db = connection.db as Record<string, unknown>;
 
-    this.syncTerrain(db)
-    this.syncNpcs(db)
-    this.syncResources(db, Date.now())
-    this.syncBuildingDefs(db)
-    this.syncProjectSites(db)
-    this.syncBuildings(db)
+    this.syncTerrain(db);
+    this.syncNpcs(db);
+    this.syncResources(db, Date.now());
+    this.syncBuildingDefs(db);
+    this.syncProjectSites(db);
+    this.syncBuildings(db);
     if (this.showFootprintOverlay) {
-      this.syncBuildingFootprints(db)
+      this.syncBuildingFootprints(db);
     } else {
-      this.prune(this.footprintObjects, new Set())
+      this.prune(this.footprintObjects, new Set());
     }
-    this.syncPlayers(db, localIdentityHex)
-    this.syncV2Streams(db)
-    this.pruneBuildingDefEntityCache()
+    this.syncPlayers(db, localIdentityHex);
+    this.syncV2Streams(db);
+    this.pruneBuildingDefEntityCache();
 
     this.stats = {
       terrain: this.terrainObjects.size,
       terrainDetailed: this.stats.terrainDetailed,
       terrainFallback: this.stats.terrainFallback,
+      grassChunks: this.grassBladeCountByChunkKey.size,
+      grassBladesApprox: sumMapValues(this.grassBladeCountByChunkKey),
       npc: this.npcObjects.size,
       resource: this.resourceObjects.size,
       building: this.buildingObjects.size,
@@ -517,100 +580,119 @@ export class WorldStreamVisualizer {
       footprint: this.footprintObjects.size,
       players: this.playerObjects.size,
       v2: this.v2Objects.size,
-    }
+    };
   }
 
   private syncTerrain(db: Record<string, unknown>): void {
-    const streamTable = getTableRows(db, 'terrainChunkStream')
+    const streamTable = getTableRows(db, "terrainChunkStream");
     if (!streamTable) {
-      this.prune(this.terrainObjects, new Set(), (key) => this.releaseTerrainWaterResources(key))
-      this.terrainStamps.clear()
-      this.terrainCellsByCoord.clear()
-      this.terrainHeightIndex.clear()
-      this.terrainFallbackHeightByChunkCoord.clear()
-      return
+      this.prune(this.terrainObjects, new Set(), (key) => {
+        this.releaseTerrainWaterResources(key);
+        this.grassBladeCountByChunkKey.delete(key);
+      });
+      this.terrainStamps.clear();
+      this.grassBladeCountByChunkKey.clear();
+      this.terrainCellsByCoord.clear();
+      this.terrainHeightIndex.clear();
+      this.terrainFallbackHeightByChunkCoord.clear();
+      this.stats.terrainDetailed = 0;
+      this.stats.terrainFallback = 0;
+      return;
     }
-    const streamRows = Array.from(streamTable)
+    const streamRows = Array.from(streamTable);
 
-    const payloadByChunkKey = new Map<string, Record<string, unknown>>()
-    const payloadTable = getTableRows(db, 'terrainChunkPayload')
+    const payloadByChunkKey = new Map<string, Record<string, unknown>>();
+    const payloadTable = getTableRows(db, "terrainChunkPayload");
     if (payloadTable) {
       for (const row of payloadTable) {
-        const key = String(row.chunkKey ?? '')
+        const key = String(row.chunkKey ?? "");
         if (!key) {
-          continue
+          continue;
         }
-        payloadByChunkKey.set(key, row)
+        payloadByChunkKey.set(key, row);
       }
     }
 
-    const payloadCellsByCoord = new Map<string, DecodedTerrainCells>()
-    const payloadSignatureByCoord = new Map<string, string>()
-    this.terrainHeightIndex.clear()
-    this.terrainFallbackHeightByChunkCoord.clear()
+    const payloadCellsByCoord = new Map<string, DecodedTerrainCells>();
+    const payloadSignatureByCoord = new Map<string, string>();
+    this.terrainHeightIndex.clear();
+    this.terrainFallbackHeightByChunkCoord.clear();
     for (const row of streamRows) {
-      const chunkKey = String(row.chunkKey ?? '')
+      const chunkKey = String(row.chunkKey ?? "");
       if (!chunkKey) {
-        continue
+        continue;
       }
-      const chunkX = Math.trunc(toNumber(row.chunkX))
-      const chunkY = Math.trunc(toNumber(row.chunkY))
-      const heightMin = toNumber(row.heightMin)
-      const heightMax = toNumber(row.heightMax)
-      const coord = chunkCoordKey(chunkX, chunkY)
-      const payloadRow = payloadByChunkKey.get(chunkKey) ?? null
+      const chunkX = Math.trunc(toNumber(row.chunkX));
+      const chunkY = Math.trunc(toNumber(row.chunkY));
+      const heightMin = toNumber(row.heightMin);
+      const heightMax = toNumber(row.heightMax);
+      const coord = chunkCoordKey(chunkX, chunkY);
+      const payloadRow = payloadByChunkKey.get(chunkKey) ?? null;
       this.terrainFallbackHeightByChunkCoord.set(
         coord,
         elevationToWorldY((heightMin + heightMax) * 0.5),
-      )
-      payloadSignatureByCoord.set(coord, terrainPayloadSignature(payloadRow))
-      const cells = decodeTerrainPayload(payloadRow)
+      );
+      payloadSignatureByCoord.set(coord, terrainPayloadSignature(payloadRow));
+      const cells = decodeTerrainPayload(payloadRow);
       if (cells) {
-        payloadCellsByCoord.set(coord, cells)
-        this.terrainHeightIndex.setChunk(chunkX, chunkY, cells)
+        payloadCellsByCoord.set(coord, cells);
+        this.terrainHeightIndex.setChunk(chunkX, chunkY, cells);
       }
     }
-    this.terrainCellsByCoord = payloadCellsByCoord
-    const firstCells = payloadCellsByCoord.values().next().value as DecodedTerrainCells | undefined
+    this.terrainCellsByCoord = payloadCellsByCoord;
+    const firstCells = payloadCellsByCoord.values().next().value as
+      | DecodedTerrainCells
+      | undefined;
     if (firstCells && firstCells.chunkSize > 0) {
-      this.terrainChunkSizeHint = firstCells.chunkSize
+      this.terrainChunkSizeHint = firstCells.chunkSize;
     }
-    this.terrainHeightIndex.setChunkSizeHint(this.terrainChunkSizeHint)
+    this.terrainHeightIndex.setChunkSizeHint(this.terrainChunkSizeHint);
 
-    const seen = new Set<string>()
-    let detailedCount = 0
-    let fallbackCount = 0
+    const seen = new Set<string>();
+    let detailedCount = 0;
+    let fallbackCount = 0;
     for (const row of streamRows) {
-      const chunkKey = String(row.chunkKey ?? '')
+      const chunkKey = String(row.chunkKey ?? "");
       if (!chunkKey) {
-        continue
+        continue;
       }
-      seen.add(chunkKey)
+      seen.add(chunkKey);
 
-      const chunkX = Math.trunc(toNumber(row.chunkX))
-      const chunkY = Math.trunc(toNumber(row.chunkY))
-      const coord = chunkCoordKey(chunkX, chunkY)
-      const biomeId = toNumber(row.biomeId)
-      const payloadRow = payloadByChunkKey.get(chunkKey) ?? null
-      const cells = payloadCellsByCoord.get(coord) ?? null
-      const chunkWorldSize = cells?.chunkSize ?? inferTerrainChunkSize(payloadRow) ?? this.chunkWorldSize
+      const chunkX = Math.trunc(toNumber(row.chunkX));
+      const chunkY = Math.trunc(toNumber(row.chunkY));
+      const coord = chunkCoordKey(chunkX, chunkY);
+      const biomeId = toNumber(row.biomeId);
+      const payloadRow = payloadByChunkKey.get(chunkKey) ?? null;
+      const cells = payloadCellsByCoord.get(coord) ?? null;
+      const chunkWorldSize =
+        cells?.chunkSize ??
+        inferTerrainChunkSize(payloadRow) ??
+        this.chunkWorldSize;
       if (payloadCellsByCoord.has(coord)) {
-        detailedCount += 1
+        detailedCount += 1;
       } else {
-        fallbackCount += 1
+        fallbackCount += 1;
       }
-      const stamp = terrainStamp(payloadRow, row, chunkX, chunkY, payloadSignatureByCoord)
+      const stamp = terrainStamp(
+        payloadRow,
+        row,
+        chunkX,
+        chunkY,
+        payloadSignatureByCoord,
+      );
+      const fullStamp = `${stamp}|${this.grassChunkStamp(biomeId)}`;
 
-      let object = this.terrainObjects.get(chunkKey)
-      const prevStamp = this.terrainStamps.get(chunkKey)
-      if (!object || prevStamp !== stamp) {
+      let object = this.terrainObjects.get(chunkKey);
+      const prevStamp = this.terrainStamps.get(chunkKey);
+      if (!object || prevStamp !== fullStamp) {
         if (object) {
-          object.destroy()
-          this.releaseTerrainWaterResources(chunkKey)
-          this.terrainObjects.delete(chunkKey)
+          object.destroy();
+          this.releaseTerrainWaterResources(chunkKey);
+          this.grassBladeCountByChunkKey.delete(chunkKey);
+          this.terrainObjects.delete(chunkKey);
         }
 
-        object = this.buildTerrainChunkObject(
+        const built = this.buildTerrainChunkObject(
           chunkKey,
           biomeId,
           chunkX,
@@ -619,30 +701,35 @@ export class WorldStreamVisualizer {
           payloadRow,
           row,
           payloadCellsByCoord,
-        )
-        if (!object) {
-          continue
+        );
+        if (!built) {
+          continue;
         }
 
-        this.root.addChild(object)
-        this.terrainObjects.set(chunkKey, object)
-        this.terrainStamps.set(chunkKey, stamp)
+        object = built.object;
+        this.root.addChild(object);
+        this.terrainObjects.set(chunkKey, object);
+        this.terrainStamps.set(chunkKey, fullStamp);
+        this.grassBladeCountByChunkKey.set(chunkKey, built.grassBladeCount);
       }
 
-      object.x = chunkX * chunkWorldSize
-      object.y = 0
-      object.z = chunkY * chunkWorldSize
+      object.x = chunkX * chunkWorldSize;
+      object.y = 0;
+      object.z = chunkY * chunkWorldSize;
     }
 
-    this.prune(this.terrainObjects, seen, (key) => this.releaseTerrainWaterResources(key))
+    this.prune(this.terrainObjects, seen, (key) => {
+      this.releaseTerrainWaterResources(key);
+      this.grassBladeCountByChunkKey.delete(key);
+    });
     for (const key of this.terrainStamps.keys()) {
       if (!seen.has(key)) {
-        this.terrainStamps.delete(key)
+        this.terrainStamps.delete(key);
       }
     }
-    this.stats.terrainDetailed = detailedCount
-    this.stats.terrainFallback = fallbackCount
-    this.animateWaterSurfaces()
+    this.stats.terrainDetailed = detailedCount;
+    this.stats.terrainFallback = fallbackCount;
+    this.animateWaterSurfaces();
   }
 
   private buildTerrainChunkObject(
@@ -654,84 +741,130 @@ export class WorldStreamVisualizer {
     payloadRow: Record<string, unknown> | null,
     streamRow: Record<string, unknown>,
     payloadCellsByCoord: Map<string, DecodedTerrainCells>,
-  ): Object3D | undefined {
-    const chunk = new Object3D()
+  ): TerrainChunkBuildResult | undefined {
+    const chunk = new Object3D();
+    let grassBladeCount = 0;
 
-    const cells = payloadCellsByCoord.get(chunkCoordKey(chunkX, chunkY)) ?? decodeTerrainPayload(payloadRow)
+    const cells =
+      payloadCellsByCoord.get(chunkCoordKey(chunkX, chunkY)) ??
+      decodeTerrainPayload(payloadRow);
     if (!cells) {
-      const mesh = chunk.addComponent(MeshRenderer)
-      mesh.geometry = new BoxGeometry(1, 1, 1)
+      const mesh = chunk.addComponent(MeshRenderer);
+      mesh.geometry = new BoxGeometry(1, 1, 1);
       if (!setMaterialSafe(mesh, createTerrainMaterial(biomeId))) {
-        chunk.destroy()
-        return undefined
+        chunk.destroy();
+        return undefined;
       }
-      const heightMin = toNumber(streamRow.heightMin)
-      const heightMax = toNumber(streamRow.heightMax)
-      const slabTopY = elevationToWorldY((heightMin + heightMax) * 0.5)
-      const slabThickness = Math.max((heightMax - heightMin) * TERRAIN_HEIGHT_SCALE, 0.08)
-      chunk.x = chunkWorldSize * 0.5
-      chunk.y = slabTopY - slabThickness * 0.5
-      chunk.z = chunkWorldSize * 0.5
-      chunk.scaleX = chunkWorldSize
-      chunk.scaleY = slabThickness
-      chunk.scaleZ = chunkWorldSize
-      return chunk
+      const heightMin = toNumber(streamRow.heightMin);
+      const heightMax = toNumber(streamRow.heightMax);
+      const slabTopY = elevationToWorldY((heightMin + heightMax) * 0.5);
+      const slabThickness = Math.max(
+        (heightMax - heightMin) * TERRAIN_HEIGHT_SCALE,
+        0.08,
+      );
+      chunk.x = chunkWorldSize * 0.5;
+      chunk.y = slabTopY - slabThickness * 0.5;
+      chunk.z = chunkWorldSize * 0.5;
+      chunk.scaleX = chunkWorldSize;
+      chunk.scaleY = slabThickness;
+      chunk.scaleZ = chunkWorldSize;
+      return {
+        object: chunk,
+        grassBladeCount,
+      };
     }
 
-    const mesh = chunk.addComponent(MeshRenderer)
-    const terrainGeometry = buildTerrainSurfaceGeometry(cells, chunkX, chunkY, payloadCellsByCoord)
+    const mesh = chunk.addComponent(MeshRenderer);
+    const terrainGeometry = buildTerrainSurfaceGeometry(
+      cells,
+      chunkX,
+      chunkY,
+      payloadCellsByCoord,
+    );
     if (!terrainGeometry) {
-      chunk.destroy()
-      return undefined
+      chunk.destroy();
+      return undefined;
     }
-    mesh.geometry = terrainGeometry
+    mesh.geometry = terrainGeometry;
     if (!setMaterialSafe(mesh, createTerrainMaterial(biomeId))) {
-      chunk.destroy()
-      return undefined
+      chunk.destroy();
+      return undefined;
     }
 
-    const waterSurface = buildWaterSurfaceGeometry(cells, chunkX, chunkY, payloadCellsByCoord)
+    const waterSurface = buildWaterSurfaceGeometry(
+      cells,
+      chunkX,
+      chunkY,
+      payloadCellsByCoord,
+    );
     if (waterSurface) {
-      const waterObject = new Object3D()
-      waterObject.name = WATER_SURFACE_OBJECT_NAME
-      const waterMesh = waterObject.addComponent(MeshRenderer)
-      waterMesh.geometry = waterSurface.geometry
-      const waterMaterial = this.createWaterMaterial(chunkKey, waterSurface.state)
+      const waterObject = new Object3D();
+      waterObject.name = WATER_SURFACE_OBJECT_NAME;
+      const waterMesh = waterObject.addComponent(MeshRenderer);
+      waterMesh.geometry = waterSurface.geometry;
+      const waterMaterial = this.createWaterMaterial(
+        chunkKey,
+        waterSurface.state,
+      );
       if (setMaterialSafe(waterMesh, waterMaterial)) {
-        this.registerTerrainWaterResources(chunkKey, waterMaterial, waterSurface.state.depthTexture)
-        chunk.addChild(waterObject)
+        this.registerTerrainWaterResources(
+          chunkKey,
+          waterMaterial,
+          waterSurface.state.depthTexture,
+        );
+        chunk.addChild(waterObject);
       } else {
         if (waterMaterial instanceof WaterSurfaceMaterial) {
-          waterMaterial.destroy(false)
-          waterSurface.state.depthTexture.destroy(true)
+          waterMaterial.destroy(false);
+          waterSurface.state.depthTexture.destroy(true);
         }
-        waterObject.destroy()
+        waterObject.destroy();
       }
     }
 
-    return chunk
+    if (this.shouldRenderGrassForBiome(biomeId)) {
+      grassBladeCount = this.attachGrassToChunk(
+        chunk,
+        biomeId,
+        chunkX,
+        chunkY,
+        cells,
+        payloadCellsByCoord,
+      );
+    }
+
+    return {
+      object: chunk,
+      grassBladeCount,
+    };
   }
 
   private animateWaterSurfaces(): void {
-    const phaseTime = Time.time * WATER_WAVE_TIME_SCALE
+    const phaseTime = Time.time * WATER_WAVE_TIME_SCALE;
     for (const { material } of this.waterResourcesByChunkKey.values()) {
-      material.setTime(phaseTime)
+      material.setTime(phaseTime);
     }
   }
 
-  private createWaterMaterial(chunkKey: string, state: WaterSurfaceRenderState): Material {
-    this.releaseTerrainWaterResources(chunkKey)
+  private createWaterMaterial(
+    chunkKey: string,
+    state: WaterSurfaceRenderState,
+  ): Material {
+    this.releaseTerrainWaterResources(chunkKey);
     try {
       return createWaterSurfaceMaterial({
         depthTexture: state.depthTexture,
         profile: this.waterProfile,
         quality: this.waterQuality,
         phase: state.phase,
-      })
+      });
     } catch (error) {
-      console.warn('[stitch-orillusion-client] custom water material fallback to unlit', error)
-      state.depthTexture.destroy(true)
-      return createWaterFallbackMaterial()
+      console.warn(
+        "[stitch-orillusion-client] custom water material fallback to unlit",
+        error,
+      );
+      state.depthTexture.destroy(true);
+      return createWaterFallbackMaterial();
     }
   }
 
@@ -741,68 +874,184 @@ export class WorldStreamVisualizer {
     depthTexture: Float16ArrayTexture,
   ): void {
     if (!(material instanceof WaterSurfaceMaterial)) {
-      return
+      return;
     }
     this.waterResourcesByChunkKey.set(chunkKey, {
       material,
       depthTexture,
-    })
+    });
   }
 
   private releaseTerrainWaterResources(chunkKey: string): void {
-    const resources = this.waterResourcesByChunkKey.get(chunkKey)
+    const resources = this.waterResourcesByChunkKey.get(chunkKey);
     if (!resources) {
-      return
+      return;
     }
 
-    this.waterResourcesByChunkKey.delete(chunkKey)
+    this.waterResourcesByChunkKey.delete(chunkKey);
     try {
-      resources.depthTexture.destroy(true)
+      resources.depthTexture.destroy(true);
     } catch {
       // Texture may already be disposed by parent object lifecycle.
     }
   }
 
-  private syncNpcs(db: Record<string, unknown>): void {
-    const table = getTableRows(db, 'npcStateStream')
-    if (!table) {
-      this.prune(this.npcObjects, new Set())
-      this.npcStateSnapshots.clear()
-      return
+  private shouldRenderGrassForBiome(biomeId: number): boolean {
+    if (!this.grassEnabled) {
+      return false;
+    }
+    return this.grassBiomeIds.has(Math.trunc(biomeId));
+  }
+
+  private grassChunkStamp(biomeId: number): string {
+    if (!this.grassEnabled) {
+      return "grass:off";
     }
 
-    const seen = new Set<string>()
+    const normalizedBiomeId = Math.trunc(biomeId);
+    const enabled = this.grassBiomeIds.has(normalizedBiomeId) ? 1 : 0;
+    const profile = grassProfileByBiome(normalizedBiomeId);
+    return `grass:${enabled}:${normalizedBiomeId}:${profile.width}:${profile.height}:${profile.spawnChance}:${profile.extraSpawnChance}:${profile.scaleBoost}:${TERRAIN_GRASS_MIN_SCALE}:${TERRAIN_GRASS_MAX_SCALE}:${TERRAIN_GRASS_Y_SCALE_RATIO}:${TERRAIN_GRASS_SHADER_HEIGHT_RATIO}:${TERRAIN_GRASS_HEIGHT_OFFSET}`;
+  }
+
+  private attachGrassToChunk(
+    chunk: Object3D,
+    biomeId: number,
+    chunkX: number,
+    chunkY: number,
+    cells: DecodedTerrainCells,
+    payloadCellsByCoord: Map<string, DecodedTerrainCells>,
+  ): number {
+    const placements = buildGrassPlacements(
+      cells,
+      biomeId,
+      chunkX,
+      chunkY,
+      payloadCellsByCoord,
+    );
+    if (placements.length <= 0) {
+      return 0;
+    }
+
+    const profile = grassProfileByBiome(biomeId);
+    const shaderGrassHeight = Math.max(
+      0.001,
+      profile.height * TERRAIN_GRASS_SHADER_HEIGHT_RATIO,
+    );
+    const heightScaleFactor = Math.max(
+      0.15,
+      shaderGrassHeight / TERRAIN_GRASS_BASE_HEIGHT_REFERENCE,
+    );
+    const grassObject = new Object3D();
+    grassObject.name = TERRAIN_GRASS_OBJECT_NAME;
+    const grass = grassObject.addComponent(LocalGrassComponent);
+    grass.castShadow = false;
+    grass.receiveShadow = false;
+    grass.grassMaterial.acceptShadow = false;
+    grass.grassMaterial.castShadow = false;
+    try {
+      grass.grassMaterial.setDefine("USE_SHADOWMAPING", false);
+    } catch {
+      // Some material variants may not expose this define.
+    }
+    grass.setGrassTexture(Engine3D.res.whiteTexture);
+    grass.setWindNoiseTexture(Engine3D.res.whiteTexture);
+    grass.setGrass(
+      profile.width,
+      shaderGrassHeight,
+      TERRAIN_GRASS_SEGMENTS,
+      TERRAIN_GRASS_DENSITY,
+      placements.length,
+    );
+    grass.grassMaterial.grassHeight = shaderGrassHeight;
+    grass.setMinMax(
+      new Vector3(0, -8, 0),
+      new Vector3(cells.chunkSize, 16, cells.chunkSize),
+    );
+
+    const nodes = grass.nodes;
+    for (let index = 0; index < placements.length; index += 1) {
+      const placement = placements[index];
+      const node = nodes[index];
+      if (!placement || !node) {
+        continue;
+      }
+
+      node.x = placement.localX;
+      node.y = placement.localY;
+      node.z = placement.localZ;
+      node.rotationY = placement.rotationY;
+      node.scaleX = placement.scale;
+      // Keep blade width visible while compressing vertical exaggeration.
+      // Tie vertical scale to profile.height so height tuning has visible effect.
+      node.scaleY = Math.max(
+        0.004,
+        placement.scale * TERRAIN_GRASS_Y_SCALE_RATIO * heightScaleFactor,
+      );
+      node.scaleZ = placement.scale;
+      node.updateWorldMatrix(true);
+    }
+
+    chunk.addChild(grassObject);
+    void ensureTerrainGrassTextures().then((textures) => {
+      if (!textures) {
+        return;
+      }
+      try {
+        grass.setGrassTexture(textures.blade);
+        grass.setWindNoiseTexture(textures.windNoise);
+      } catch {
+        // Chunk may already be destroyed before async texture assignment.
+      }
+    });
+
+    return placements.length;
+  }
+
+  private syncNpcs(db: Record<string, unknown>): void {
+    const table = getTableRows(db, "npcStateStream");
+    if (!table) {
+      this.prune(this.npcObjects, new Set());
+      this.npcStateSnapshots.clear();
+      return;
+    }
+
+    const seen = new Set<string>();
     for (const row of table) {
-      const npcId = toU64BigInt(row.npcId, -1n)
+      const npcId = toU64BigInt(row.npcId, -1n);
       if (npcId < 0n) {
-        continue
+        continue;
       }
-      const npcIdString = npcId.toString()
-      seen.add(npcIdString)
+      const npcIdString = npcId.toString();
+      seen.add(npcIdString);
 
-      const regionId = toU64BigInt(row.regionId, -1n)
-      const dimensionId = Math.max(1, toU64Number(row.dimensionId))
+      const regionId = toU64BigInt(row.regionId, -1n);
+      const dimensionId = Math.max(1, toU64Number(row.dimensionId));
 
-      const hexX = toNumber(row.hexX)
-      const hexZ = toNumber(row.hexZ)
-      const world = hexToWorldXZ({ q: hexX, r: hexZ, dimension: Math.max(1, toNumber(row.dimensionId)) })
+      const hexX = toNumber(row.hexX);
+      const hexZ = toNumber(row.hexZ);
+      const world = hexToWorldXZ({
+        q: hexX,
+        r: hexZ,
+        dimension: Math.max(1, toNumber(row.dimensionId)),
+      });
 
-      let object = this.npcObjects.get(npcIdString)
+      let object = this.npcObjects.get(npcIdString);
       if (!object) {
-        object = new Object3D()
-        this.root.addChild(object)
-        this.npcObjects.set(npcIdString, object)
+        object = new Object3D();
+        this.root.addChild(object);
+        this.npcObjects.set(npcIdString, object);
       }
 
-      this.ensureMarkerVisual(object, NPC_MARKER_MODEL)
+      this.ensureMarkerVisual(object, NPC_MARKER_MODEL);
 
-      object.x = world.x
-      const groundY = this.sampleTerrainHeight(world.x, world.z)
-      object.y = (groundY ?? 0) + 0.6
-      object.z = world.z
-      object.scaleX = 1
-      object.scaleY = 1
-      object.scaleZ = 1
+      object.x = world.x;
+      const groundY = this.sampleTerrainHeight(world.x, world.z);
+      object.y = (groundY ?? 0) + 0.6;
+      object.z = world.z;
+      object.scaleX = 1;
+      object.scaleY = 1;
+      object.scaleZ = 1;
 
       this.npcStateSnapshots.set(npcIdString, {
         npcId,
@@ -810,13 +1059,13 @@ export class WorldStreamVisualizer {
         dimensionId,
         worldX: world.x,
         worldZ: world.z,
-      })
+      });
     }
 
-    this.prune(this.npcObjects, seen)
+    this.prune(this.npcObjects, seen);
     for (const key of this.npcStateSnapshots.keys()) {
       if (!seen.has(key)) {
-        this.npcStateSnapshots.delete(key)
+        this.npcStateSnapshots.delete(key);
       }
     }
   }
@@ -826,236 +1075,286 @@ export class WorldStreamVisualizer {
       this.resourceObjects.size > 0 &&
       nowMs - this.lastResourceSyncAtMs < RESOURCE_SYNC_INTERVAL_MS
     ) {
-      return
+      return;
     }
-    this.lastResourceSyncAtMs = nowMs
+    this.lastResourceSyncAtMs = nowMs;
 
-    if (this.resourceRenderMode === 'instanced' && !this.ensureResourceInstancingReady()) {
-      this.switchResourceRenderMode('legacy', 'instancing init failed')
+    if (
+      this.resourceRenderMode === "instanced" &&
+      !this.ensureResourceInstancingReady()
+    ) {
+      this.switchResourceRenderMode("legacy", "instancing init failed");
     }
 
-    const table = getTableRows(db, 'resourceNode')
+    const table = getTableRows(db, "resourceNode");
     if (!table) {
-      this.prune(this.resourceObjects, new Set())
-      return
+      this.prune(this.resourceObjects, new Set());
+      return;
     }
 
-    const seen = new Set<string>()
+    const seen = new Set<string>();
     for (const row of table) {
-      const id = String(row.entityId ?? '')
+      const id = String(row.entityId ?? "");
       if (!id) {
-        continue
+        continue;
       }
-      seen.add(id)
+      seen.add(id);
 
-      const hexX = toNumber(row.hexX)
-      const hexZ = toNumber(row.hexZ)
-      const world = hexToWorldXZ({ q: hexX, r: hexZ, dimension: Math.max(1, toNumber(row.dimensionId)) })
-      const depleted = Boolean(row.isDepleted)
+      const hexX = toNumber(row.hexX);
+      const hexZ = toNumber(row.hexZ);
+      const world = hexToWorldXZ({
+        q: hexX,
+        r: hexZ,
+        dimension: Math.max(1, toNumber(row.dimensionId)),
+      });
+      const depleted = Boolean(row.isDepleted);
 
-      let object = this.resourceObjects.get(id)
+      let object = this.resourceObjects.get(id);
       if (!object) {
-        object = new Object3D()
-        this.attachResourceObject(object)
-        this.resourceObjects.set(id, object)
+        object = new Object3D();
+        this.attachResourceObject(object);
+        this.resourceObjects.set(id, object);
       }
-      this.attachResourceObject(object)
+      this.attachResourceObject(object);
 
-      this.ensureMarkerVisual(object, RESOURCE_MARKER_MODEL)
+      this.ensureMarkerVisual(object, RESOURCE_MARKER_MODEL);
 
-      object.x = world.x
-      const halfHeight = depleted ? 0.09 : 0.4
-      const groundY = this.sampleTerrainHeight(world.x, world.z)
-      const visualState = this.markerVisualStates.get(object)
-      const modelState = `model:${RESOURCE_MARKER_MODEL.key}`
-      object.y = (groundY ?? 0) + (visualState === modelState ? 0 : halfHeight)
-      object.z = world.z
-      object.scaleX = 0.55
-      object.scaleY = depleted ? 0.18 : 0.8
-      object.scaleZ = 0.55
+      object.x = world.x;
+      const halfHeight = depleted ? 0.09 : 0.4;
+      const groundY = this.sampleTerrainHeight(world.x, world.z);
+      const visualState = this.markerVisualStates.get(object);
+      const modelState = `model:${RESOURCE_MARKER_MODEL.key}`;
+      object.y = (groundY ?? 0) + (visualState === modelState ? 0 : halfHeight);
+      object.z = world.z;
+      object.scaleX = 0.55;
+      object.scaleY = depleted ? 0.18 : 0.8;
+      object.scaleZ = 0.55;
     }
 
-    this.prune(this.resourceObjects, seen)
+    this.prune(this.resourceObjects, seen);
   }
 
   private ensureResourceInstancingReady(): boolean {
     try {
       if (!this.resourceInstanceRoot.hasComponent(InstanceDrawComponent)) {
-        this.resourceInstanceRoot.addComponent(InstanceDrawComponent)
+        this.resourceInstanceRoot.addComponent(InstanceDrawComponent);
       }
-      return true
+      return true;
     } catch (error) {
-      console.warn('[stitch-orillusion-client] failed to enable resource instancing, fallback to legacy', error)
-      return false
+      console.warn(
+        "[stitch-orillusion-client] failed to enable resource instancing, fallback to legacy",
+        error,
+      );
+      return false;
     }
   }
 
   private attachResourceObject(object: Object3D): void {
-    const parent = this.resourceRenderMode === 'instanced' ? this.resourceInstanceRoot : this.root
+    const parent =
+      this.resourceRenderMode === "instanced"
+        ? this.resourceInstanceRoot
+        : this.root;
     if (parent.hasChild(object)) {
-      return
+      return;
     }
 
     if (this.root.hasChild(object)) {
-      this.root.removeChild(object)
+      this.root.removeChild(object);
     }
     if (this.resourceInstanceRoot.hasChild(object)) {
-      this.resourceInstanceRoot.removeChild(object)
+      this.resourceInstanceRoot.removeChild(object);
     }
-    parent.addChild(object)
+    parent.addChild(object);
   }
 
-  private switchResourceRenderMode(nextMode: ResourceRenderMode, reason: string): void {
+  private switchResourceRenderMode(
+    nextMode: ResourceRenderMode,
+    reason: string,
+  ): void {
     if (this.resourceRenderMode === nextMode) {
-      return
+      return;
     }
-    this.resourceRenderMode = nextMode
-    this.prune(this.resourceObjects, new Set())
-    console.warn('[stitch-orillusion-client] resource render mode switched', { mode: nextMode, reason })
-    this.logBuildingWarn(`resource render mode switched to ${nextMode}: ${reason}`, reason)
+    this.resourceRenderMode = nextMode;
+    this.prune(this.resourceObjects, new Set());
+    console.warn("[stitch-orillusion-client] resource render mode switched", {
+      mode: nextMode,
+      reason,
+    });
+    this.logBuildingWarn(
+      `resource render mode switched to ${nextMode}: ${reason}`,
+      reason,
+    );
   }
 
   private syncBuildingDefs(db: Record<string, unknown>): void {
-    const table = getTableRows(db, 'buildingDef')
-    this.buildingDefByRequirementKey.clear()
+    const table = getTableRows(db, "buildingDef");
+    this.buildingDefByRequirementKey.clear();
     if (!table) {
-      return
+      return;
     }
 
     for (const row of table) {
-      const buildingDefId = toU64String(row.buildingDefId)
-      const requiredItemDefId = toU64String(row.requiredItemDefId)
-      const requiredItemQty = Math.max(0, Math.trunc(toNumber(row.requiredItemQty)))
-      const buildRequired = Math.max(0, Math.trunc(toNumber(row.buildRequired)))
-      const requirementKey = buildingRequirementKey(requiredItemDefId, requiredItemQty, buildRequired)
+      const buildingDefId = toU64String(row.buildingDefId);
+      const requiredItemDefId = toU64String(row.requiredItemDefId);
+      const requiredItemQty = Math.max(
+        0,
+        Math.trunc(toNumber(row.requiredItemQty)),
+      );
+      const buildRequired = Math.max(
+        0,
+        Math.trunc(toNumber(row.buildRequired)),
+      );
+      const requirementKey = buildingRequirementKey(
+        requiredItemDefId,
+        requiredItemQty,
+        buildRequired,
+      );
       if (!buildingDefId || !requirementKey) {
-        continue
+        continue;
       }
 
-      const prev = this.buildingDefByRequirementKey.get(requirementKey)
+      const prev = this.buildingDefByRequirementKey.get(requirementKey);
       if (!prev || compareU64String(buildingDefId, prev) < 0) {
-        this.buildingDefByRequirementKey.set(requirementKey, buildingDefId)
+        this.buildingDefByRequirementKey.set(requirementKey, buildingDefId);
       }
     }
   }
 
-  private resolveBuildingDefId(buildingId: string, row: Record<string, unknown>): string | null {
-    const cached = this.buildingDefByEntityId.get(buildingId)
+  private resolveBuildingDefId(
+    buildingId: string,
+    row: Record<string, unknown>,
+  ): string | null {
+    const cached = this.buildingDefByEntityId.get(buildingId);
     if (cached) {
-      return cached
+      return cached;
     }
 
-    const requiredItemDefId = toU64String(row.requiredItemDefId)
-    const requiredItemQty = Math.max(0, Math.trunc(toNumber(row.requiredItemQty)))
-    const buildRequired = Math.max(0, Math.trunc(toNumber(row.buildRequired)))
-    const requirementKey = buildingRequirementKey(requiredItemDefId, requiredItemQty, buildRequired)
+    const requiredItemDefId = toU64String(row.requiredItemDefId);
+    const requiredItemQty = Math.max(
+      0,
+      Math.trunc(toNumber(row.requiredItemQty)),
+    );
+    const buildRequired = Math.max(0, Math.trunc(toNumber(row.buildRequired)));
+    const requirementKey = buildingRequirementKey(
+      requiredItemDefId,
+      requiredItemQty,
+      buildRequired,
+    );
     if (!requirementKey) {
-      return null
+      return null;
     }
 
-    const resolved = this.buildingDefByRequirementKey.get(requirementKey) ?? null
+    const resolved =
+      this.buildingDefByRequirementKey.get(requirementKey) ?? null;
     if (resolved) {
-      this.buildingDefByEntityId.set(buildingId, resolved)
+      this.buildingDefByEntityId.set(buildingId, resolved);
     }
-    return resolved
+    return resolved;
   }
 
   private pruneBuildingDefEntityCache(): void {
     for (const id of this.buildingDefByEntityId.keys()) {
       if (this.buildingObjects.has(id) || this.projectSiteObjects.has(id)) {
-        continue
+        continue;
       }
-      this.buildingDefByEntityId.delete(id)
+      this.buildingDefByEntityId.delete(id);
     }
   }
 
   private syncBuildings(db: Record<string, unknown>): void {
-    const table = getTableRows(db, 'buildingState')
+    const table = getTableRows(db, "buildingState");
     if (!table) {
-      this.prune(this.buildingObjects, new Set())
-      this.buildingVisualVersions.clear()
-      this.buildingModelAppliedVersions.clear()
-      this.buildingModelPendingVersions.clear()
-      return
+      this.prune(this.buildingObjects, new Set());
+      this.buildingVisualVersions.clear();
+      this.buildingModelAppliedVersions.clear();
+      this.buildingModelPendingVersions.clear();
+      return;
     }
 
-    const seen = new Set<string>()
+    const seen = new Set<string>();
     for (const row of table) {
-      const id = String(row.entityId ?? '')
+      const id = String(row.entityId ?? "");
       if (!id) {
-        continue
+        continue;
       }
-      seen.add(id)
+      seen.add(id);
 
-      const hexX = toNumber(row.hexX)
-      const hexZ = toNumber(row.hexZ)
-      const world = hexToWorldXZ({ q: hexX, r: hexZ, dimension: Math.max(1, toNumber(row.dimensionId)) })
-      const buildState = Math.max(0, toNumber(row.state))
-      const buildingDefId = this.resolveBuildingDefId(id, row)
-      const tier = buildingTierFromState(buildState)
-      const profile = getBuildingTierProfile(tier)
-      const variant = selectBuildingVariant(id, buildingDefId, profile)
-      const rotationY = stableIndex(`${id}:rot`, 4) * 90
-      const visualVersion = `${tier}:${buildingDefId ?? 'unknown'}:${variant.key}:r${rotationY}`
+      const hexX = toNumber(row.hexX);
+      const hexZ = toNumber(row.hexZ);
+      const world = hexToWorldXZ({
+        q: hexX,
+        r: hexZ,
+        dimension: Math.max(1, toNumber(row.dimensionId)),
+      });
+      const buildState = Math.max(0, toNumber(row.state));
+      const buildingDefId = this.resolveBuildingDefId(id, row);
+      const tier = buildingTierFromState(buildState);
+      const profile = getBuildingTierProfile(tier);
+      const variant = selectBuildingVariant(id, buildingDefId, profile);
+      const rotationY = stableIndex(`${id}:rot`, 4) * 90;
+      const visualVersion = `${tier}:${buildingDefId ?? "unknown"}:${variant.key}:r${rotationY}`;
 
-      let object = this.buildingObjects.get(id)
+      let object = this.buildingObjects.get(id);
       if (!object) {
-        object = new Object3D()
-        this.root.addChild(object)
-        this.buildingObjects.set(id, object)
+        object = new Object3D();
+        this.root.addChild(object);
+        this.buildingObjects.set(id, object);
       }
 
       if (this.buildingVisualVersions.get(id) !== visualVersion) {
-        this.installBuildingFallbackVisual(object, profile.fallbackScaleY)
-        this.buildingVisualVersions.set(id, visualVersion)
-        this.buildingModelAppliedVersions.delete(id)
+        this.installBuildingFallbackVisual(object, profile.fallbackScaleY);
+        this.buildingVisualVersions.set(id, visualVersion);
+        this.buildingModelAppliedVersions.delete(id);
       }
 
       if (
         this.buildingModelAppliedVersions.get(id) !== visualVersion &&
         this.buildingModelPendingVersions.get(id) !== visualVersion
       ) {
-        this.buildingModelPendingVersions.set(id, visualVersion)
-        void this.tryAttachBuildingModel(id, visualVersion, variant, profile)
+        this.buildingModelPendingVersions.set(id, visualVersion);
+        void this.tryAttachBuildingModel(id, visualVersion, variant, profile);
       }
 
-      const groundY = this.sampleTerrainHeight(world.x, world.z)
-      object.x = world.x
-      object.y = groundY ?? 0
-      object.z = world.z
-      object.rotationY = rotationY
-      object.scaleX = 1
-      object.scaleY = 1
-      object.scaleZ = 1
+      const groundY = this.sampleTerrainHeight(world.x, world.z);
+      object.x = world.x;
+      object.y = groundY ?? 0;
+      object.z = world.z;
+      object.rotationY = rotationY;
+      object.scaleX = 1;
+      object.scaleY = 1;
+      object.scaleZ = 1;
     }
 
-    this.prune(this.buildingObjects, seen)
+    this.prune(this.buildingObjects, seen);
     for (const id of this.buildingVisualVersions.keys()) {
       if (seen.has(id)) {
-        continue
+        continue;
       }
-      this.buildingVisualVersions.delete(id)
-      this.buildingModelAppliedVersions.delete(id)
-      this.buildingModelPendingVersions.delete(id)
+      this.buildingVisualVersions.delete(id);
+      this.buildingModelAppliedVersions.delete(id);
+      this.buildingModelPendingVersions.delete(id);
     }
   }
 
-  private installBuildingFallbackVisual(root: Object3D, fallbackScaleY: number): void {
-    destroyDirectChildren(root)
+  private installBuildingFallbackVisual(
+    root: Object3D,
+    fallbackScaleY: number,
+  ): void {
+    destroyDirectChildren(root);
 
-    const fallback = new Object3D()
-    const mesh = fallback.addComponent(MeshRenderer)
-    mesh.geometry = new BoxGeometry(1, 1, 1)
+    const fallback = new Object3D();
+    const mesh = fallback.addComponent(MeshRenderer);
+    mesh.geometry = new BoxGeometry(1, 1, 1);
     if (!setMaterialSafe(mesh, createUnlitMaterial(0.68, 0.52, 0.3))) {
-      fallback.destroy()
-      return
+      fallback.destroy();
+      return;
     }
 
-    fallback.y = fallbackScaleY * 0.5
-    fallback.scaleX = 1.3
-    fallback.scaleY = fallbackScaleY
-    fallback.scaleZ = 1.3
-    root.addChild(fallback)
+    fallback.y = fallbackScaleY * 0.5;
+    fallback.scaleX = 1.3;
+    fallback.scaleY = fallbackScaleY;
+    fallback.scaleZ = 1.3;
+    root.addChild(fallback);
   }
 
   private async tryAttachBuildingModel(
@@ -1065,503 +1364,574 @@ export class WorldStreamVisualizer {
     profile: BuildingTierProfile,
   ): Promise<void> {
     try {
-      const candidates = uniqueVariantCandidates(variant, profile.variants)
-      let instance: Object3D | null = null
+      const candidates = uniqueVariantCandidates(variant, profile.variants);
+      let instance: Object3D | null = null;
       for (const candidate of candidates) {
-        const assembled = await this.buildVariantInstance(candidate)
+        const assembled = await this.buildVariantInstance(candidate);
         if (assembled) {
-          instance = assembled
-          break
+          instance = assembled;
+          break;
         }
       }
       if (!instance) {
-        return
+        return;
       }
 
-      const root = this.buildingObjects.get(buildingId)
+      const root = this.buildingObjects.get(buildingId);
       if (!root) {
-        return
+        return;
       }
 
       if (this.buildingVisualVersions.get(buildingId) !== visualVersion) {
-        return
+        return;
       }
 
-      destroyDirectChildren(root)
-      root.addChild(instance)
-      this.buildingModelAppliedVersions.set(buildingId, visualVersion)
-      this.logBuildingDebug('attached building model', {
+      destroyDirectChildren(root);
+      root.addChild(instance);
+      this.buildingModelAppliedVersions.set(buildingId, visualVersion);
+      this.logBuildingDebug("attached building model", {
         buildingId,
         visualVersion,
-      })
+      });
     } finally {
       if (this.buildingModelPendingVersions.get(buildingId) === visualVersion) {
-        this.buildingModelPendingVersions.delete(buildingId)
+        this.buildingModelPendingVersions.delete(buildingId);
       }
     }
   }
 
-  private async buildVariantInstance(variant: BuildingModelVariant): Promise<Object3D | null> {
-    const composed = new Object3D()
+  private async buildVariantInstance(
+    variant: BuildingModelVariant,
+  ): Promise<Object3D | null> {
+    const composed = new Object3D();
     try {
       for (const piece of variant.pieces) {
-        const prefab = await this.loadBuildingPrefab(piece.url)
+        const prefab = await this.loadBuildingPrefab(piece.url);
         if (!prefab) {
-          composed.destroy()
-          return null
+          composed.destroy();
+          return null;
         }
 
-        let part: Object3D
+        let part: Object3D;
         try {
-          part = prefab.instantiate()
+          part = prefab.instantiate();
         } catch (error) {
-          this.buildingPrefabByUrl.delete(piece.url)
-          this.buildingPrefabFailedUrls.add(piece.url)
-          this.logBuildingWarn(`failed to instantiate building part ${piece.url}`, error)
-          composed.destroy()
-          return null
+          this.buildingPrefabByUrl.delete(piece.url);
+          this.buildingPrefabFailedUrls.add(piece.url);
+          this.logBuildingWarn(
+            `failed to instantiate building part ${piece.url}`,
+            error,
+          );
+          composed.destroy();
+          return null;
         }
 
-        part.x = piece.offsetX ?? 0
-        part.y = piece.offsetY ?? 0
-        part.z = piece.offsetZ ?? 0
-        part.rotationY = piece.rotationY ?? 0
-        const scale = piece.scale ?? 1
-        part.scaleX *= scale
-        part.scaleY *= scale
-        part.scaleZ *= scale
-        composed.addChild(part)
+        part.x = piece.offsetX ?? 0;
+        part.y = piece.offsetY ?? 0;
+        part.z = piece.offsetZ ?? 0;
+        part.rotationY = piece.rotationY ?? 0;
+        const scale = piece.scale ?? 1;
+        part.scaleX *= scale;
+        part.scaleY *= scale;
+        part.scaleZ *= scale;
+        composed.addChild(part);
       }
-      return composed
+      return composed;
     } catch {
-      composed.destroy()
-      return null
+      composed.destroy();
+      return null;
     }
   }
 
   private async loadBuildingPrefab(url: string): Promise<Object3D | null> {
     if (!url) {
-      return null
+      return null;
     }
-    const cached = this.buildingPrefabByUrl.get(url)
+    const cached = this.buildingPrefabByUrl.get(url);
     if (cached) {
-      return cached
+      return cached;
     }
     if (this.buildingPrefabFailedUrls.has(url)) {
-      return null
+      return null;
     }
 
-    const pending = this.buildingPrefabLoadPromises.get(url)
+    const pending = this.buildingPrefabLoadPromises.get(url);
     if (pending) {
-      return pending
+      return pending;
     }
 
     const loadPromise = Engine3D.res
       .loadGltf(url)
       .then((loadedPrefab) => {
-        const sanitized = this.buildSanitizedBuildingPrefab(loadedPrefab)
-        this.buildingPrefabByUrl.set(url, sanitized)
-        this.logBuildingDebug('loaded building prefab', {
+        const sanitized = this.buildSanitizedBuildingPrefab(loadedPrefab);
+        this.buildingPrefabByUrl.set(url, sanitized);
+        this.logBuildingDebug("loaded building prefab", {
           url,
           meshCount: countMeshNodes(sanitized),
-        })
-        return sanitized
+        });
+        return sanitized;
       })
       .catch((error) => {
-        this.buildingPrefabFailedUrls.add(url)
-        this.logBuildingWarn(`failed to load building model ${url}`, error)
-        return null
+        this.buildingPrefabFailedUrls.add(url);
+        this.logBuildingWarn(`failed to load building model ${url}`, error);
+        return null;
       })
       .finally(() => {
-        this.buildingPrefabLoadPromises.delete(url)
-      })
+        this.buildingPrefabLoadPromises.delete(url);
+      });
 
-    this.buildingPrefabLoadPromises.set(url, loadPromise)
-    return loadPromise
+    this.buildingPrefabLoadPromises.set(url, loadPromise);
+    return loadPromise;
   }
 
-  private ensureMarkerVisual(root: Object3D, profile: MarkerModelProfile): void {
-    const modelState = `model:${profile.key}`
-    const fallbackState = `fallback:${profile.key}`
-    const currentState = this.markerVisualStates.get(root)
-    const cachedPrefab = this.markerPrefabByKey.get(profile.key)
+  private ensureMarkerVisual(
+    root: Object3D,
+    profile: MarkerModelProfile,
+  ): void {
+    const modelState = `model:${profile.key}`;
+    const fallbackState = `fallback:${profile.key}`;
+    const currentState = this.markerVisualStates.get(root);
+    const cachedPrefab = this.markerPrefabByKey.get(profile.key);
     if (cachedPrefab) {
       if (currentState === modelState) {
-        return
+        return;
       }
 
       try {
-        const instance = cachedPrefab.instantiate()
-        instance.x = 0
-        instance.y = profile.offsetY ?? 0
-        instance.z = 0
-        instance.rotationY = profile.rotationY ?? 0
-        instance.scaleX *= profile.scale
-        instance.scaleY *= profile.scale
-        instance.scaleZ *= profile.scale
+        const instance = cachedPrefab.instantiate();
+        instance.x = 0;
+        instance.y = profile.offsetY ?? 0;
+        instance.z = 0;
+        instance.rotationY = profile.rotationY ?? 0;
+        instance.scaleX *= profile.scale;
+        instance.scaleY *= profile.scale;
+        instance.scaleZ *= profile.scale;
         if (profile.shadowSafePbr) {
-          this.applyPbrShadowSafety(instance)
+          this.applyPbrShadowSafety(instance);
         }
-        destroyDirectChildren(root)
-        root.addChild(instance)
-        this.playMarkerAnimation(instance, profile.defaultAnimation, profile.defaultAnimationIndex)
-        this.markerVisualStates.set(root, modelState)
-        this.logBuildingDebug('attached marker model', {
+        destroyDirectChildren(root);
+        root.addChild(instance);
+        this.playMarkerAnimation(
+          instance,
+          profile.defaultAnimation,
+          profile.defaultAnimationIndex,
+        );
+        this.markerVisualStates.set(root, modelState);
+        this.logBuildingDebug("attached marker model", {
           key: profile.key,
           url: profile.url,
-        })
+        });
       } catch (error) {
-        this.markerPrefabByKey.delete(profile.key)
-        this.markerPrefabFailedKeys.add(profile.key)
-        this.logBuildingWarn(`failed to instantiate marker model ${profile.url}`, error)
+        this.markerPrefabByKey.delete(profile.key);
+        this.markerPrefabFailedKeys.add(profile.key);
+        this.logBuildingWarn(
+          `failed to instantiate marker model ${profile.url}`,
+          error,
+        );
       }
-      return
+      return;
     }
 
-    if (!this.markerPrefabFailedKeys.has(profile.key) && !this.markerPrefabLoadPromises.has(profile.key)) {
-      const loadPromise = this.loadMarkerPrefab(profile)
-      this.markerPrefabLoadPromises.set(profile.key, loadPromise)
+    if (
+      !this.markerPrefabFailedKeys.has(profile.key) &&
+      !this.markerPrefabLoadPromises.has(profile.key)
+    ) {
+      const loadPromise = this.loadMarkerPrefab(profile);
+      this.markerPrefabLoadPromises.set(profile.key, loadPromise);
     }
 
     if (currentState !== fallbackState) {
-      destroyDirectChildren(root)
-      const fallback = buildMarkerFallbackObject(profile)
+      destroyDirectChildren(root);
+      const fallback = buildMarkerFallbackObject(profile);
       if (fallback) {
-        root.addChild(fallback)
-        this.markerVisualStates.set(root, fallbackState)
+        root.addChild(fallback);
+        this.markerVisualStates.set(root, fallbackState);
       }
     }
   }
 
   private async loadMarkerPrefab(profile: MarkerModelProfile): Promise<void> {
     try {
-      const loadedPrefab = await Engine3D.res.loadGltf(profile.url)
-      const prefab = this.buildMarkerPrefab(loadedPrefab, profile)
-      this.markerPrefabByKey.set(profile.key, prefab)
-      this.logBuildingDebug('loaded marker prefab', {
+      const loadedPrefab = await Engine3D.res.loadGltf(profile.url);
+      const prefab = this.buildMarkerPrefab(loadedPrefab, profile);
+      this.markerPrefabByKey.set(profile.key, prefab);
+      this.logBuildingDebug("loaded marker prefab", {
         key: profile.key,
         url: profile.url,
         meshCount: countMeshNodes(prefab),
-      })
+      });
     } catch (error) {
-      this.markerPrefabFailedKeys.add(profile.key)
-      this.logBuildingWarn(`failed to load marker model ${profile.url}`, error)
+      this.markerPrefabFailedKeys.add(profile.key);
+      this.logBuildingWarn(`failed to load marker model ${profile.url}`, error);
     } finally {
-      this.markerPrefabLoadPromises.delete(profile.key)
+      this.markerPrefabLoadPromises.delete(profile.key);
     }
   }
 
   private buildSanitizedBuildingPrefab(sourceRoot: Object3D): Object3D {
-    return this.cloneNodeAsUnlit(sourceRoot, [0.76, 0.64, 0.44])
+    return this.cloneNodeAsUnlit(sourceRoot, [0.76, 0.64, 0.44]);
   }
 
   private buildMarkerPrefab(
     sourceRoot: Object3D,
     profile: MarkerModelProfile,
   ): Object3D {
-    const resolvedRoot = this.resolveModelRoot(sourceRoot, profile.rootObjectName)
+    const resolvedRoot = this.resolveModelRoot(
+      sourceRoot,
+      profile.rootObjectName,
+    );
     if (profile.preserveMaterials) {
       if (profile.shadowSafePbr) {
-        this.applyPbrShadowSafety(resolvedRoot)
+        this.applyPbrShadowSafety(resolvedRoot);
       }
-      return resolvedRoot
+      return resolvedRoot;
     }
-    return this.cloneNodeAsUnlit(resolvedRoot, profile.modelColor)
+    return this.cloneNodeAsUnlit(resolvedRoot, profile.modelColor);
   }
 
-  private logBuildingDebug(message: string, fields?: Record<string, unknown>): void {
+  private logBuildingDebug(
+    message: string,
+    fields?: Record<string, unknown>,
+  ): void {
     if (!this.debugBuildingModels) {
-      return
+      return;
     }
 
     if (fields && Object.keys(fields).length > 0) {
-      console.info('[stitch-orillusion-client]', message, fields)
-      return
+      console.info("[stitch-orillusion-client]", message, fields);
+      return;
     }
-    console.info('[stitch-orillusion-client]', message)
+    console.info("[stitch-orillusion-client]", message);
   }
 
   private logBuildingWarn(message: string, error: unknown): void {
     if (!this.debugBuildingModels) {
-      return
+      return;
     }
-    console.warn(`[stitch-orillusion-client] ${message}`, error)
+    console.warn(`[stitch-orillusion-client] ${message}`, error);
   }
 
-  private cloneNodeAsUnlit(source: Object3D, color: readonly [number, number, number]): Object3D {
-    const clone = new Object3D()
-    clone.name = source.name
-    clone.x = source.x
-    clone.y = source.y
-    clone.z = source.z
-    clone.rotationX = source.rotationX
-    clone.rotationY = source.rotationY
-    clone.rotationZ = source.rotationZ
-    clone.scaleX = source.scaleX
-    clone.scaleY = source.scaleY
-    clone.scaleZ = source.scaleZ
+  private cloneNodeAsUnlit(
+    source: Object3D,
+    color: readonly [number, number, number],
+  ): Object3D {
+    const clone = new Object3D();
+    clone.name = source.name;
+    clone.x = source.x;
+    clone.y = source.y;
+    clone.z = source.z;
+    clone.rotationX = source.rotationX;
+    clone.rotationY = source.rotationY;
+    clone.rotationZ = source.rotationZ;
+    clone.scaleX = source.scaleX;
+    clone.scaleY = source.scaleY;
+    clone.scaleZ = source.scaleZ;
 
     if (source.hasComponent(MeshRenderer)) {
-      const sourceMesh = source.getComponent(MeshRenderer)
+      const sourceMesh = source.getComponent(MeshRenderer);
       if (sourceMesh?.geometry) {
-        const mesh = clone.addComponent(MeshRenderer)
-        mesh.castGI = false
-        mesh.castShadow = false
-        mesh.receiveShadow = false
-        mesh.geometry = sourceMesh.geometry
+        const mesh = clone.addComponent(MeshRenderer);
+        mesh.castGI = false;
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
+        mesh.geometry = sourceMesh.geometry;
 
-        const unlit = new UnLitMaterial()
-        unlit.baseColor = new Color(color[0], color[1], color[2], 1)
+        const unlit = new UnLitMaterial();
+        unlit.baseColor = new Color(color[0], color[1], color[2], 1);
         if (!setMaterialSafe(mesh, unlit)) {
-          unlit.destroy(false)
-          clone.removeComponent(MeshRenderer)
+          unlit.destroy(false);
+          clone.removeComponent(MeshRenderer);
         }
       }
     }
 
     for (const child of source.entityChildren) {
       if (!(child instanceof Object3D)) {
-        continue
+        continue;
       }
-      const childClone = this.cloneNodeAsUnlit(child, color)
-      clone.addChild(childClone)
+      const childClone = this.cloneNodeAsUnlit(child, color);
+      clone.addChild(childClone);
     }
 
-    return clone
+    return clone;
   }
 
-  private resolveModelRoot(loadedRoot: Object3D, preferredName?: string): Object3D {
+  private resolveModelRoot(
+    loadedRoot: Object3D,
+    preferredName?: string,
+  ): Object3D {
     if (!preferredName) {
-      return loadedRoot
+      return loadedRoot;
     }
 
-    const resolved = loadedRoot.getObjectByName(preferredName)
+    const resolved = loadedRoot.getObjectByName(preferredName);
     if (resolved instanceof Object3D) {
-      return resolved
+      return resolved;
     }
 
-    this.logBuildingWarn(`preferred model root not found: ${preferredName}`, loadedRoot.name)
-    return loadedRoot
+    this.logBuildingWarn(
+      `preferred model root not found: ${preferredName}`,
+      loadedRoot.name,
+    );
+    return loadedRoot;
   }
 
-  private playMarkerAnimation(root: Object3D, preferredClipName?: string, preferredClipIndex?: number): void {
-    const animator = root.getComponentsInChild(AnimatorComponent)[0]
+  private playMarkerAnimation(
+    root: Object3D,
+    preferredClipName?: string,
+    preferredClipIndex?: number,
+  ): void {
+    const animator = root.getComponentsInChild(AnimatorComponent)[0];
     if (!animator || !animator.clips || animator.clips.length === 0) {
-      return
+      return;
     }
 
     const preferredByName = preferredClipName
-      ? animator.clips.find((clip) => normalizeClipName(clip.clipName) === normalizeClipName(preferredClipName))
-      : undefined
+      ? animator.clips.find(
+          (clip) =>
+            normalizeClipName(clip.clipName) ===
+            normalizeClipName(preferredClipName),
+        )
+      : undefined;
     const preferredByIndex =
       Number.isInteger(preferredClipIndex) &&
-        (preferredClipIndex as number) >= 0 &&
-        (preferredClipIndex as number) < animator.clips.length
+      (preferredClipIndex as number) >= 0 &&
+      (preferredClipIndex as number) < animator.clips.length
         ? animator.clips[preferredClipIndex as number]
-        : undefined
-    const clip = preferredByName ?? preferredByIndex ?? animator.clips[0]
+        : undefined;
+    const clip = preferredByName ?? preferredByIndex ?? animator.clips[0];
     if (!clip) {
-      return
+      return;
     }
 
     try {
-      animator.playAnim(clip.clipName)
+      animator.playAnim(clip.clipName);
     } catch (error) {
-      this.logBuildingWarn(`failed to play marker animation ${clip.clipName}`, error)
+      this.logBuildingWarn(
+        `failed to play marker animation ${clip.clipName}`,
+        error,
+      );
     }
   }
 
   private applyPbrShadowSafety(root: Object3D): void {
     for (const mesh of this.collectMeshRenderers(root)) {
-      mesh.castGI = false
-      mesh.castShadow = false
-      mesh.receiveShadow = false
+      mesh.castGI = false;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
 
-      const materials = this.getMeshMaterialsSafe(mesh)
+      const materials = this.getMeshMaterialsSafe(mesh);
       if (materials.length === 0) {
-        continue
+        continue;
       }
       for (const material of materials) {
-        this.applyShadowSafeMaterial(material)
+        this.applyShadowSafeMaterial(material);
       }
     }
   }
 
-  private collectMeshRenderers(root: Object3D): Array<MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2> {
-    const out: Array<MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2> = []
-    const visited = new Set<MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2>()
+  private collectMeshRenderers(
+    root: Object3D,
+  ): Array<MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2> {
+    const out: Array<
+      MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2
+    > = [];
+    const visited = new Set<
+      MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2
+    >();
 
     for (const renderer of root.getComponentsInChild(MeshRenderer)) {
       if (!visited.has(renderer)) {
-        visited.add(renderer)
-        out.push(renderer)
+        visited.add(renderer);
+        out.push(renderer);
       }
     }
     for (const renderer of root.getComponentsInChild(SkinnedMeshRenderer)) {
       if (!visited.has(renderer)) {
-        visited.add(renderer)
-        out.push(renderer)
+        visited.add(renderer);
+        out.push(renderer);
       }
     }
     for (const renderer of root.getComponentsInChild(SkinnedMeshRenderer2)) {
       if (!visited.has(renderer)) {
-        visited.add(renderer)
-        out.push(renderer)
+        visited.add(renderer);
+        out.push(renderer);
       }
     }
 
-    return out
+    return out;
   }
 
-  private getMeshMaterialsSafe(mesh: MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2): Material[] {
+  private getMeshMaterialsSafe(
+    mesh: MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2,
+  ): Material[] {
     try {
-      const materials = mesh.materials
+      const materials = mesh.materials;
       if (Array.isArray(materials) && materials.length > 0) {
-        return materials
+        return materials;
       }
 
-      const single = mesh.material
-      return single ? [single] : []
+      const single = mesh.material;
+      return single ? [single] : [];
     } catch (error) {
-      this.logBuildingWarn('failed to read marker material', error)
-      return []
+      this.logBuildingWarn("failed to read marker material", error);
+      return [];
     }
   }
 
   private applyShadowSafeMaterial(material: Material): void {
-    material.acceptShadow = false
-    material.castShadow = false
+    material.acceptShadow = false;
+    material.castShadow = false;
     try {
-      material.setDefine('USE_SHADOWMAPING', false)
+      material.setDefine("USE_SHADOWMAPING", false);
     } catch {
       // Ignore materials that do not expose the shadow define.
     }
   }
 
   private syncProjectSites(db: Record<string, unknown>): void {
-    const table = getTableRows(db, 'projectSiteState')
+    const table = getTableRows(db, "projectSiteState");
     if (!table) {
-      this.prune(this.projectSiteObjects, new Set())
-      return
+      this.prune(this.projectSiteObjects, new Set());
+      return;
     }
 
-    const seen = new Set<string>()
-    const labels: Array<{ id: string; percent: number; actions: number; total: number }> = []
+    const seen = new Set<string>();
+    const labels: Array<{
+      id: string;
+      percent: number;
+      actions: number;
+      total: number;
+    }> = [];
     for (const row of table) {
-      const id = String(row.entityId ?? '')
+      const id = String(row.entityId ?? "");
       if (!id) {
-        continue
+        continue;
       }
-      seen.add(id)
-      const buildingDefId = toU64String(row.buildingDefId)
+      seen.add(id);
+      const buildingDefId = toU64String(row.buildingDefId);
       if (buildingDefId) {
-        this.buildingDefByEntityId.set(id, buildingDefId)
+        this.buildingDefByEntityId.set(id, buildingDefId);
       }
 
-      const hexX = toNumber(row.hexX)
-      const hexZ = toNumber(row.hexZ)
-      const world = hexToWorldXZ({ q: hexX, r: hexZ, dimension: Math.max(1, toNumber(row.dimensionId)) })
-      const currentActions = Math.max(0, toNumber(row.currentActions))
-      const totalActions = Math.max(1, toNumber(row.totalActions))
-      const progressRatio = Math.max(0, Math.min(1, currentActions / totalActions))
+      const hexX = toNumber(row.hexX);
+      const hexZ = toNumber(row.hexZ);
+      const world = hexToWorldXZ({
+        q: hexX,
+        r: hexZ,
+        dimension: Math.max(1, toNumber(row.dimensionId)),
+      });
+      const currentActions = Math.max(0, toNumber(row.currentActions));
+      const totalActions = Math.max(1, toNumber(row.totalActions));
+      const progressRatio = Math.max(
+        0,
+        Math.min(1, currentActions / totalActions),
+      );
       labels.push({
         id,
         percent: Math.round(progressRatio * 100),
         actions: Math.trunc(currentActions),
         total: Math.trunc(totalActions),
-      })
+      });
 
-      let object = this.projectSiteObjects.get(id)
+      let object = this.projectSiteObjects.get(id);
       if (!object) {
-        object = new Object3D()
-        this.root.addChild(object)
-        this.projectSiteObjects.set(id, object)
+        object = new Object3D();
+        this.root.addChild(object);
+        this.projectSiteObjects.set(id, object);
       }
 
-      this.ensureMarkerVisual(object, PROJECT_SITE_MARKER_MODEL)
+      this.ensureMarkerVisual(object, PROJECT_SITE_MARKER_MODEL);
 
-      const phase = stablePhase(id)
+      const phase = stablePhase(id);
       const pulse =
         progressRatio >= 1
           ? 0
-          : (Math.sin(Date.now() * 0.008 + phase) + 1) * 0.04
-      const scaleY = 0.45 + progressRatio * 0.55 + pulse
-      const groundY = this.sampleTerrainHeight(world.x, world.z)
-      object.x = world.x
-      object.y = (groundY ?? 0) + scaleY * 0.5
-      object.z = world.z
-      object.scaleX = 0.9
-      object.scaleY = scaleY
-      object.scaleZ = 0.9
+          : (Math.sin(Date.now() * 0.008 + phase) + 1) * 0.04;
+      const scaleY = 0.45 + progressRatio * 0.55 + pulse;
+      const groundY = this.sampleTerrainHeight(world.x, world.z);
+      object.x = world.x;
+      object.y = (groundY ?? 0) + scaleY * 0.5;
+      object.z = world.z;
+      object.scaleX = 0.9;
+      object.scaleY = scaleY;
+      object.scaleZ = 0.9;
     }
 
-    this.prune(this.projectSiteObjects, seen)
-    labels.sort((a, b) => b.percent - a.percent)
+    this.prune(this.projectSiteObjects, seen);
+    labels.sort((a, b) => b.percent - a.percent);
     this.projectLabels = labels.map((entry) => {
-      return `${entry.id}:${entry.percent}%(${entry.actions}/${entry.total})`
-    })
+      return `${entry.id}:${entry.percent}%(${entry.actions}/${entry.total})`;
+    });
   }
 
   private syncBuildingFootprints(db: Record<string, unknown>): void {
-    const table = getTableRows(db, 'buildingFootprint')
+    const table = getTableRows(db, "buildingFootprint");
     if (!table) {
-      this.prune(this.footprintObjects, new Set())
-      return
+      this.prune(this.footprintObjects, new Set());
+      return;
     }
 
-    const seen = new Set<string>()
+    const seen = new Set<string>();
     for (const row of table) {
-      const key = String(row.tileKey ?? '')
+      const key = String(row.tileKey ?? "");
       if (!key) {
-        continue
+        continue;
       }
-      seen.add(key)
+      seen.add(key);
 
-      const hexX = toNumber(row.hexX)
-      const hexZ = toNumber(row.hexZ)
-      const world = hexToWorldXZ({ q: hexX, r: hexZ, dimension: Math.max(1, toNumber(row.dimensionId)) })
-      const isPerimeter = Boolean(row.isPerimeter)
-      const tileType = Math.max(0, toNumber(row.tileType))
+      const hexX = toNumber(row.hexX);
+      const hexZ = toNumber(row.hexZ);
+      const world = hexToWorldXZ({
+        q: hexX,
+        r: hexZ,
+        dimension: Math.max(1, toNumber(row.dimensionId)),
+      });
+      const isPerimeter = Boolean(row.isPerimeter);
+      const tileType = Math.max(0, toNumber(row.tileType));
 
-      let object = this.footprintObjects.get(key)
+      let object = this.footprintObjects.get(key);
       if (!object) {
-        object = new Object3D()
-        const mesh = object.addComponent(MeshRenderer)
-        mesh.geometry = new BoxGeometry(1, 1, 1)
-        const [r, g, b] = footprintColor(tileType, isPerimeter)
+        object = new Object3D();
+        const mesh = object.addComponent(MeshRenderer);
+        mesh.geometry = new BoxGeometry(1, 1, 1);
+        const [r, g, b] = footprintColor(tileType, isPerimeter);
         if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
-          object.destroy()
-          continue
+          object.destroy();
+          continue;
         }
-        this.root.addChild(object)
-        this.footprintObjects.set(key, object)
+        this.root.addChild(object);
+        this.footprintObjects.set(key, object);
       }
 
-      const scaleY = isPerimeter ? 0.03 : 0.06
-      const groundY = this.sampleTerrainHeight(world.x, world.z)
-      object.x = world.x
-      object.y = (groundY ?? 0) + scaleY * 0.5 + 0.02
-      object.z = world.z
-      object.scaleX = isPerimeter ? 0.9 : 0.94
-      object.scaleY = scaleY
-      object.scaleZ = isPerimeter ? 0.9 : 0.94
+      const scaleY = isPerimeter ? 0.03 : 0.06;
+      const groundY = this.sampleTerrainHeight(world.x, world.z);
+      object.x = world.x;
+      object.y = (groundY ?? 0) + scaleY * 0.5 + 0.02;
+      object.z = world.z;
+      object.scaleX = isPerimeter ? 0.9 : 0.94;
+      object.scaleY = scaleY;
+      object.scaleZ = isPerimeter ? 0.9 : 0.94;
     }
 
-    this.prune(this.footprintObjects, seen)
+    this.prune(this.footprintObjects, seen);
   }
 
-  private syncPlayers(db: Record<string, unknown>, localIdentityHex: string | null): void {
-    void db
-    void localIdentityHex
+  private syncPlayers(
+    db: Record<string, unknown>,
+    localIdentityHex: string | null,
+  ): void {
+    void db;
+    void localIdentityHex;
     // Local player is rendered by world-scene. Stream player markers are disabled
     // to avoid duplicate visuals until marker/player model unification is complete.
-    this.prune(this.playerObjects, new Set())
+    this.prune(this.playerObjects, new Set());
   }
 
   private syncV2Streams(db: Record<string, unknown>): void {
-    void db
+    void db;
     // Disable AOI v2 debug cubes in normal gameplay view.
-    this.prune(this.v2Objects, new Set())
+    this.prune(this.v2Objects, new Set());
   }
 
   private prune(
@@ -1571,41 +1941,47 @@ export class WorldStreamVisualizer {
   ): void {
     for (const [key, object] of objects) {
       if (seen.has(key)) {
-        continue
+        continue;
       }
-      onPrune?.(key, object)
-      object.destroy()
-      objects.delete(key)
+      onPrune?.(key, object);
+      object.destroy();
+      objects.delete(key);
     }
   }
 
   private clearAll(): void {
-    this.prune(this.terrainObjects, new Set(), (key) => this.releaseTerrainWaterResources(key))
-    this.terrainStamps.clear()
-    this.prune(this.npcObjects, new Set())
-    this.npcStateSnapshots.clear()
-    this.prune(this.resourceObjects, new Set())
-    destroyDirectChildren(this.resourceInstanceRoot)
-    this.prune(this.buildingObjects, new Set())
-    this.buildingVisualVersions.clear()
-    this.buildingModelAppliedVersions.clear()
-    this.buildingModelPendingVersions.clear()
-    this.buildingDefByEntityId.clear()
-    this.buildingDefByRequirementKey.clear()
-    this.prune(this.projectSiteObjects, new Set())
-    this.prune(this.footprintObjects, new Set())
-    this.prune(this.playerObjects, new Set())
-    this.prune(this.v2Objects, new Set())
-    this.terrainCellsByCoord.clear()
-    this.terrainHeightIndex.clear()
-    this.terrainFallbackHeightByChunkCoord.clear()
-    this.waterResourcesByChunkKey.clear()
-    this.lastResourceSyncAtMs = 0
+    this.prune(this.terrainObjects, new Set(), (key) => {
+      this.releaseTerrainWaterResources(key);
+      this.grassBladeCountByChunkKey.delete(key);
+    });
+    this.terrainStamps.clear();
+    this.grassBladeCountByChunkKey.clear();
+    this.prune(this.npcObjects, new Set());
+    this.npcStateSnapshots.clear();
+    this.prune(this.resourceObjects, new Set());
+    destroyDirectChildren(this.resourceInstanceRoot);
+    this.prune(this.buildingObjects, new Set());
+    this.buildingVisualVersions.clear();
+    this.buildingModelAppliedVersions.clear();
+    this.buildingModelPendingVersions.clear();
+    this.buildingDefByEntityId.clear();
+    this.buildingDefByRequirementKey.clear();
+    this.prune(this.projectSiteObjects, new Set());
+    this.prune(this.footprintObjects, new Set());
+    this.prune(this.playerObjects, new Set());
+    this.prune(this.v2Objects, new Set());
+    this.terrainCellsByCoord.clear();
+    this.terrainHeightIndex.clear();
+    this.terrainFallbackHeightByChunkCoord.clear();
+    this.waterResourcesByChunkKey.clear();
+    this.lastResourceSyncAtMs = 0;
 
     this.stats = {
       terrain: 0,
       terrainDetailed: 0,
       terrainFallback: 0,
+      grassChunks: 0,
+      grassBladesApprox: 0,
       npc: 0,
       resource: 0,
       building: 0,
@@ -1613,183 +1989,401 @@ export class WorldStreamVisualizer {
       footprint: 0,
       players: 0,
       v2: 0,
-    }
+    };
   }
 
-  private sampleTerrainFallbackHeight(worldX: number, worldZ: number): number | null {
+  private sampleTerrainFallbackHeight(
+    worldX: number,
+    worldZ: number,
+  ): number | null {
     if (
       !Number.isFinite(worldX) ||
       !Number.isFinite(worldZ) ||
       this.terrainFallbackHeightByChunkCoord.size === 0
     ) {
-      return null
+      return null;
     }
 
-    const chunkSize = Math.max(1, Math.trunc(this.terrainChunkSizeHint))
-    const chunkX = Math.floor(worldX / chunkSize)
-    const chunkY = Math.floor(worldZ / chunkSize)
-    return this.terrainFallbackHeightByChunkCoord.get(chunkCoordKey(chunkX, chunkY)) ?? null
+    const chunkSize = Math.max(1, Math.trunc(this.terrainChunkSizeHint));
+    const chunkX = Math.floor(worldX / chunkSize);
+    const chunkY = Math.floor(worldZ / chunkSize);
+    return (
+      this.terrainFallbackHeightByChunkCoord.get(
+        chunkCoordKey(chunkX, chunkY),
+      ) ?? null
+    );
   }
 }
 
-function getTableRows(db: Record<string, unknown>, name: string): Iterable<Record<string, unknown>> | null {
-  const table = db[name] as { iter?: () => Iterable<Record<string, unknown>> } | undefined
-  if (!table || typeof table.iter !== 'function') {
-    return null
+function getTableRows(
+  db: Record<string, unknown>,
+  name: string,
+): Iterable<Record<string, unknown>> | null {
+  const table = db[name] as
+    | { iter?: () => Iterable<Record<string, unknown>> }
+    | undefined;
+  if (!table || typeof table.iter !== "function") {
+    return null;
   }
-  return table.iter()
+  return table.iter();
 }
 
 function createUnlitMaterial(r: number, g: number, b: number): UnLitMaterial {
-  const material = new UnLitMaterial()
-  material.baseColor = new Color(r, g, b, 1)
-  return material
+  const material = new UnLitMaterial();
+  material.baseColor = new Color(r, g, b, 1);
+  return material;
 }
 
 function normalizeClipName(value: string): string {
-  return value.trim().toLowerCase()
+  return value.trim().toLowerCase();
 }
 
 function createTerrainMaterial(biomeId: number): Material {
-  const [r, g, b] = terrainColorByBiome(biomeId)
-  const material = new LitMaterial()
-  material.baseColor = new Color(r, g, b, 1)
-  material.acceptShadow = false
-  material.castShadow = false
+  const [r, g, b] = terrainColorByBiome(biomeId);
+  const material = new LitMaterial();
+  material.baseColor = new Color(r, g, b, 1);
+  material.acceptShadow = false;
+  material.castShadow = false;
   try {
-    material.setDefine('USE_SHADOWMAPING', false)
+    material.setDefine("USE_SHADOWMAPING", false);
   } catch {
     // Some material variants may not expose this define; ignore safely.
   }
 
   if (terrainSampleBaseMap) {
-    material.baseMap = terrainSampleBaseMap
-    return material
+    material.baseMap = terrainSampleBaseMap;
+    return material;
   }
 
-  material.baseMap = Engine3D.res.whiteTexture as TerrainBaseMap
+  material.baseMap = Engine3D.res.whiteTexture as TerrainBaseMap;
   void ensureTerrainSampleBaseMap().then((loaded) => {
     if (!loaded) {
-      return
+      return;
     }
     try {
-      material.baseMap = loaded
+      material.baseMap = loaded;
     } catch {
       // Material may have been destroyed before async texture load completes.
     }
-  })
-  return material
+  });
+  return material;
 }
 
 function ensureTerrainSampleBaseMap(): Promise<TerrainBaseMap | null> {
+  if (!TERRAIN_SAMPLE_BASEMAP_URL) {
+    return Promise.resolve(null);
+  }
   if (terrainSampleBaseMap) {
-    return Promise.resolve(terrainSampleBaseMap)
+    return Promise.resolve(terrainSampleBaseMap);
   }
   if (!terrainSampleBaseMapPromise) {
-    terrainSampleBaseMapPromise = Engine3D.res.loadTexture(TERRAIN_SAMPLE_BASEMAP_URL)
+    terrainSampleBaseMapPromise = Engine3D.res
+      .loadTexture(TERRAIN_SAMPLE_BASEMAP_URL)
       .then((texture) => {
         if (!texture) {
-          return null
+          return null;
         }
-        terrainSampleBaseMap = texture as TerrainBaseMap
-        return terrainSampleBaseMap
+        terrainSampleBaseMap = texture as TerrainBaseMap;
+        return terrainSampleBaseMap;
       })
       .catch((error) => {
-        console.warn('[stitch-orillusion-client] failed to load terrain sample texture', error)
-        return null
-      })
+        console.warn(
+          "[stitch-orillusion-client] failed to load terrain sample texture",
+          error,
+        );
+        return null;
+      });
   }
-  return terrainSampleBaseMapPromise
+  return terrainSampleBaseMapPromise;
+}
+
+function ensureTerrainGrassTextures(): Promise<GrassTextureBundle | null> {
+  if (terrainGrassTextures) {
+    return Promise.resolve(terrainGrassTextures);
+  }
+  if (!terrainGrassTexturesPromise) {
+    terrainGrassTexturesPromise = verifyImageAssetUrl(
+      TERRAIN_GRASS_BLADE_TEXTURE_URL,
+      "grass blade texture",
+    )
+      .then((ok) => {
+        if (!ok) {
+          return null;
+        }
+        return Engine3D.res.loadTexture(TERRAIN_GRASS_BLADE_TEXTURE_URL);
+      })
+      .then((blade) => {
+        if (!blade) {
+          return null;
+        }
+        terrainGrassTextures = {
+          blade,
+          windNoise: Engine3D.res.whiteTexture,
+        };
+        return terrainGrassTextures;
+      })
+      .catch((error) => {
+        console.warn(
+          "[stitch-orillusion-client] failed to load grass textures",
+          TERRAIN_GRASS_BLADE_TEXTURE_URL,
+          error,
+        );
+        return null;
+      });
+  }
+  return terrainGrassTexturesPromise;
+}
+
+async function verifyImageAssetUrl(
+  url: string,
+  label: string,
+): Promise<boolean> {
+  try {
+    const response = await fetch(url, { method: "GET" });
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!response.ok || !contentType.toLowerCase().startsWith("image/")) {
+      console.warn("[stitch-orillusion-client] invalid image asset response", {
+        label,
+        url,
+        status: response.status,
+        contentType,
+      });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.warn("[stitch-orillusion-client] image asset preflight failed", {
+      label,
+      url,
+      error,
+    });
+    return false;
+  }
 }
 
 function createWaterFallbackMaterial(): UnLitMaterial {
-  const material = new UnLitMaterial()
-  material.baseColor = new Color(0.16, 0.48, 0.82, 0.56)
-  material.doubleSide = true
-  material.transparent = true
-  material.depthWriteEnabled = false
-  material.acceptShadow = false
-  material.castShadow = false
+  const material = new UnLitMaterial();
+  material.baseColor = new Color(0.16, 0.48, 0.82, 0.56);
+  material.doubleSide = true;
+  material.transparent = true;
+  material.depthWriteEnabled = false;
+  material.acceptShadow = false;
+  material.castShadow = false;
   try {
-    material.setDefine('USE_SHADOWMAPING', false)
+    material.setDefine("USE_SHADOWMAPING", false);
   } catch {
     // Ignore materials that do not expose the shadow define.
   }
-  return material
+  return material;
 }
 
-function buildMarkerFallbackObject(profile: MarkerModelProfile): Object3D | null {
-  const fallback = new Object3D()
-  const mesh = fallback.addComponent(MeshRenderer)
-  const fallbackShape = profile.fallback
+function buildMarkerFallbackObject(
+  profile: MarkerModelProfile,
+): Object3D | null {
+  const fallback = new Object3D();
+  const mesh = fallback.addComponent(MeshRenderer);
+  const fallbackShape = profile.fallback;
 
-  if (fallbackShape.kind === 'sphere') {
-    const segments = Math.max(6, fallbackShape.segments ?? 14)
-    mesh.geometry = new SphereGeometry(fallbackShape.radius, segments, segments)
-    const [r, g, b] = fallbackShape.color
+  if (fallbackShape.kind === "sphere") {
+    const segments = Math.max(6, fallbackShape.segments ?? 14);
+    mesh.geometry = new SphereGeometry(
+      fallbackShape.radius,
+      segments,
+      segments,
+    );
+    const [r, g, b] = fallbackShape.color;
     if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
-      fallback.destroy()
-      return null
+      fallback.destroy();
+      return null;
     }
-    return fallback
+    return fallback;
   }
 
-  mesh.geometry = new BoxGeometry(fallbackShape.width, fallbackShape.height, fallbackShape.depth)
-  const [r, g, b] = fallbackShape.color
+  mesh.geometry = new BoxGeometry(
+    fallbackShape.width,
+    fallbackShape.height,
+    fallbackShape.depth,
+  );
+  const [r, g, b] = fallbackShape.color;
   if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
-    fallback.destroy()
-    return null
+    fallback.destroy();
+    return null;
   }
-  return fallback
+  return fallback;
 }
 
 function setMaterialSafe(mesh: MeshRenderer, material: Material): boolean {
   try {
-    mesh.material = material
-    return true
+    mesh.material = material;
+    return true;
   } catch (error) {
-    console.warn('[stitch-orillusion-client] material assignment failed in stream visualizer', error)
-    return false
+    console.warn(
+      "[stitch-orillusion-client] material assignment failed in stream visualizer",
+      error,
+    );
+    return false;
   }
 }
 
 function countMeshNodes(root: Object3D): number {
-  let count = 0
-  const stack: Object3D[] = [root]
+  let count = 0;
+  const stack: Object3D[] = [root];
 
   while (stack.length > 0) {
-    const node = stack.pop()
+    const node = stack.pop();
     if (!node) {
-      continue
+      continue;
     }
 
     if (node.hasComponent(MeshRenderer)) {
-      count += 1
+      count += 1;
     }
 
     for (const child of node.entityChildren) {
       if (child instanceof Object3D) {
-        stack.push(child)
+        stack.push(child);
       }
     }
   }
 
-  return count
+  return count;
 }
 
 interface TerrainCellSample {
-  readonly elevation: number
-  readonly waterLevel: number
-  readonly flags: number
-  readonly waterBodyType?: number
-  readonly distanceToWater?: number
-  readonly distanceToSea?: number
-  readonly riverFlowPermille?: number
+  readonly elevation: number;
+  readonly waterLevel: number;
+  readonly flags: number;
+  readonly waterBodyType?: number;
+  readonly distanceToWater?: number;
+  readonly distanceToSea?: number;
+  readonly riverFlowPermille?: number;
 }
 
 interface DecodedTerrainCells {
-  readonly chunkSize: number
-  readonly read: (x: number, z: number) => TerrainCellSample | null
+  readonly chunkSize: number;
+  readonly read: (x: number, z: number) => TerrainCellSample | null;
+}
+
+interface GrassBiomeProfile {
+  readonly width: number;
+  readonly height: number;
+  readonly spawnChance: number;
+  readonly extraSpawnChance: number;
+  readonly scaleBoost: number;
+}
+
+interface GrassPlacement {
+  readonly localX: number;
+  readonly localY: number;
+  readonly localZ: number;
+  readonly rotationY: number;
+  readonly scale: number;
+}
+
+function grassProfileByBiome(biomeId: number): GrassBiomeProfile {
+  if (Math.trunc(biomeId) === 1) {
+    return {
+      width: 0.12,
+      height: 0.22,
+      spawnChance: 0.76,
+      extraSpawnChance: 0.24,
+      scaleBoost: 1,
+    };
+  }
+
+  return {
+    width: 0.1,
+    height: 0.18,
+    spawnChance: 0.58,
+    extraSpawnChance: 0.1,
+    scaleBoost: 0.95,
+  };
+}
+
+function buildGrassPlacements(
+  cells: DecodedTerrainCells,
+  biomeId: number,
+  chunkX: number,
+  chunkY: number,
+  payloadCellsByCoord: Map<string, DecodedTerrainCells>,
+): GrassPlacement[] {
+  const profile = grassProfileByBiome(biomeId);
+  const chunkSize = Math.max(1, cells.chunkSize);
+  const chunkOriginX = chunkX * chunkSize;
+  const chunkOriginZ = chunkY * chunkSize;
+  const placements: GrassPlacement[] = [];
+  const maxPlacements = chunkSize * chunkSize * 2;
+
+  for (let localCellZ = 0; localCellZ < chunkSize; localCellZ += 1) {
+    for (let localCellX = 0; localCellX < chunkSize; localCellX += 1) {
+      if (placements.length >= maxPlacements) {
+        return placements;
+      }
+
+      const cell = cells.read(localCellX, localCellZ);
+      if (!cell || isWaterCell(cell)) {
+        continue;
+      }
+
+      const cellSeed = stableHash32(
+        `${chunkX}:${chunkY}:${localCellX}:${localCellZ}`,
+      );
+      if (hashToUnitFloat(cellSeed) > profile.spawnChance) {
+        continue;
+      }
+
+      const extraSpawn =
+        hashToUnitFloat(cellSeed ^ 0x9e3779b9) < profile.extraSpawnChance;
+      const spawnCount = extraSpawn ? 2 : 1;
+      for (let spawnIndex = 0; spawnIndex < spawnCount; spawnIndex += 1) {
+        if (placements.length >= maxPlacements) {
+          return placements;
+        }
+
+        const spawnSeed = stableHash32(
+          `${chunkX}:${chunkY}:${localCellX}:${localCellZ}:${spawnIndex}`,
+        );
+        const jitterX =
+          hashToSignedUnitFloat(spawnSeed) * TERRAIN_GRASS_CELL_JITTER;
+        const jitterZ =
+          hashToSignedUnitFloat(spawnSeed ^ 0x85ebca6b) *
+          TERRAIN_GRASS_CELL_JITTER;
+        const localX = Math.max(
+          0.02,
+          Math.min(chunkSize - 0.02, localCellX + 0.5 + jitterX),
+        );
+        const localZ = Math.max(
+          0.02,
+          Math.min(chunkSize - 0.02, localCellZ + 0.5 + jitterZ),
+        );
+        const worldX = chunkOriginX + localX;
+        const worldZ = chunkOriginZ + localZ;
+        const sampledHeight = sampleTerrainHeightAtWorld(
+          worldX,
+          worldZ,
+          chunkSize,
+          payloadCellsByCoord,
+        );
+        const fallbackHeight = elevationToWorldY(terrainHeightFromCell(cell));
+        const scaleRandom = hashToUnitFloat(spawnSeed ^ 0xc2b2ae35);
+        const scale =
+          (TERRAIN_GRASS_MIN_SCALE +
+            (TERRAIN_GRASS_MAX_SCALE - TERRAIN_GRASS_MIN_SCALE) * scaleRandom) *
+          profile.scaleBoost;
+
+        placements.push({
+          localX,
+          localY:
+            (sampledHeight ?? fallbackHeight) + TERRAIN_GRASS_HEIGHT_OFFSET,
+          localZ,
+          rotationY: hashToUnitFloat(spawnSeed ^ 0x27d4eb2d) * 360,
+          scale,
+        });
+      }
+    }
+  }
+
+  return placements;
 }
 
 function terrainStamp(
@@ -1799,36 +2393,42 @@ function terrainStamp(
   chunkY: number,
   payloadSignatureByCoord: Map<string, string>,
 ): string {
-  const hMin = toNumber(streamRow.heightMin)
-  const hMax = toNumber(streamRow.heightMax)
-  const payloadSignature = terrainPayloadSignature(payloadRow)
+  const hMin = toNumber(streamRow.heightMin);
+  const hMax = toNumber(streamRow.heightMax);
+  const payloadSignature = terrainPayloadSignature(payloadRow);
 
   if (payloadRow) {
-    const neighborSignature = terrainNeighborStamp(chunkX, chunkY, payloadSignatureByCoord)
-    return `payload:${payloadSignature}:${neighborSignature}:${hMin}:${hMax}`
+    const neighborSignature = terrainNeighborStamp(
+      chunkX,
+      chunkY,
+      payloadSignatureByCoord,
+    );
+    return `payload:${payloadSignature}:${neighborSignature}:${hMin}:${hMax}`;
   }
 
-  return `none:${payloadSignature}:${hMin}:${hMax}`
+  return `none:${payloadSignature}:${hMin}:${hMax}`;
 }
 
-function terrainPayloadSignature(payloadRow: Record<string, unknown> | null): string {
+function terrainPayloadSignature(
+  payloadRow: Record<string, unknown> | null,
+): string {
   if (!payloadRow) {
-    return 'none'
+    return "none";
   }
 
-  const version = toNumber(payloadRow.cellPayloadVersion)
-  const chunkSize = toTerrainChunkSize(payloadRow)
-  const bytes = toByteArray(payloadRow.cellPayloadBytes)
+  const version = toNumber(payloadRow.cellPayloadVersion);
+  const chunkSize = toTerrainChunkSize(payloadRow);
+  const bytes = toByteArray(payloadRow.cellPayloadBytes);
   if (!bytes || bytes.length < 2) {
-    return `${version}:${chunkSize}:${bytes?.length ?? 0}`
+    return `${version}:${chunkSize}:${bytes?.length ?? 0}`;
   }
 
-  const len = bytes.length
-  const head = readU16LE(bytes, 0)
-  const midIndex = Math.max(0, ((len >> 1) - ((len >> 1) % 2)))
-  const mid = readU16LE(bytes, midIndex)
-  const tail = readU16LE(bytes, len - 2)
-  return `${version}:${chunkSize}:${len}:${head}:${mid}:${tail}`
+  const len = bytes.length;
+  const head = readU16LE(bytes, 0);
+  const midIndex = Math.max(0, (len >> 1) - ((len >> 1) % 2));
+  const mid = readU16LE(bytes, midIndex);
+  const tail = readU16LE(bytes, len - 2);
+  return `${version}:${chunkSize}:${len}:${head}:${mid}:${tail}`;
 }
 
 function terrainNeighborStamp(
@@ -1836,95 +2436,120 @@ function terrainNeighborStamp(
   chunkY: number,
   payloadSignatureByCoord: Map<string, string>,
 ): string {
-  let stamp = ''
+  let stamp = "";
   for (const [dx, dy] of TERRAIN_NEIGHBOR_OFFSETS) {
-    stamp += `|${payloadSignatureByCoord.get(chunkCoordKey(chunkX + dx, chunkY + dy)) ?? 'none'}`
+    stamp += `|${payloadSignatureByCoord.get(chunkCoordKey(chunkX + dx, chunkY + dy)) ?? "none"}`;
   }
-  return stamp
+  return stamp;
 }
 
-function decodeTerrainPayload(payloadRow: Record<string, unknown> | null): DecodedTerrainCells | null {
+function decodeTerrainPayload(
+  payloadRow: Record<string, unknown> | null,
+): DecodedTerrainCells | null {
   if (!payloadRow) {
-    return null
+    return null;
   }
 
-  const version = toNumber(payloadRow.cellPayloadVersion)
-  if (version !== TERRAIN_PAYLOAD_VERSION_V1 && version !== TERRAIN_PAYLOAD_VERSION_V2) {
-    return null
+  const version = toNumber(payloadRow.cellPayloadVersion);
+  if (
+    version !== TERRAIN_PAYLOAD_VERSION_V1 &&
+    version !== TERRAIN_PAYLOAD_VERSION_V2
+  ) {
+    return null;
   }
 
-  const bytes = toByteArray(payloadRow.cellPayloadBytes)
+  const bytes = toByteArray(payloadRow.cellPayloadBytes);
   if (!bytes || bytes.length < 8) {
-    return null
+    return null;
   }
 
-  const chunkSize = toTerrainChunkSize(payloadRow, bytes.length)
+  const chunkSize = toTerrainChunkSize(payloadRow, bytes.length);
   if (chunkSize <= 0) {
-    return null
+    return null;
   }
 
-  const stride = terrainPayloadStrideBytes(version)
+  const stride = terrainPayloadStrideBytes(version);
   if (stride <= 0) {
-    return null
+    return null;
   }
 
   const read = (x: number, z: number): TerrainCellSample | null => {
-    const byteIndex = (z * chunkSize + x) * stride
+    const byteIndex = (z * chunkSize + x) * stride;
     if (byteIndex + stride - 1 >= bytes.length) {
-      return null
+      return null;
     }
     return {
       elevation: readI16LE(bytes, byteIndex),
       waterLevel: readI16LE(bytes, byteIndex + 2),
       flags: readU16LE(bytes, byteIndex + 6),
-      waterBodyType: version === TERRAIN_PAYLOAD_VERSION_V2 ? readI16LE(bytes, byteIndex + 8) : 0,
-      distanceToWater: version === TERRAIN_PAYLOAD_VERSION_V2 ? readI16LE(bytes, byteIndex + 10) : 0,
-      distanceToSea: version === TERRAIN_PAYLOAD_VERSION_V2 ? readI16LE(bytes, byteIndex + 12) : 0,
-      riverFlowPermille: version === TERRAIN_PAYLOAD_VERSION_V2 ? readI16LE(bytes, byteIndex + 14) : 0,
-    }
-  }
+      waterBodyType:
+        version === TERRAIN_PAYLOAD_VERSION_V2
+          ? readI16LE(bytes, byteIndex + 8)
+          : 0,
+      distanceToWater:
+        version === TERRAIN_PAYLOAD_VERSION_V2
+          ? readI16LE(bytes, byteIndex + 10)
+          : 0,
+      distanceToSea:
+        version === TERRAIN_PAYLOAD_VERSION_V2
+          ? readI16LE(bytes, byteIndex + 12)
+          : 0,
+      riverFlowPermille:
+        version === TERRAIN_PAYLOAD_VERSION_V2
+          ? readI16LE(bytes, byteIndex + 14)
+          : 0,
+    };
+  };
 
-  return { chunkSize, read }
+  return { chunkSize, read };
 }
 
-function toTerrainChunkSize(payloadRow: Record<string, unknown>, byteLengthHint = 0): number {
-  const fromCellCount = toNumber(payloadRow.cellCount)
+function toTerrainChunkSize(
+  payloadRow: Record<string, unknown>,
+  byteLengthHint = 0,
+): number {
+  const fromCellCount = toNumber(payloadRow.cellCount);
   if (fromCellCount > 0) {
-    const side = Math.floor(Math.sqrt(fromCellCount))
+    const side = Math.floor(Math.sqrt(fromCellCount));
     if (side > 0 && side * side === fromCellCount) {
-      return side
+      return side;
     }
   }
 
-  const bytesLength = byteLengthHint > 0 ? byteLengthHint : toByteArray(payloadRow.cellPayloadBytes)?.length ?? 0
-  const version = toNumber(payloadRow.cellPayloadVersion)
-  const stride = terrainPayloadStrideBytes(version)
+  const bytesLength =
+    byteLengthHint > 0
+      ? byteLengthHint
+      : (toByteArray(payloadRow.cellPayloadBytes)?.length ?? 0);
+  const version = toNumber(payloadRow.cellPayloadVersion);
+  const stride = terrainPayloadStrideBytes(version);
   if (stride > 0 && bytesLength >= stride) {
-    const count = Math.floor(bytesLength / stride)
-    const side = Math.floor(Math.sqrt(count))
+    const count = Math.floor(bytesLength / stride);
+    const side = Math.floor(Math.sqrt(count));
     if (side > 0) {
-      return side
+      return side;
     }
   }
-  return 0
+  return 0;
 }
 
 function terrainPayloadStrideBytes(version: number): number {
   if (version === TERRAIN_PAYLOAD_VERSION_V1) {
-    return 8
+    return 8;
   }
   if (version === TERRAIN_PAYLOAD_VERSION_V2) {
-    return 16
+    return 16;
   }
-  return 0
+  return 0;
 }
 
-function inferTerrainChunkSize(payloadRow: Record<string, unknown> | null): number | null {
+function inferTerrainChunkSize(
+  payloadRow: Record<string, unknown> | null,
+): number | null {
   if (!payloadRow) {
-    return null
+    return null;
   }
-  const chunkSize = toTerrainChunkSize(payloadRow)
-  return chunkSize > 0 ? chunkSize : null
+  const chunkSize = toTerrainChunkSize(payloadRow);
+  return chunkSize > 0 ? chunkSize : null;
 }
 
 function buildTerrainSurfaceGeometry(
@@ -1933,52 +2558,57 @@ function buildTerrainSurfaceGeometry(
   chunkY: number,
   payloadCellsByCoord: Map<string, DecodedTerrainCells>,
 ): TerrainGeometry | null {
-  const chunkSize = cells.chunkSize
+  const chunkSize = cells.chunkSize;
   if (!Number.isFinite(chunkSize) || chunkSize <= 0) {
-    return null
+    return null;
   }
 
-  const segments = Math.max(1, chunkSize)
-  const geometry = new TerrainGeometry(chunkSize, chunkSize, segments, segments)
-  const position = geometry.getAttribute(VertexAttributeName.position)
-  const data = position?.data as Float32Array | undefined
+  const segments = Math.max(1, chunkSize);
+  const geometry = new TerrainGeometry(
+    chunkSize,
+    chunkSize,
+    segments,
+    segments,
+  );
+  const position = geometry.getAttribute(VertexAttributeName.position);
+  const data = position?.data as Float32Array | undefined;
   if (!data) {
-    return null
+    return null;
   }
 
-  const half = chunkSize * 0.5
-  const chunkOriginX = chunkX * chunkSize
-  const chunkOriginZ = chunkY * chunkSize
+  const half = chunkSize * 0.5;
+  const chunkOriginX = chunkX * chunkSize;
+  const chunkOriginZ = chunkY * chunkSize;
   for (let i = 0; i < data.length; i += 3) {
-    const localX = (data[i] ?? 0) + half
-    const localZ = (data[i + 2] ?? 0) + half
-    data[i] = localX
-    data[i + 2] = localZ
+    const localX = (data[i] ?? 0) + half;
+    const localZ = (data[i + 2] ?? 0) + half;
+    data[i] = localX;
+    data[i + 2] = localZ;
 
-    const worldVertexX = Math.round(chunkOriginX + localX)
-    const worldVertexZ = Math.round(chunkOriginZ + localZ)
+    const worldVertexX = Math.round(chunkOriginX + localX);
+    const worldVertexZ = Math.round(chunkOriginZ + localZ);
     data[i + 1] = sampleTerrainVertexHeight(
       worldVertexX,
       worldVertexZ,
       chunkSize,
       payloadCellsByCoord,
       cells,
-    )
+    );
   }
 
-  geometry.vertexBuffer.upload(VertexAttributeName.position, position)
-  geometry.computeNormals()
-  return geometry
+  geometry.vertexBuffer.upload(VertexAttributeName.position, position);
+  geometry.computeNormals();
+  return geometry;
 }
 
 interface WaterSurfaceGeometryBuildResult {
-  readonly geometry: TerrainGeometry
-  readonly state: WaterSurfaceRenderState
+  readonly geometry: TerrainGeometry;
+  readonly state: WaterSurfaceRenderState;
 }
 
 interface WaterSurfaceRenderState {
-  readonly phase: number
-  readonly depthTexture: Float16ArrayTexture
+  readonly phase: number;
+  readonly depthTexture: Float16ArrayTexture;
 }
 
 function buildWaterSurfaceGeometry(
@@ -1987,62 +2617,72 @@ function buildWaterSurfaceGeometry(
   chunkY: number,
   payloadCellsByCoord: Map<string, DecodedTerrainCells>,
 ): WaterSurfaceGeometryBuildResult | null {
-  const chunkSize = cells.chunkSize
+  const chunkSize = cells.chunkSize;
   if (!Number.isFinite(chunkSize) || chunkSize <= 0) {
-    return null
+    return null;
   }
 
-  const segments = Math.max(1, chunkSize)
-  const geometry = new TerrainGeometry(chunkSize, chunkSize, segments, segments)
-  const position = geometry.getAttribute(VertexAttributeName.position)
-  const data = position?.data as Float32Array | undefined
+  const segments = Math.max(1, chunkSize);
+  const geometry = new TerrainGeometry(
+    chunkSize,
+    chunkSize,
+    segments,
+    segments,
+  );
+  const position = geometry.getAttribute(VertexAttributeName.position);
+  const data = position?.data as Float32Array | undefined;
   if (!position || !data) {
-    return null
+    return null;
   }
 
-  const half = chunkSize * 0.5
-  const chunkOriginX = chunkX * chunkSize
-  const chunkOriginZ = chunkY * chunkSize
-  let hasWater = false
+  const half = chunkSize * 0.5;
+  const chunkOriginX = chunkX * chunkSize;
+  const chunkOriginZ = chunkY * chunkSize;
+  let hasWater = false;
 
   for (let i = 0; i < data.length; i += 3) {
-    const localX = (data[i] ?? 0) + half
-    const localZ = (data[i + 2] ?? 0) + half
-    data[i] = localX
-    data[i + 2] = localZ
+    const localX = (data[i] ?? 0) + half;
+    const localZ = (data[i + 2] ?? 0) + half;
+    data[i] = localX;
+    data[i + 2] = localZ;
 
-    const worldVertexX = Math.round(chunkOriginX + localX)
-    const worldVertexZ = Math.round(chunkOriginZ + localZ)
+    const worldVertexX = Math.round(chunkOriginX + localX);
+    const worldVertexZ = Math.round(chunkOriginZ + localZ);
     const sample = sampleWaterSurfaceVertex(
       worldVertexX,
       worldVertexZ,
       chunkSize,
       payloadCellsByCoord,
       cells,
-    )
-    data[i + 1] = sample.height
-    hasWater = hasWater || sample.hasWater
+    );
+    data[i + 1] = sample.height;
+    hasWater = hasWater || sample.hasWater;
   }
 
   if (!hasWater) {
-    return null
+    return null;
   }
 
-  geometry.vertexBuffer.upload(VertexAttributeName.position, position)
-  geometry.computeNormals()
-  const depthTexture = buildWaterDepthMaskTexture(cells, chunkX, chunkY, payloadCellsByCoord)
+  geometry.vertexBuffer.upload(VertexAttributeName.position, position);
+  geometry.computeNormals();
+  const depthTexture = buildWaterDepthMaskTexture(
+    cells,
+    chunkX,
+    chunkY,
+    payloadCellsByCoord,
+  );
   return {
     geometry,
     state: {
       phase: stablePhase(`${chunkX}:${chunkY}:water`),
       depthTexture,
     },
-  }
+  };
 }
 
 interface WaterVertexSample {
-  readonly height: number
-  readonly hasWater: boolean
+  readonly height: number;
+  readonly hasWater: boolean;
 }
 
 function sampleWaterSurfaceVertex(
@@ -2053,59 +2693,83 @@ function sampleWaterSurfaceVertex(
   fallbackCells: DecodedTerrainCells,
 ): WaterVertexSample {
   const samples: Array<TerrainCellSample | null> = [
-    readTerrainCellAtWorldCell(worldVertexX - 1, worldVertexZ - 1, chunkSize, payloadCellsByCoord),
-    readTerrainCellAtWorldCell(worldVertexX, worldVertexZ - 1, chunkSize, payloadCellsByCoord),
-    readTerrainCellAtWorldCell(worldVertexX - 1, worldVertexZ, chunkSize, payloadCellsByCoord),
-    readTerrainCellAtWorldCell(worldVertexX, worldVertexZ, chunkSize, payloadCellsByCoord),
-  ]
+    readTerrainCellAtWorldCell(
+      worldVertexX - 1,
+      worldVertexZ - 1,
+      chunkSize,
+      payloadCellsByCoord,
+    ),
+    readTerrainCellAtWorldCell(
+      worldVertexX,
+      worldVertexZ - 1,
+      chunkSize,
+      payloadCellsByCoord,
+    ),
+    readTerrainCellAtWorldCell(
+      worldVertexX - 1,
+      worldVertexZ,
+      chunkSize,
+      payloadCellsByCoord,
+    ),
+    readTerrainCellAtWorldCell(
+      worldVertexX,
+      worldVertexZ,
+      chunkSize,
+      payloadCellsByCoord,
+    ),
+  ];
 
-  let waterTotal = 0
-  let waterCount = 0
+  let waterTotal = 0;
+  let waterCount = 0;
   for (const sample of samples) {
     if (!sample || !isWaterCell(sample)) {
-      continue
+      continue;
     }
-    waterTotal += elevationToWorldY(Math.max(sample.elevation, sample.waterLevel))
-    waterCount += 1
+    waterTotal += elevationToWorldY(
+      Math.max(sample.elevation, sample.waterLevel),
+    );
+    waterCount += 1;
   }
 
   if (waterCount > 0) {
     return {
-      height: (waterTotal / waterCount) + WATER_SURFACE_OFFSET,
+      height: waterTotal / waterCount + WATER_SURFACE_OFFSET,
       hasWater: true,
-    }
+    };
   }
 
-  let terrainTotal = 0
-  let terrainCount = 0
+  let terrainTotal = 0;
+  let terrainCount = 0;
   for (const sample of samples) {
     if (!sample) {
-      continue
+      continue;
     }
-    terrainTotal += elevationToWorldY(terrainHeightFromCell(sample))
-    terrainCount += 1
+    terrainTotal += elevationToWorldY(terrainHeightFromCell(sample));
+    terrainCount += 1;
   }
 
   if (terrainCount > 0) {
     return {
-      height: (terrainTotal / terrainCount) - WATER_SURFACE_HIDDEN_DEPTH,
+      height: terrainTotal / terrainCount - WATER_SURFACE_HIDDEN_DEPTH,
       hasWater: false,
-    }
+    };
   }
 
-  const fallbackX = positiveModInt(worldVertexX, fallbackCells.chunkSize)
-  const fallbackZ = positiveModInt(worldVertexZ, fallbackCells.chunkSize)
-  const fallbackSample = fallbackCells.read(fallbackX, fallbackZ)
-  const fallbackHeight = fallbackSample ? elevationToWorldY(terrainHeightFromCell(fallbackSample)) : 0
+  const fallbackX = positiveModInt(worldVertexX, fallbackCells.chunkSize);
+  const fallbackZ = positiveModInt(worldVertexZ, fallbackCells.chunkSize);
+  const fallbackSample = fallbackCells.read(fallbackX, fallbackZ);
+  const fallbackHeight = fallbackSample
+    ? elevationToWorldY(terrainHeightFromCell(fallbackSample))
+    : 0;
   return {
     height: fallbackHeight - WATER_SURFACE_HIDDEN_DEPTH,
     hasWater: false,
-  }
+  };
 }
 
 interface WaterDepthMaskSample {
-  readonly hasWater: boolean
-  readonly depthWorld: number
+  readonly hasWater: boolean;
+  readonly depthWorld: number;
 }
 
 function buildWaterDepthMaskTexture(
@@ -2114,34 +2778,42 @@ function buildWaterDepthMaskTexture(
   chunkY: number,
   payloadCellsByCoord: Map<string, DecodedTerrainCells>,
 ): Float16ArrayTexture {
-  const chunkSize = Math.max(1, cells.chunkSize)
-  const pixelData: number[] = new Array(chunkSize * chunkSize * 4)
-  const chunkOriginX = chunkX * chunkSize
-  const chunkOriginZ = chunkY * chunkSize
+  const chunkSize = Math.max(1, cells.chunkSize);
+  const pixelData: number[] = new Array(chunkSize * chunkSize * 4);
+  const chunkOriginX = chunkX * chunkSize;
+  const chunkOriginZ = chunkY * chunkSize;
 
   for (let z = 0; z < chunkSize; z += 1) {
     for (let x = 0; x < chunkSize; x += 1) {
-      const worldCellX = chunkOriginX + x
-      const worldCellZ = chunkOriginZ + z
-      const sample = sampleWaterDepthMaskCell(worldCellX, worldCellZ, chunkSize, payloadCellsByCoord, cells)
+      const worldCellX = chunkOriginX + x;
+      const worldCellZ = chunkOriginZ + z;
+      const sample = sampleWaterDepthMaskCell(
+        worldCellX,
+        worldCellZ,
+        chunkSize,
+        payloadCellsByCoord,
+        cells,
+      );
 
-      const offset = (z * chunkSize + x) * 4
-      const normalizedDepth = clamp01(sample.depthWorld / WATER_DEPTH_MAX_WORLD)
-      pixelData[offset] = normalizedDepth
-      pixelData[offset + 1] = sample.hasWater ? 1 : 0
-      pixelData[offset + 2] = 0
-      pixelData[offset + 3] = 1
+      const offset = (z * chunkSize + x) * 4;
+      const normalizedDepth = clamp01(
+        sample.depthWorld / WATER_DEPTH_MAX_WORLD,
+      );
+      pixelData[offset] = normalizedDepth;
+      pixelData[offset + 1] = sample.hasWater ? 1 : 0;
+      pixelData[offset + 2] = 0;
+      pixelData[offset + 3] = 1;
     }
   }
 
-  const texture = new Float16ArrayTexture()
-  texture.create(chunkSize, chunkSize, pixelData, false)
-  texture.addressModeU = 'clamp-to-edge'
-  texture.addressModeV = 'clamp-to-edge'
-  texture.magFilter = 'nearest'
-  texture.minFilter = 'nearest'
-  texture.mipmapFilter = 'nearest'
-  return texture
+  const texture = new Float16ArrayTexture();
+  texture.create(chunkSize, chunkSize, pixelData, false);
+  texture.addressModeU = "clamp-to-edge";
+  texture.addressModeV = "clamp-to-edge";
+  texture.magFilter = "nearest";
+  texture.minFilter = "nearest";
+  texture.mipmapFilter = "nearest";
+  return texture;
 }
 
 function sampleWaterDepthMaskCell(
@@ -2157,20 +2829,22 @@ function sampleWaterDepthMaskCell(
     chunkSize,
     payloadCellsByCoord,
     fallbackCells,
-  )
+  );
   if (!sample || !isWaterCell(sample)) {
     return {
       hasWater: false,
       depthWorld: 0,
-    }
+    };
   }
 
-  const waterY = elevationToWorldY(Math.max(sample.waterLevel, sample.elevation))
-  const groundY = elevationToWorldY(sample.elevation)
+  const waterY = elevationToWorldY(
+    Math.max(sample.waterLevel, sample.elevation),
+  );
+  const groundY = elevationToWorldY(sample.elevation);
   return {
     hasWater: true,
     depthWorld: Math.max(0, waterY - groundY),
-  }
+  };
 }
 
 function readTerrainCellAtWorldCellOrFallback(
@@ -2180,14 +2854,19 @@ function readTerrainCellAtWorldCellOrFallback(
   payloadCellsByCoord: Map<string, DecodedTerrainCells>,
   fallbackCells: DecodedTerrainCells,
 ): TerrainCellSample | null {
-  const sample = readTerrainCellAtWorldCell(worldCellX, worldCellZ, chunkSize, payloadCellsByCoord)
+  const sample = readTerrainCellAtWorldCell(
+    worldCellX,
+    worldCellZ,
+    chunkSize,
+    payloadCellsByCoord,
+  );
   if (sample) {
-    return sample
+    return sample;
   }
 
-  const fallbackX = positiveModInt(worldCellX, fallbackCells.chunkSize)
-  const fallbackZ = positiveModInt(worldCellZ, fallbackCells.chunkSize)
-  return fallbackCells.read(fallbackX, fallbackZ)
+  const fallbackX = positiveModInt(worldCellX, fallbackCells.chunkSize);
+  const fallbackZ = positiveModInt(worldCellZ, fallbackCells.chunkSize);
+  return fallbackCells.read(fallbackX, fallbackZ);
 }
 
 function sampleTerrainVertexHeight(
@@ -2198,30 +2877,52 @@ function sampleTerrainVertexHeight(
   fallbackCells: DecodedTerrainCells,
 ): number {
   const samples: Array<TerrainCellSample | null> = [
-    readTerrainCellAtWorldCell(worldVertexX - 1, worldVertexZ - 1, chunkSize, payloadCellsByCoord),
-    readTerrainCellAtWorldCell(worldVertexX, worldVertexZ - 1, chunkSize, payloadCellsByCoord),
-    readTerrainCellAtWorldCell(worldVertexX - 1, worldVertexZ, chunkSize, payloadCellsByCoord),
-    readTerrainCellAtWorldCell(worldVertexX, worldVertexZ, chunkSize, payloadCellsByCoord),
-  ]
+    readTerrainCellAtWorldCell(
+      worldVertexX - 1,
+      worldVertexZ - 1,
+      chunkSize,
+      payloadCellsByCoord,
+    ),
+    readTerrainCellAtWorldCell(
+      worldVertexX,
+      worldVertexZ - 1,
+      chunkSize,
+      payloadCellsByCoord,
+    ),
+    readTerrainCellAtWorldCell(
+      worldVertexX - 1,
+      worldVertexZ,
+      chunkSize,
+      payloadCellsByCoord,
+    ),
+    readTerrainCellAtWorldCell(
+      worldVertexX,
+      worldVertexZ,
+      chunkSize,
+      payloadCellsByCoord,
+    ),
+  ];
 
-  let total = 0
-  let count = 0
+  let total = 0;
+  let count = 0;
   for (const sample of samples) {
     if (!sample) {
-      continue
+      continue;
     }
-    total += elevationToWorldY(terrainHeightFromCell(sample))
-    count += 1
+    total += elevationToWorldY(terrainHeightFromCell(sample));
+    count += 1;
   }
 
   if (count > 0) {
-    return total / count
+    return total / count;
   }
 
-  const fallbackX = positiveModInt(worldVertexX, fallbackCells.chunkSize)
-  const fallbackZ = positiveModInt(worldVertexZ, fallbackCells.chunkSize)
-  const fallbackSample = fallbackCells.read(fallbackX, fallbackZ)
-  return fallbackSample ? elevationToWorldY(terrainHeightFromCell(fallbackSample)) : 0
+  const fallbackX = positiveModInt(worldVertexX, fallbackCells.chunkSize);
+  const fallbackZ = positiveModInt(worldVertexZ, fallbackCells.chunkSize);
+  const fallbackSample = fallbackCells.read(fallbackX, fallbackZ);
+  return fallbackSample
+    ? elevationToWorldY(terrainHeightFromCell(fallbackSample))
+    : 0;
 }
 
 function sampleTerrainHeightAtWorld(
@@ -2231,27 +2932,47 @@ function sampleTerrainHeightAtWorld(
   payloadCellsByCoord: Map<string, DecodedTerrainCells>,
 ): number | null {
   if (payloadCellsByCoord.size === 0) {
-    return null
+    return null;
   }
-  const chunkSize = Math.max(1, Math.trunc(chunkSizeHint))
+  const chunkSize = Math.max(1, Math.trunc(chunkSizeHint));
   const samples: Array<TerrainCellSample | null> = [
-    readTerrainCellAtWorldCell(Math.floor(worldX), Math.floor(worldZ), chunkSize, payloadCellsByCoord),
-    readTerrainCellAtWorldCell(Math.ceil(worldX), Math.floor(worldZ), chunkSize, payloadCellsByCoord),
-    readTerrainCellAtWorldCell(Math.floor(worldX), Math.ceil(worldZ), chunkSize, payloadCellsByCoord),
-    readTerrainCellAtWorldCell(Math.ceil(worldX), Math.ceil(worldZ), chunkSize, payloadCellsByCoord),
-  ]
+    readTerrainCellAtWorldCell(
+      Math.floor(worldX),
+      Math.floor(worldZ),
+      chunkSize,
+      payloadCellsByCoord,
+    ),
+    readTerrainCellAtWorldCell(
+      Math.ceil(worldX),
+      Math.floor(worldZ),
+      chunkSize,
+      payloadCellsByCoord,
+    ),
+    readTerrainCellAtWorldCell(
+      Math.floor(worldX),
+      Math.ceil(worldZ),
+      chunkSize,
+      payloadCellsByCoord,
+    ),
+    readTerrainCellAtWorldCell(
+      Math.ceil(worldX),
+      Math.ceil(worldZ),
+      chunkSize,
+      payloadCellsByCoord,
+    ),
+  ];
 
-  let sum = 0
-  let count = 0
+  let sum = 0;
+  let count = 0;
   for (const sample of samples) {
     if (!sample) {
-      continue
+      continue;
     }
-    sum += elevationToWorldY(terrainHeightFromCell(sample))
-    count += 1
+    sum += elevationToWorldY(terrainHeightFromCell(sample));
+    count += 1;
   }
 
-  return count > 0 ? sum / count : null
+  return count > 0 ? sum / count : null;
 }
 
 function readTerrainCellAtWorldCell(
@@ -2260,111 +2981,118 @@ function readTerrainCellAtWorldCell(
   chunkSize: number,
   payloadCellsByCoord: Map<string, DecodedTerrainCells>,
 ): TerrainCellSample | null {
-  const chunkX = floorDivInt(worldCellX, chunkSize)
-  const chunkY = floorDivInt(worldCellZ, chunkSize)
-  const cells = payloadCellsByCoord.get(chunkCoordKey(chunkX, chunkY))
+  const chunkX = floorDivInt(worldCellX, chunkSize);
+  const chunkY = floorDivInt(worldCellZ, chunkSize);
+  const cells = payloadCellsByCoord.get(chunkCoordKey(chunkX, chunkY));
   if (!cells) {
-    return null
+    return null;
   }
 
-  const localX = positiveModInt(worldCellX, chunkSize)
-  const localZ = positiveModInt(worldCellZ, chunkSize)
-  return cells.read(localX, localZ)
+  const localX = positiveModInt(worldCellX, chunkSize);
+  const localZ = positiveModInt(worldCellZ, chunkSize);
+  return cells.read(localX, localZ);
 }
 
 function terrainHeightFromCell(sample: TerrainCellSample): number {
-  const isWater = isWaterCell(sample)
-  return isWater ? sample.waterLevel : sample.elevation
+  const isWater = isWaterCell(sample);
+  return isWater ? sample.waterLevel : sample.elevation;
 }
 
 function isWaterCell(sample: TerrainCellSample): boolean {
-  return (sample.flags & TERRAIN_WATER_FLAG) !== 0 || sample.waterLevel > sample.elevation
+  return (
+    (sample.flags & TERRAIN_WATER_FLAG) !== 0 ||
+    sample.waterLevel > sample.elevation
+  );
 }
 
 function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value))
+  return Math.max(0, Math.min(1, value));
 }
 
 function toByteArray(value: unknown): Uint8Array | null {
   if (value instanceof Uint8Array) {
-    return value
+    return value;
   }
   if (value instanceof ArrayBuffer) {
-    return new Uint8Array(value)
+    return new Uint8Array(value);
   }
   if (ArrayBuffer.isView(value)) {
-    const view = value as ArrayBufferView
-    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength)
+    const view = value as ArrayBufferView;
+    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
   }
   if (Array.isArray(value)) {
-    return Uint8Array.from(value.map((item) => toNumber(item) & 0xff))
+    return Uint8Array.from(value.map((item) => toNumber(item) & 0xff));
   }
-  if (typeof value === 'object' && value !== null) {
-    const candidate = value as { toUint8Array?: () => Uint8Array; value?: unknown; data?: unknown }
-    const byMethod = candidate.toUint8Array?.()
+  if (typeof value === "object" && value !== null) {
+    const candidate = value as {
+      toUint8Array?: () => Uint8Array;
+      value?: unknown;
+      data?: unknown;
+    };
+    const byMethod = candidate.toUint8Array?.();
     if (byMethod instanceof Uint8Array) {
-      return byMethod
+      return byMethod;
     }
-    const byValue = toByteArray(candidate.value)
+    const byValue = toByteArray(candidate.value);
     if (byValue) {
-      return byValue
+      return byValue;
     }
-    const byData = toByteArray(candidate.data)
+    const byData = toByteArray(candidate.data);
     if (byData) {
-      return byData
+      return byData;
     }
   }
-  return null
+  return null;
 }
 
 function readI16LE(bytes: Uint8Array, index: number): number {
-  const low = bytes[index] ?? 0
-  const high = bytes[index + 1] ?? 0
-  const value = low | (high << 8)
-  return value >= 0x8000 ? value - 0x10000 : value
+  const low = bytes[index] ?? 0;
+  const high = bytes[index + 1] ?? 0;
+  const value = low | (high << 8);
+  return value >= 0x8000 ? value - 0x10000 : value;
 }
 
 function readU16LE(bytes: Uint8Array, index: number): number {
-  const low = bytes[index] ?? 0
-  const high = bytes[index + 1] ?? 0
-  return low | (high << 8)
+  const low = bytes[index] ?? 0;
+  const high = bytes[index + 1] ?? 0;
+  return low | (high << 8);
 }
 
 function elevationToWorldY(rawElevation: number): number {
-  return (rawElevation - TERRAIN_SEA_LEVEL_BASE) * TERRAIN_HEIGHT_SCALE
+  return (rawElevation - TERRAIN_SEA_LEVEL_BASE) * TERRAIN_HEIGHT_SCALE;
 }
 
 function floorDivInt(value: number, divisor: number): number {
-  return Math.floor(value / divisor)
+  return Math.floor(value / divisor);
 }
 
 function positiveModInt(value: number, divisor: number): number {
-  const mod = value % divisor
-  return mod < 0 ? mod + divisor : mod
+  const mod = value % divisor;
+  return mod < 0 ? mod + divisor : mod;
 }
 
 function chunkCoordKey(chunkX: number, chunkY: number): string {
-  return `${chunkX}:${chunkY}`
+  return `${chunkX}:${chunkY}`;
 }
 
 function buildingTierFromState(state: number): number {
   if (state >= 2) {
-    return 2
+    return 2;
   }
   if (state >= 1) {
-    return 1
+    return 1;
   }
-  return 0
+  return 0;
 }
 
 function getBuildingTierProfile(tier: number): BuildingTierProfile {
   if (tier <= 0) {
-    return BUILDING_TIER_PROFILES[0]!
+    return BUILDING_TIER_PROFILES[0]!;
   }
   if (tier >= BUILDING_TIER_PROFILES.length - 1) {
-    return BUILDING_TIER_PROFILES[BUILDING_TIER_PROFILES.length - 1]!
+    return BUILDING_TIER_PROFILES[BUILDING_TIER_PROFILES.length - 1]!;
   }
-  return BUILDING_TIER_PROFILES[tier]!
+  return BUILDING_TIER_PROFILES[tier]!;
 }
 
 function selectBuildingVariant(
@@ -2372,32 +3100,31 @@ function selectBuildingVariant(
   buildingDefId: string | null,
   profile: BuildingTierProfile,
 ): BuildingModelVariant {
-  const variants = profile.variants
+  const variants = profile.variants;
   if (variants.length === 0) {
-    return { key: 'fallback', pieces: [] }
+    return { key: "fallback", pieces: [] };
   }
-  const index =
-    buildingDefId
-      ? moduloU64String(buildingDefId, variants.length)
-      : stableIndex(`${buildingId}:variant`, variants.length)
-  return variants[index] ?? variants[0]!
+  const index = buildingDefId
+    ? moduloU64String(buildingDefId, variants.length)
+    : stableIndex(`${buildingId}:variant`, variants.length);
+  return variants[index] ?? variants[0]!;
 }
 
 function uniqueVariantCandidates(
   preferred: BuildingModelVariant,
   variants: ReadonlyArray<BuildingModelVariant>,
 ): BuildingModelVariant[] {
-  const keys = new Set<string>()
-  const ordered: BuildingModelVariant[] = [preferred, ...variants]
-  const result: BuildingModelVariant[] = []
+  const keys = new Set<string>();
+  const ordered: BuildingModelVariant[] = [preferred, ...variants];
+  const result: BuildingModelVariant[] = [];
   for (const entry of ordered) {
     if (!entry.key || keys.has(entry.key)) {
-      continue
+      continue;
     }
-    keys.add(entry.key)
-    result.push(entry)
+    keys.add(entry.key);
+    result.push(entry);
   }
-  return result
+  return result;
 }
 
 function buildingRequirementKey(
@@ -2406,84 +3133,86 @@ function buildingRequirementKey(
   buildRequired: number,
 ): string | null {
   if (!requiredItemDefId) {
-    return null
+    return null;
   }
-  return `${requiredItemDefId}:${requiredItemQty}:${buildRequired}`
+  return `${requiredItemDefId}:${requiredItemQty}:${buildRequired}`;
 }
 
 function toU64String(value: unknown): string | null {
-  if (typeof value === 'bigint') {
-    return value >= 0n ? value.toString() : null
+  if (typeof value === "bigint") {
+    return value >= 0n ? value.toString() : null;
   }
-  if (typeof value === 'number') {
+  if (typeof value === "number") {
     if (!Number.isFinite(value) || value < 0) {
-      return null
+      return null;
     }
-    return Math.trunc(value).toString()
+    return Math.trunc(value).toString();
   }
-  if (typeof value === 'string') {
-    const trimmed = value.trim().replace(/^0x/i, '')
+  if (typeof value === "string") {
+    const trimmed = value.trim().replace(/^0x/i, "");
     if (!trimmed) {
-      return null
+      return null;
     }
     if (/^[0-9]+$/.test(trimmed)) {
-      return trimmed
+      return trimmed;
     }
     if (/^[0-9a-fA-F]+$/.test(trimmed)) {
       try {
-        return BigInt(`0x${trimmed}`).toString()
+        return BigInt(`0x${trimmed}`).toString();
       } catch {
-        return null
+        return null;
       }
     }
-    return null
+    return null;
   }
-  if (typeof value === 'object' && value !== null && 'toString' in value) {
-    return toU64String(String(value))
+  if (typeof value === "object" && value !== null && "toString" in value) {
+    return toU64String(String(value));
   }
-  return null
+  return null;
 }
 
 function compareU64String(a: string, b: string): number {
   try {
-    const aa = BigInt(a)
-    const bb = BigInt(b)
+    const aa = BigInt(a);
+    const bb = BigInt(b);
     if (aa === bb) {
-      return 0
+      return 0;
     }
-    return aa < bb ? -1 : 1
+    return aa < bb ? -1 : 1;
   } catch {
     if (a === b) {
-      return 0
+      return 0;
     }
-    return a < b ? -1 : 1
+    return a < b ? -1 : 1;
   }
 }
 
 function moduloU64String(value: string, modulo: number): number {
   if (modulo <= 0) {
-    return 0
+    return 0;
   }
   try {
-    const m = BigInt(modulo)
-    return Number(BigInt(value) % m)
+    const m = BigInt(modulo);
+    return Number(BigInt(value) % m);
   } catch {
-    return stableIndex(value, modulo)
+    return stableIndex(value, modulo);
   }
 }
 
 function destroyDirectChildren(object: Object3D): void {
-  const children = [...object.entityChildren]
+  const children = [...object.entityChildren];
   for (const child of children) {
     if (object.hasChild(child)) {
-      object.removeChild(child)
+      object.removeChild(child);
     }
-    child.destroy()
+    child.destroy();
   }
 }
 
-function terrainColorByBiome(biomeId: number): readonly [number, number, number] {
-  const hue = ((biomeId % 12) + 12) % 12
+function terrainColorByBiome(
+  biomeId: number,
+): readonly [number, number, number] {
+  const hue = ((biomeId % 12) + 12) % 12;
   const colors: ReadonlyArray<readonly [number, number, number]> = [
     [0.22, 0.36, 0.17],
     [0.24, 0.33, 0.24],
@@ -2491,127 +3220,170 @@ function terrainColorByBiome(biomeId: number): readonly [number, number, number]
     [0.25, 0.37, 0.42],
     [0.3, 0.25, 0.42],
     [0.42, 0.35, 0.19],
-  ]
-  return colors[hue % colors.length] ?? [0.22, 0.36, 0.17]
+  ];
+  return colors[hue % colors.length] ?? [0.22, 0.36, 0.17];
 }
 
-function v2ColorByEntityType(entityType: number): readonly [number, number, number] {
+function v2ColorByEntityType(
+  entityType: number,
+): readonly [number, number, number] {
   const colors: ReadonlyArray<readonly [number, number, number]> = [
     [0.85, 0.2, 0.2],
     [0.2, 0.85, 0.4],
     [0.25, 0.5, 0.9],
     [0.8, 0.68, 0.2],
     [0.75, 0.35, 0.82],
-  ]
-  return colors[Math.abs(entityType) % colors.length] ?? [0.85, 0.2, 0.2]
+  ];
+  return colors[Math.abs(entityType) % colors.length] ?? [0.85, 0.2, 0.2];
 }
 
 function stableIndex(value: string, modulo: number): number {
   if (modulo <= 0) {
-    return 0
+    return 0;
   }
-  return stableHash32(value) % modulo
+  return stableHash32(value) % modulo;
 }
 
 function stablePhase(value: string): number {
-  return (stableHash32(value) % 628) / 100
+  return (stableHash32(value) % 628) / 100;
 }
 
 function stableHash32(value: string): number {
-  let hash = 0
+  let hash = 0;
   for (let i = 0; i < value.length; i += 1) {
-    hash = (hash * 31 + value.charCodeAt(i)) | 0
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
   }
-  return hash >>> 0
+  return hash >>> 0;
 }
 
-function footprintColor(tileType: number, isPerimeter: boolean): readonly [number, number, number] {
+function hashToUnitFloat(hash: number): number {
+  return (hash >>> 0) / 0xffffffff;
+}
+
+function hashToSignedUnitFloat(hash: number): number {
+  return hashToUnitFloat(hash) * 2 - 1;
+}
+
+function normalizeBiomeIdSet(
+  values: readonly number[] | undefined,
+  fallback: readonly number[],
+): Set<number> {
+  const source = values && values.length > 0 ? values : fallback;
+  const normalized = new Set<number>();
+  for (const value of source) {
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+    normalized.add(Math.trunc(value));
+  }
+  if (normalized.size <= 0) {
+    for (const value of fallback) {
+      if (Number.isFinite(value)) {
+        normalized.add(Math.trunc(value));
+      }
+    }
+  }
+  return normalized;
+}
+
+function sumMapValues(values: Map<string, number>): number {
+  let total = 0;
+  for (const value of values.values()) {
+    total += value;
+  }
+  return total;
+}
+
+function footprintColor(
+  tileType: number,
+  isPerimeter: boolean,
+): readonly [number, number, number] {
   if (isPerimeter) {
-    return [0.95, 0.2, 0.2]
+    return [0.95, 0.2, 0.2];
   }
 
   const colors: ReadonlyArray<readonly [number, number, number]> = [
     [0.95, 0.54, 0.22], // hitbox
-    [0.24, 0.9, 0.32],  // walkable
+    [0.24, 0.9, 0.32], // walkable
     [0.22, 0.75, 0.95], // decorative
     [0.86, 0.84, 0.28], // interaction
-  ]
-  return colors[Math.abs(tileType) % colors.length] ?? [0.95, 0.54, 0.22]
+  ];
+  return colors[Math.abs(tileType) % colors.length] ?? [0.95, 0.54, 0.22];
 }
 
 function toNumber(value: unknown): number {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
   }
-  if (typeof value === 'bigint') {
-    return Number(value)
+  if (typeof value === "bigint") {
+    return Number(value);
   }
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value)
-    return Number.isFinite(parsed) ? parsed : 0
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
-  if (typeof value === 'object' && value !== null && 'toString' in value) {
-    const parsed = Number.parseFloat(String(value))
-    return Number.isFinite(parsed) ? parsed : 0
+  if (typeof value === "object" && value !== null && "toString" in value) {
+    const parsed = Number.parseFloat(String(value));
+    return Number.isFinite(parsed) ? parsed : 0;
   }
-  return 0
+  return 0;
 }
 
 function toU64BigInt(value: unknown, fallback: bigint): bigint {
-  if (typeof value === 'bigint') {
-    return value
+  if (typeof value === "bigint") {
+    return value;
   }
-  if (typeof value === 'number') {
+  if (typeof value === "number") {
     if (!Number.isFinite(value)) {
-      return fallback
+      return fallback;
     }
-    return BigInt(Math.trunc(value))
+    return BigInt(Math.trunc(value));
   }
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     if (!value) {
-      return fallback
+      return fallback;
     }
     try {
-      return BigInt(value)
+      return BigInt(value);
     } catch {
-      return fallback
+      return fallback;
     }
   }
-  if (typeof value === 'object' && value !== null && 'toString' in value) {
+  if (typeof value === "object" && value !== null && "toString" in value) {
     try {
-      return BigInt(String(value))
+      return BigInt(String(value));
     } catch {
-      return fallback
+      return fallback;
     }
   }
-  return fallback
+  return fallback;
 }
 
 function toU64Number(value: unknown): number {
-  const num = toNumber(value)
+  const num = toNumber(value);
   if (!Number.isFinite(num)) {
-    return 0
+    return 0;
   }
-  return num < 0 ? 0 : num
+  return num < 0 ? 0 : num;
 }
 
 function toIdentityHex(value: unknown): string | null {
-  if (typeof value === 'object' && value !== null && 'toHexString' in value) {
-    const candidate = value as { toHexString?: () => string }
-    const converted = candidate.toHexString?.()
-    return converted ? normalizeIdentityHex(converted) : null
+  if (typeof value === "object" && value !== null && "toHexString" in value) {
+    const candidate = value as { toHexString?: () => string };
+    const converted = candidate.toHexString?.();
+    return converted ? normalizeIdentityHex(converted) : null;
   }
 
-  if (typeof value === 'string') {
-    return normalizeIdentityHex(value)
+  if (typeof value === "string") {
+    return normalizeIdentityHex(value);
   }
 
-  return null
+  return null;
 }
 
 function normalizeIdentityHex(value: string | null | undefined): string | null {
   if (!value) {
-    return null
+    return null;
   }
-  return value.replace(/^0x/i, '').toLowerCase()
+  return value.replace(/^0x/i, "").toLowerCase();
 }
