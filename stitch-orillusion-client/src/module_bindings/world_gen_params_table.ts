@@ -24,5 +24,9 @@ export default __t.row({
   noiseLacunarity: __t.f32().name("noise_lacunarity"),
   terrainChunkSize: __t.u16().name("terrain_chunk_size"),
   regenerateOnStart: __t.bool().name("regenerate_on_start"),
+  lazyGenerationEnabled: __t.bool().name("lazy_generation_enabled"),
+  lazySeedRadiusChunks: __t.i16().name("lazy_seed_radius_chunks"),
+  lazyChunksPerTick: __t.u16().name("lazy_chunks_per_tick"),
+  lazyPrefetchRing: __t.i16().name("lazy_prefetch_ring"),
   updatedAt: __t.timestamp().name("updated_at"),
 });

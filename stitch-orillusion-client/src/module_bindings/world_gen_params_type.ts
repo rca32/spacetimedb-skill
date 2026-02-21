@@ -24,6 +24,10 @@ export default __t.object("WorldGenParams", {
   noiseLacunarity: __t.f32(),
   terrainChunkSize: __t.u16(),
   regenerateOnStart: __t.bool(),
+  lazyGenerationEnabled: __t.bool(),
+  lazySeedRadiusChunks: __t.i16(),
+  lazyChunksPerTick: __t.u16(),
+  lazyPrefetchRing: __t.i16(),
   updatedAt: __t.timestamp(),
 });
 

@@ -11,7 +11,7 @@ use crate::services::permissions;
 use crate::services::projection_views;
 use crate::tables::agent_timers::{
     environment_effect_loop_timer, npc_ai_loop_timer, player_regen_loop_timer,
-    resource_regen_loop_timer, session_cleanup_loop_timer,
+    resource_regen_loop_timer, session_cleanup_loop_timer, worldgen_lazy_loop_timer,
 };
 use crate::tables::building_state::building_state;
 use crate::tables::claim_state::claim_state;
@@ -39,12 +39,13 @@ use crate::tables::{
     EnvironmentEffectState, FeatureFlags, NpcActionSchedule, NpcAiLoopTimer, NpcAnchorState,
     NpcPopulationDef, NpcState, NpcTradeOrderDef, NpcTradeOrderState, PlayerRegenLoopTimer,
     RegionState, ResourceNode, ResourceRegenLoopTimer, ResourceState, SessionCleanupLoopTimer,
-    StatusEffect, TerrainChunk,
+    StatusEffect, TerrainChunk, WorldgenLazyLoopTimer,
 };
 use crate::utils::identity_to_entity_id;
 
 const PLAYER_REGEN_INTERVAL_SECS: u64 = 5;
 const RESOURCE_REGEN_INTERVAL_SECS: u64 = 10;
+const WORLDGEN_LAZY_INTERVAL_SECS: u64 = 1;
 const SESSION_CLEANUP_INTERVAL_SECS: u64 = 60;
 const ENVIRONMENT_EFFECT_INTERVAL_SECS: u64 = 5;
 const SESSION_IDLE_TIMEOUT_SECS: u64 = 30 * 60;
@@ -205,6 +206,23 @@ pub(crate) fn ensure_default_agent_timers(ctx: &ReducerContext) {
             scheduled_at: npc_ai_schedule,
             last_run_at: ctx.timestamp,
         });
+    }
+
+    if let Some(mut timer) = ctx.db.worldgen_lazy_loop_timer().scheduled_id().find(1) {
+        timer.scheduled_at =
+            ScheduleAt::Interval(Duration::from_secs(WORLDGEN_LAZY_INTERVAL_SECS).into());
+        timer.last_run_at = ctx.timestamp;
+        ctx.db.worldgen_lazy_loop_timer().scheduled_id().update(timer);
+    } else {
+        ctx.db
+            .worldgen_lazy_loop_timer()
+            .insert(WorldgenLazyLoopTimer {
+                scheduled_id: 1,
+                scheduled_at: ScheduleAt::Interval(
+                    Duration::from_secs(WORLDGEN_LAZY_INTERVAL_SECS).into(),
+                ),
+                last_run_at: ctx.timestamp,
+            });
     }
 
     if ctx
@@ -1683,6 +1701,23 @@ pub fn resource_regen_agent_loop(ctx: &ReducerContext, arg: ResourceRegenLoopTim
             .resource_regen_loop_timer()
             .scheduled_id()
             .update(timer);
+    }
+}
+
+#[spacetimedb::reducer]
+pub fn worldgen_lazy_agent_loop(ctx: &ReducerContext, arg: WorldgenLazyLoopTimer) {
+    if let Err(error) = crate::worldgen::drain_chunk_generation_queue(ctx) {
+        log::warn!("worldgen_lazy_agent_loop failed: {}", error);
+    }
+
+    if let Some(mut timer) = ctx
+        .db
+        .worldgen_lazy_loop_timer()
+        .scheduled_id()
+        .find(arg.scheduled_id)
+    {
+        timer.last_run_at = ctx.timestamp;
+        ctx.db.worldgen_lazy_loop_timer().scheduled_id().update(timer);
     }
 }
 

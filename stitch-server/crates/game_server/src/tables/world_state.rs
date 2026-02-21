@@ -94,3 +94,15 @@ pub struct ResourceNode {
     pub is_depleted: bool,
     pub respawn_at: Timestamp,
 }
+
+#[spacetimedb::table(name = worldgen_chunk_generation_queue, public)]
+pub struct WorldgenChunkGenerationQueue {
+    #[primary_key]
+    pub queue_key: String,
+    pub region_id: u64,
+    pub dimension_id: u32,
+    pub chunk_x: i32,
+    pub chunk_y: i32,
+    pub priority: i32,
+    pub requested_at: Timestamp,
+}

@@ -69,6 +69,8 @@ import DimensionDescNextIdReducer from "./dimension_desc_next_id_reducer";
 export { DimensionDescNextIdReducer };
 import DimensionNetworkNextIdReducer from "./dimension_network_next_id_reducer";
 export { DimensionNetworkNextIdReducer };
+import DrainChunkGenerationQueueNowReducer from "./drain_chunk_generation_queue_now_reducer";
+export { DrainChunkGenerationQueueNowReducer };
 import EconomySetParamReducer from "./economy_set_param_reducer";
 export { EconomySetParamReducer };
 import EnvironmentEffectAgentLoopReducer from "./environment_effect_agent_loop_reducer";
@@ -81,6 +83,8 @@ import GenerateWorldFromParamsInDimensionReducer from "./generate_world_from_par
 export { GenerateWorldFromParamsInDimensionReducer };
 import GenerateWorldInDimensionReducer from "./generate_world_in_dimension_reducer";
 export { GenerateWorldInDimensionReducer };
+import GetChunkPayloadReducer from "./get_chunk_payload_reducer";
+export { GetChunkPayloadReducer };
 import GuildCreateReducer from "./guild_create_reducer";
 export { GuildCreateReducer };
 import GuildJoinReducer from "./guild_join_reducer";
@@ -89,6 +93,8 @@ import GuildProjectUpdateReducer from "./guild_project_update_reducer";
 export { GuildProjectUpdateReducer };
 import GuildSetRoleReducer from "./guild_set_role_reducer";
 export { GuildSetRoleReducer };
+import HarvestResourceReducer from "./harvest_resource_reducer";
+export { HarvestResourceReducer };
 import HousingChangeEntranceReducer from "./housing_change_entrance_reducer";
 export { HousingChangeEntranceReducer };
 import HousingCreateReducer from "./housing_create_reducer";
@@ -167,6 +173,8 @@ import ReportReviewReducer from "./report_review_reducer";
 export { ReportReviewReducer };
 import ReportSubmitReducer from "./report_submit_reducer";
 export { ReportSubmitReducer };
+import RequestChunksForAoiReducer from "./request_chunks_for_aoi_reducer";
+export { RequestChunksForAoiReducer };
 import RequestPathReducer from "./request_path_reducer";
 export { RequestPathReducer };
 import RequestPathInDimensionReducer from "./request_path_in_dimension_reducer";
@@ -185,6 +193,8 @@ import SetActiveDimensionReducer from "./set_active_dimension_reducer";
 export { SetActiveDimensionReducer };
 import SetNpcAiEnabledReducer from "./set_npc_ai_enabled_reducer";
 export { SetNpcAiEnabledReducer };
+import SetWorldgenLazyParamsReducer from "./set_worldgen_lazy_params_reducer";
+export { SetWorldgenLazyParamsReducer };
 import SetWorldgenParamsReducer from "./set_worldgen_params_reducer";
 export { SetWorldgenParamsReducer };
 import SignInReducer from "./sign_in_reducer";
@@ -215,6 +225,8 @@ import UpsertNpcPopulationDefReducer from "./upsert_npc_population_def_reducer";
 export { UpsertNpcPopulationDefReducer };
 import UpsertNpcTradeOrderDefReducer from "./upsert_npc_trade_order_def_reducer";
 export { UpsertNpcTradeOrderDefReducer };
+import WorldgenLazyAgentLoopReducer from "./worldgen_lazy_agent_loop_reducer";
+export { WorldgenLazyAgentLoopReducer };
 
 // Import and reexport all procedure arg types
 
@@ -499,6 +511,10 @@ import WalletRow from "./wallet_table";
 export { WalletRow };
 import WorldGenParamsRow from "./world_gen_params_table";
 export { WorldGenParamsRow };
+import WorldgenChunkGenerationQueueRow from "./worldgen_chunk_generation_queue_table";
+export { WorldgenChunkGenerationQueueRow };
+import WorldgenLazyLoopTimerRow from "./worldgen_lazy_loop_timer_table";
+export { WorldgenLazyLoopTimerRow };
 
 // Import and reexport all types
 import Account from "./account_type";
@@ -781,6 +797,10 @@ import Wallet from "./wallet_type";
 export { Wallet };
 import WorldGenParams from "./world_gen_params_type";
 export { WorldGenParams };
+import WorldgenChunkGenerationQueue from "./worldgen_chunk_generation_queue_type";
+export { WorldgenChunkGenerationQueue };
+import WorldgenLazyLoopTimer from "./worldgen_lazy_loop_timer_type";
+export { WorldgenLazyLoopTimer };
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema(
@@ -2324,6 +2344,28 @@ const tablesSchema = __schema(
       { name: 'world_gen_params_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, WorldGenParamsRow),
+  __table({
+    name: 'worldgen_chunk_generation_queue',
+    indexes: [
+      { name: 'queue_key', algorithm: 'btree', columns: [
+        'queueKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'worldgen_chunk_generation_queue_queue_key_key', constraint: 'unique', columns: ['queueKey'] },
+    ],
+  }, WorldgenChunkGenerationQueueRow),
+  __table({
+    name: 'worldgen_lazy_loop_timer',
+    indexes: [
+      { name: 'scheduled_id', algorithm: 'btree', columns: [
+        'scheduledId',
+      ] },
+    ],
+    constraints: [
+      { name: 'worldgen_lazy_loop_timer_scheduled_id_key', constraint: 'unique', columns: ['scheduledId'] },
+    ],
+  }, WorldgenLazyLoopTimerRow),
 );
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -2347,16 +2389,19 @@ const reducersSchema = __reducers(
   __reducerSchema("claim_totem_place", ClaimTotemPlaceReducer),
   __reducerSchema("dimension_desc_next_id", DimensionDescNextIdReducer),
   __reducerSchema("dimension_network_next_id", DimensionNetworkNextIdReducer),
+  __reducerSchema("drain_chunk_generation_queue_now", DrainChunkGenerationQueueNowReducer),
   __reducerSchema("economy_set_param", EconomySetParamReducer),
   __reducerSchema("environment_effect_agent_loop", EnvironmentEffectAgentLoopReducer),
   __reducerSchema("generate_world", GenerateWorldReducer),
   __reducerSchema("generate_world_from_params", GenerateWorldFromParamsReducer),
   __reducerSchema("generate_world_from_params_in_dimension", GenerateWorldFromParamsInDimensionReducer),
   __reducerSchema("generate_world_in_dimension", GenerateWorldInDimensionReducer),
+  __reducerSchema("get_chunk_payload", GetChunkPayloadReducer),
   __reducerSchema("guild_create", GuildCreateReducer),
   __reducerSchema("guild_join", GuildJoinReducer),
   __reducerSchema("guild_project_update", GuildProjectUpdateReducer),
   __reducerSchema("guild_set_role", GuildSetRoleReducer),
+  __reducerSchema("harvest_resource", HarvestResourceReducer),
   __reducerSchema("housing_change_entrance", HousingChangeEntranceReducer),
   __reducerSchema("housing_create", HousingCreateReducer),
   __reducerSchema("housing_enter", HousingEnterReducer),
@@ -2395,6 +2440,7 @@ const reducersSchema = __reducers(
   __reducerSchema("rent_set_whitelist", RentSetWhitelistReducer),
   __reducerSchema("report_review", ReportReviewReducer),
   __reducerSchema("report_submit", ReportSubmitReducer),
+  __reducerSchema("request_chunks_for_aoi", RequestChunksForAoiReducer),
   __reducerSchema("request_path", RequestPathReducer),
   __reducerSchema("request_path_in_dimension", RequestPathInDimensionReducer),
   __reducerSchema("resource_regen_agent_loop", ResourceRegenAgentLoopReducer),
@@ -2404,6 +2450,7 @@ const reducersSchema = __reducers(
   __reducerSchema("session_cleanup_agent_loop", SessionCleanupAgentLoopReducer),
   __reducerSchema("set_active_dimension", SetActiveDimensionReducer),
   __reducerSchema("set_npc_ai_enabled", SetNpcAiEnabledReducer),
+  __reducerSchema("set_worldgen_lazy_params", SetWorldgenLazyParamsReducer),
   __reducerSchema("set_worldgen_params", SetWorldgenParamsReducer),
   __reducerSchema("sign_in", SignInReducer),
   __reducerSchema("sign_out", SignOutReducer),
@@ -2419,6 +2466,7 @@ const reducersSchema = __reducers(
   __reducerSchema("upsert_npc_anchor_state", UpsertNpcAnchorStateReducer),
   __reducerSchema("upsert_npc_population_def", UpsertNpcPopulationDefReducer),
   __reducerSchema("upsert_npc_trade_order_def", UpsertNpcTradeOrderDefReducer),
+  __reducerSchema("worldgen_lazy_agent_loop", WorldgenLazyAgentLoopReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
@@ -2474,3 +2522,4 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
+

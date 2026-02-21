@@ -33,6 +33,25 @@ pub fn set_worldgen_params(
 }
 
 #[spacetimedb::reducer]
+pub fn set_worldgen_lazy_params(
+    ctx: &ReducerContext,
+    enabled: bool,
+    seed_radius_chunks: i16,
+    chunks_per_tick: u16,
+    prefetch_ring: i16,
+) -> Result<(), String> {
+    crate::worldgen::ensure_default_worldgen_config(ctx);
+    let mut params = crate::worldgen::load_worldgen_params(ctx);
+    params.lazy_generation_enabled = enabled;
+    params.lazy_seed_radius_chunks = seed_radius_chunks;
+    params.lazy_chunks_per_tick = chunks_per_tick;
+    params.lazy_prefetch_ring = prefetch_ring;
+    params.updated_at = ctx.timestamp;
+    crate::worldgen::upsert_worldgen_params(ctx, params);
+    Ok(())
+}
+
+#[spacetimedb::reducer]
 pub fn generate_world(
     ctx: &ReducerContext,
     region_id: u64,
@@ -288,6 +307,49 @@ pub fn get_chunk_payload(
     Ok(())
 }
 
+#[spacetimedb::reducer]
+pub fn request_chunks_for_aoi(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+    min_chunk_x: i32,
+    max_chunk_x: i32,
+    min_chunk_y: i32,
+    max_chunk_y: i32,
+) -> Result<(), String> {
+    let enqueued = crate::worldgen::request_chunks_for_aoi(
+        ctx,
+        region_id,
+        dimension_id,
+        min_chunk_x,
+        max_chunk_x,
+        min_chunk_y,
+        max_chunk_y,
+    )?;
+    log::info!(
+        "request_chunks_for_aoi: region_id={} dimension_id={} bounds=({},{})->({},{}) enqueued={}",
+        region_id,
+        dimension_id,
+        min_chunk_x,
+        min_chunk_y,
+        max_chunk_x,
+        max_chunk_y,
+        enqueued
+    );
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn drain_chunk_generation_queue_now(ctx: &ReducerContext) -> Result<(), String> {
+    let summary = crate::worldgen::drain_chunk_generation_queue(ctx)?;
+    log::info!(
+        "drain_chunk_generation_queue_now: chunks={} resources={}",
+        summary.chunk_count,
+        summary.resource_count
+    );
+    Ok(())
+}
+
 fn find_resource_gen_def(ctx: &ReducerContext, resource_def_id: u64) -> Option<ResourceGenDef> {
     ctx.db
         .resource_gen_def()
@@ -332,6 +394,10 @@ fn update_worldgen_params_for_generation(
             noise_lacunarity: params.noise_lacunarity,
             terrain_chunk_size: params.terrain_chunk_size,
             regenerate_on_start: params.regenerate_on_start,
+            lazy_generation_enabled: params.lazy_generation_enabled,
+            lazy_seed_radius_chunks: params.lazy_seed_radius_chunks,
+            lazy_chunks_per_tick: params.lazy_chunks_per_tick,
+            lazy_prefetch_ring: params.lazy_prefetch_ring,
             updated_at: params.updated_at,
         },
     );

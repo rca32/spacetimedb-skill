@@ -9,10 +9,11 @@ use crate::tables::world_gen::{
 };
 use crate::tables::world_state::{
     region_state, resource_node, terrain_chunk, terrain_chunk_payload, terrain_chunk_stream,
+    worldgen_chunk_generation_queue,
 };
 use crate::tables::{
     BiomeGenDef, RegionState, ResourceClumpDef, ResourceGenDef, ResourceNode, TerrainChunk,
-    TerrainChunkPayload, TerrainChunkStream, WorldGenParams,
+    TerrainChunkPayload, TerrainChunkStream, WorldGenParams, WorldgenChunkGenerationQueue,
 };
 
 pub const WORLD_GEN_PARAMS_ID: u64 = 1;
@@ -27,11 +28,17 @@ const DEFAULT_NOISE_SCALE: f32 = 0.035;
 const DEFAULT_NOISE_OCTAVES: u8 = 5;
 const DEFAULT_NOISE_PERSISTENCE: f32 = 0.5;
 const DEFAULT_NOISE_LACUNARITY: f32 = 2.0;
+const DEFAULT_LAZY_SEED_RADIUS_CHUNKS: i16 = 1;
+const DEFAULT_LAZY_CHUNKS_PER_TICK: u16 = 4;
+const DEFAULT_LAZY_PREFETCH_RING: i16 = 1;
 
 const MIN_LAKE_SIZE_CELLS: usize = 6;
 const LAKE_DEPTH_MAX: i16 = 5;
+const RIVER_DEPTH: i16 = 2;
+const RIVER_FLOW_MAX: i16 = 1_000;
+const RIVER_FLOW_MIN: i16 = 200;
+const RIVER_KNN: usize = 3;
 const RESOURCE_MAX_FLATNESS_I16: i16 = 8;
-const RESOURCE_REQUEST_MAX: u32 = 1_000;
 const CELL_PAYLOAD_FIELDS_V1: usize = 4;
 const CELL_PAYLOAD_FIELDS_V2: usize = 8;
 
@@ -46,6 +53,7 @@ struct TerrainCellSample {
     elevation: i16,
     water_level: i16,
     biome_id: u16,
+    temperature: i16,
     moisture: i16,
     water_body_type: u8,
     distance_to_water_proxy: i16,
@@ -53,20 +61,21 @@ struct TerrainCellSample {
     river_flow_permille: i16,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct HydroCell {
-    index: usize,
-    elevation: i16,
-    water_level: i16,
-    is_land_water: bool,
-    water_body_type: u8,
-}
-
 #[derive(Debug, Clone)]
 struct LakeBody {
     id: usize,
     cells: Vec<usize>,
+    shore_cells: Vec<usize>,
+    center_index: usize,
     surface_level: i16,
+}
+
+#[derive(Debug, Clone)]
+struct RiverPath {
+    from_lake_id: usize,
+    to_lake_id: usize,
+    path: Vec<usize>,
+    cost: i32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -103,6 +112,12 @@ struct ChunkBuild {
     chunk_stream: TerrainChunkStream,
     chunk_payload: TerrainChunkPayload,
     resources: Vec<ResourceNode>,
+}
+
+struct RegionHydroCache {
+    cells: Vec<TerrainCellSample>,
+    coords: Vec<CellCoord>,
+    indices_by_chunk: HashMap<(i32, i32), Vec<usize>>,
 }
 
 pub fn ensure_default_worldgen_config(ctx: &ReducerContext) {
@@ -187,6 +202,9 @@ pub fn ensure_world_generated_in_dimension(
     if has_chunks && !params.regenerate_on_start {
         let stream_backfilled = backfill_chunk_stream_from_chunks(ctx, region_id, dimension_id);
         let payload_backfilled = backfill_chunk_payload_from_chunks(ctx, region_id, dimension_id);
+        if params.lazy_generation_enabled {
+            enqueue_world_seed_window(ctx, region_id, dimension_id, &params);
+        }
         return Ok(GenerateSummary {
             chunk_count: stream_backfilled.saturating_add(payload_backfilled),
             resource_count: 0,
@@ -228,39 +246,24 @@ pub fn generate_region_in_dimension(
     if overwrite {
         delete_region_world_data(ctx, region_id, dimension_id);
     }
+    clear_chunk_generation_queue_for_region_dimension(ctx, region_id, dimension_id);
 
-    let config = load_generation_config(ctx, params)?;
-    let chunk_size = i32::from(config.params.terrain_chunk_size);
-    let mut summary = GenerateSummary::default();
-
-    let x_start = -(config.params.size_x_chunks / 2);
-    let z_start = -(config.params.size_y_chunks / 2);
-
-    for z_off in 0..config.params.size_y_chunks {
-        for x_off in 0..config.params.size_x_chunks {
-            let chunk_x = x_start + x_off;
-            let chunk_y = z_start + z_off;
-            let build = build_chunk(
-                ctx,
-                region_id,
-                dimension_id,
-                chunk_x,
-                chunk_y,
-                chunk_size,
-                &config,
-            )?;
-            upsert_chunk(ctx, build.chunk);
-            upsert_chunk_stream(ctx, build.chunk_stream);
-            upsert_chunk_payload(ctx, build.chunk_payload);
-            for resource in build.resources {
-                upsert_resource(ctx, resource);
-                summary.resource_count = summary.resource_count.saturating_add(1);
-            }
-            summary.chunk_count = summary.chunk_count.saturating_add(1);
-        }
+    if params.lazy_generation_enabled {
+        let seed_coords = seed_chunk_coords(params);
+        let summary = generate_chunk_set_from_params(
+            ctx,
+            region_id,
+            dimension_id,
+            params,
+            &seed_coords,
+            true,
+        )?;
+        enqueue_non_seed_world_chunks(ctx, region_id, dimension_id, params, &seed_coords);
+        return Ok(summary);
     }
 
-    Ok(summary)
+    let all_coords = world_chunk_coords(params);
+    generate_chunk_set_from_params(ctx, region_id, dimension_id, params, &all_coords, true)
 }
 
 pub fn regenerate_chunk_range(
@@ -313,33 +316,108 @@ pub fn regenerate_chunk_range_in_dimension(
         to_chunk_y,
     );
 
-    let config = load_generation_config(ctx, &params)?;
-    let chunk_size = i32::from(config.params.terrain_chunk_size);
-    let mut summary = GenerateSummary::default();
-
+    let mut coords = Vec::new();
     for chunk_y in from_chunk_y..=to_chunk_y {
         for chunk_x in from_chunk_x..=to_chunk_x {
-            let build = build_chunk(
-                ctx,
-                region_id,
-                dimension_id,
-                chunk_x,
-                chunk_y,
-                chunk_size,
-                &config,
-            )?;
-            upsert_chunk(ctx, build.chunk);
-            upsert_chunk_stream(ctx, build.chunk_stream);
-            upsert_chunk_payload(ctx, build.chunk_payload);
-            for resource in build.resources {
-                upsert_resource(ctx, resource);
-                summary.resource_count = summary.resource_count.saturating_add(1);
+            coords.push((chunk_x, chunk_y));
+        }
+    }
+    generate_chunk_set_from_params(ctx, region_id, dimension_id, &params, &coords, true)
+}
+
+pub fn request_chunks_for_aoi(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+    min_chunk_x: i32,
+    max_chunk_x: i32,
+    min_chunk_y: i32,
+    max_chunk_y: i32,
+) -> Result<u32, String> {
+    if dimension_id == 0 {
+        return Err("dimension_id must be > 0".to_string());
+    }
+    if min_chunk_x > max_chunk_x || min_chunk_y > max_chunk_y {
+        return Err("invalid chunk bounds: min must be <= max".to_string());
+    }
+
+    ensure_default_worldgen_config(ctx);
+    let params = load_worldgen_params(ctx);
+    validate_params(&params)?;
+    ensure_region_exists(ctx, region_id);
+
+    let ring = if params.lazy_generation_enabled {
+        i32::from(params.lazy_prefetch_ring.max(0))
+    } else {
+        0
+    };
+    let ext_min_x = min_chunk_x.saturating_sub(ring);
+    let ext_max_x = max_chunk_x.saturating_add(ring);
+    let ext_min_y = min_chunk_y.saturating_sub(ring);
+    let ext_max_y = max_chunk_y.saturating_add(ring);
+    let center_x = (min_chunk_x + max_chunk_x) / 2;
+    let center_y = (min_chunk_y + max_chunk_y) / 2;
+
+    let mut enqueue_count = 0_u32;
+    let mut missing_coords = Vec::<(i32, i32)>::new();
+
+    for chunk_y in ext_min_y..=ext_max_y {
+        for chunk_x in ext_min_x..=ext_max_x {
+            if !is_chunk_in_world_bounds(&params, chunk_x, chunk_y) {
+                continue;
             }
-            summary.chunk_count = summary.chunk_count.saturating_add(1);
+            if has_chunk(ctx, region_id, dimension_id, chunk_x, chunk_y) {
+                continue;
+            }
+
+            let priority = chunk_x
+                .saturating_sub(center_x)
+                .abs()
+                .saturating_add(chunk_y.saturating_sub(center_y).abs());
+
+            if params.lazy_generation_enabled {
+                if enqueue_chunk_generation(
+                    ctx,
+                    region_id,
+                    dimension_id,
+                    chunk_x,
+                    chunk_y,
+                    priority,
+                ) {
+                    enqueue_count = enqueue_count.saturating_add(1);
+                }
+            } else {
+                missing_coords.push((chunk_x, chunk_y));
+            }
         }
     }
 
-    Ok(summary)
+    if !params.lazy_generation_enabled && !missing_coords.is_empty() {
+        let summary = generate_chunk_set_from_params(
+            ctx,
+            region_id,
+            dimension_id,
+            &params,
+            &missing_coords,
+            false,
+        )?;
+        enqueue_count = summary.chunk_count;
+    }
+
+    Ok(enqueue_count)
+}
+
+pub fn drain_chunk_generation_queue(ctx: &ReducerContext) -> Result<GenerateSummary, String> {
+    ensure_default_worldgen_config(ctx);
+    let params = load_worldgen_params(ctx);
+    validate_params(&params)?;
+
+    if !params.enabled || !params.lazy_generation_enabled {
+        return Ok(GenerateSummary::default());
+    }
+
+    let limit = usize::from(params.lazy_chunks_per_tick.max(1));
+    drain_chunk_generation_queue_with_limit(ctx, limit)
 }
 
 fn default_worldgen_params(ctx: &ReducerContext) -> WorldGenParams {
@@ -357,6 +435,10 @@ fn default_worldgen_params(ctx: &ReducerContext) -> WorldGenParams {
         noise_lacunarity: DEFAULT_NOISE_LACUNARITY,
         terrain_chunk_size: DEFAULT_WORLD_CHUNK_SIZE,
         regenerate_on_start: false,
+        lazy_generation_enabled: false,
+        lazy_seed_radius_chunks: DEFAULT_LAZY_SEED_RADIUS_CHUNKS,
+        lazy_chunks_per_tick: DEFAULT_LAZY_CHUNKS_PER_TICK,
+        lazy_prefetch_ring: DEFAULT_LAZY_PREFETCH_RING,
         updated_at: ctx.timestamp,
     }
 }
@@ -382,6 +464,15 @@ fn validate_params(params: &WorldGenParams) -> Result<(), String> {
     }
     if params.noise_lacunarity < 1.0 {
         return Err("noise_lacunarity must be >= 1".to_string());
+    }
+    if params.lazy_seed_radius_chunks < 0 || params.lazy_seed_radius_chunks > 16 {
+        return Err("lazy_seed_radius_chunks must be in [0, 16]".to_string());
+    }
+    if params.lazy_chunks_per_tick == 0 || params.lazy_chunks_per_tick > 128 {
+        return Err("lazy_chunks_per_tick must be in [1, 128]".to_string());
+    }
+    if params.lazy_prefetch_ring < 0 || params.lazy_prefetch_ring > 4 {
+        return Err("lazy_prefetch_ring must be in [0, 4]".to_string());
     }
     Ok(())
 }
@@ -442,6 +533,8 @@ fn delete_region_world_data(ctx: &ReducerContext, region_id: u64, dimension_id: 
     for entity_id in resource_ids {
         ctx.db.resource_node().entity_id().delete(entity_id);
     }
+
+    clear_chunk_generation_queue_for_region_dimension(ctx, region_id, dimension_id);
 }
 
 fn delete_chunk_range_world_data(
@@ -524,6 +617,306 @@ fn delete_chunk_range_world_data(
     for entity_id in resource_ids {
         ctx.db.resource_node().entity_id().delete(entity_id);
     }
+
+    let queue_keys: Vec<String> = ctx
+        .db
+        .worldgen_chunk_generation_queue()
+        .iter()
+        .filter(|row| {
+            row.region_id == region_id
+                && row.dimension_id == dimension_id
+                && row.chunk_x >= from_chunk_x
+                && row.chunk_x <= to_chunk_x
+                && row.chunk_y >= from_chunk_y
+                && row.chunk_y <= to_chunk_y
+        })
+        .map(|row| row.queue_key)
+        .collect();
+    for key in queue_keys {
+        ctx.db
+            .worldgen_chunk_generation_queue()
+            .queue_key()
+            .delete(key);
+    }
+}
+
+fn clear_chunk_generation_queue_for_region_dimension(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+) {
+    let keys: Vec<String> = ctx
+        .db
+        .worldgen_chunk_generation_queue()
+        .iter()
+        .filter(|row| row.region_id == region_id && row.dimension_id == dimension_id)
+        .map(|row| row.queue_key)
+        .collect();
+    for key in keys {
+        ctx.db
+            .worldgen_chunk_generation_queue()
+            .queue_key()
+            .delete(key);
+    }
+}
+
+fn has_chunk(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+    chunk_x: i32,
+    chunk_y: i32,
+) -> bool {
+    ctx.db
+        .terrain_chunk()
+        .chunk_key()
+        .find(chunk_key(region_id, dimension_id, chunk_x, chunk_y))
+        .is_some()
+}
+
+fn enqueue_chunk_generation(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+    chunk_x: i32,
+    chunk_y: i32,
+    priority: i32,
+) -> bool {
+    if has_chunk(ctx, region_id, dimension_id, chunk_x, chunk_y) {
+        return false;
+    }
+
+    let queue_key = chunk_key(region_id, dimension_id, chunk_x, chunk_y);
+    if let Some(mut row) = ctx
+        .db
+        .worldgen_chunk_generation_queue()
+        .queue_key()
+        .find(queue_key.clone())
+    {
+        if priority < row.priority {
+            row.priority = priority;
+            row.requested_at = ctx.timestamp;
+            ctx.db.worldgen_chunk_generation_queue().queue_key().update(row);
+        }
+        return false;
+    }
+
+    ctx.db
+        .worldgen_chunk_generation_queue()
+        .insert(WorldgenChunkGenerationQueue {
+            queue_key,
+            region_id,
+            dimension_id,
+            chunk_x,
+            chunk_y,
+            priority,
+            requested_at: ctx.timestamp,
+        });
+    true
+}
+
+fn world_chunk_coords(params: &WorldGenParams) -> Vec<(i32, i32)> {
+    let x_start = -(params.size_x_chunks / 2);
+    let y_start = -(params.size_y_chunks / 2);
+    let mut coords = Vec::with_capacity(
+        usize::try_from(params.size_x_chunks.saturating_mul(params.size_y_chunks)).unwrap_or(0),
+    );
+    for y_off in 0..params.size_y_chunks {
+        for x_off in 0..params.size_x_chunks {
+            coords.push((x_start + x_off, y_start + y_off));
+        }
+    }
+    coords
+}
+
+fn seed_chunk_coords(params: &WorldGenParams) -> Vec<(i32, i32)> {
+    let radius = i32::from(params.lazy_seed_radius_chunks.max(0));
+    let mut coords = Vec::new();
+    for y in -radius..=radius {
+        for x in -radius..=radius {
+            if is_chunk_in_world_bounds(params, x, y) {
+                coords.push((x, y));
+            }
+        }
+    }
+    coords.sort_by_key(|(x, y)| (*y, *x));
+    coords.dedup();
+    coords
+}
+
+fn is_chunk_in_world_bounds(params: &WorldGenParams, chunk_x: i32, chunk_y: i32) -> bool {
+    let x_start = -(params.size_x_chunks / 2);
+    let y_start = -(params.size_y_chunks / 2);
+    let x_end = x_start + params.size_x_chunks - 1;
+    let y_end = y_start + params.size_y_chunks - 1;
+    chunk_x >= x_start && chunk_x <= x_end && chunk_y >= y_start && chunk_y <= y_end
+}
+
+fn enqueue_world_seed_window(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+    params: &WorldGenParams,
+) {
+    let seed = seed_chunk_coords(params);
+    enqueue_non_seed_world_chunks(ctx, region_id, dimension_id, params, &seed);
+}
+
+fn enqueue_non_seed_world_chunks(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+    params: &WorldGenParams,
+    seed_coords: &[(i32, i32)],
+) {
+    let seed_set = seed_coords.iter().copied().collect::<HashSet<_>>();
+    for (chunk_x, chunk_y) in world_chunk_coords(params) {
+        if seed_set.contains(&(chunk_x, chunk_y)) {
+            continue;
+        }
+        let priority = chunk_x.abs().saturating_add(chunk_y.abs());
+        enqueue_chunk_generation(ctx, region_id, dimension_id, chunk_x, chunk_y, priority);
+    }
+}
+
+fn generate_chunk_set_from_params(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+    params: &WorldGenParams,
+    chunk_coords: &[(i32, i32)],
+    overwrite_existing: bool,
+) -> Result<GenerateSummary, String> {
+    if chunk_coords.is_empty() {
+        return Ok(GenerateSummary::default());
+    }
+    let config = load_generation_config(ctx, params)?;
+    generate_chunk_set_with_config(
+        ctx,
+        region_id,
+        dimension_id,
+        &config,
+        chunk_coords,
+        overwrite_existing,
+    )
+}
+
+fn generate_chunk_set_with_config(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+    config: &GenerationConfig,
+    chunk_coords: &[(i32, i32)],
+    overwrite_existing: bool,
+) -> Result<GenerateSummary, String> {
+    if chunk_coords.is_empty() {
+        return Ok(GenerateSummary::default());
+    }
+
+    let mut unique = chunk_coords.to_vec();
+    unique.sort_by_key(|(x, y)| (*y, *x));
+    unique.dedup();
+
+    let chunk_size = i32::from(config.params.terrain_chunk_size);
+    let cache = build_region_hydro_cache(&unique, chunk_size, &config.params)?;
+    let mut summary = GenerateSummary::default();
+
+    for (chunk_x, chunk_y) in unique {
+        if !overwrite_existing && has_chunk(ctx, region_id, dimension_id, chunk_x, chunk_y) {
+            continue;
+        }
+
+        let Some(indices) = cache.indices_by_chunk.get(&(chunk_x, chunk_y)) else {
+            continue;
+        };
+        let build = build_chunk_from_cache(
+            ctx,
+            region_id,
+            dimension_id,
+            chunk_x,
+            chunk_y,
+            indices,
+            &cache,
+            config,
+        )?;
+        upsert_chunk(ctx, build.chunk);
+        upsert_chunk_stream(ctx, build.chunk_stream);
+        upsert_chunk_payload(ctx, build.chunk_payload);
+        for resource in build.resources {
+            upsert_resource(ctx, resource);
+            summary.resource_count = summary.resource_count.saturating_add(1);
+        }
+        summary.chunk_count = summary.chunk_count.saturating_add(1);
+    }
+
+    Ok(summary)
+}
+
+fn drain_chunk_generation_queue_with_limit(
+    ctx: &ReducerContext,
+    limit: usize,
+) -> Result<GenerateSummary, String> {
+    if limit == 0 {
+        return Ok(GenerateSummary::default());
+    }
+
+    let mut rows: Vec<WorldgenChunkGenerationQueue> =
+        ctx.db.worldgen_chunk_generation_queue().iter().collect();
+    rows.sort_by(|a, b| {
+        let a_ts = a.requested_at.to_micros_since_unix_epoch();
+        let b_ts = b.requested_at.to_micros_since_unix_epoch();
+        a.priority
+            .cmp(&b.priority)
+            .then_with(|| a_ts.cmp(&b_ts))
+            .then_with(|| a.queue_key.cmp(&b.queue_key))
+    });
+
+    if rows.is_empty() {
+        return Ok(GenerateSummary::default());
+    }
+
+    let selected = rows.into_iter().take(limit).collect::<Vec<_>>();
+    let mut grouped = HashMap::<(u64, u32), Vec<(i32, i32)>>::new();
+    let mut keys_to_delete = Vec::<String>::new();
+
+    for row in selected {
+        if has_chunk(ctx, row.region_id, row.dimension_id, row.chunk_x, row.chunk_y) {
+            keys_to_delete.push(row.queue_key);
+            continue;
+        }
+        grouped
+            .entry((row.region_id, row.dimension_id))
+            .or_default()
+            .push((row.chunk_x, row.chunk_y));
+        keys_to_delete.push(row.queue_key);
+    }
+
+    let params = load_worldgen_params(ctx);
+    let mut summary = GenerateSummary::default();
+    for ((region_id, dimension_id), coords) in grouped {
+        ensure_region_exists(ctx, region_id);
+        let chunk_summary = generate_chunk_set_from_params(
+            ctx,
+            region_id,
+            dimension_id,
+            &params,
+            &coords,
+            false,
+        )?;
+        summary.chunk_count = summary.chunk_count.saturating_add(chunk_summary.chunk_count);
+        summary.resource_count = summary
+            .resource_count
+            .saturating_add(chunk_summary.resource_count);
+    }
+
+    for key in keys_to_delete {
+        ctx.db
+            .worldgen_chunk_generation_queue()
+            .queue_key()
+            .delete(key);
+    }
+
+    Ok(summary)
 }
 
 fn upsert_chunk(ctx: &ReducerContext, chunk: TerrainChunk) {
@@ -730,6 +1123,10 @@ fn load_generation_config(
             noise_lacunarity: params.noise_lacunarity,
             terrain_chunk_size: params.terrain_chunk_size,
             regenerate_on_start: params.regenerate_on_start,
+            lazy_generation_enabled: params.lazy_generation_enabled,
+            lazy_seed_radius_chunks: params.lazy_seed_radius_chunks,
+            lazy_chunks_per_tick: params.lazy_chunks_per_tick,
+            lazy_prefetch_ring: params.lazy_prefetch_ring,
             updated_at: params.updated_at,
         },
         biome_defs,
@@ -738,6 +1135,7 @@ fn load_generation_config(
     })
 }
 
+#[allow(dead_code)]
 fn build_chunk(
     ctx: &ReducerContext,
     region_id: u64,
@@ -747,67 +1145,67 @@ fn build_chunk(
     chunk_size: i32,
     config: &GenerationConfig,
 ) -> Result<ChunkBuild, String> {
-    let chunk_size_usize =
-        usize::try_from(chunk_size).map_err(|_| "chunk_size overflow".to_string())?;
-    if chunk_size_usize == 0 {
-        return Err("chunk_size must be > 0".to_string());
+    let cache = build_region_hydro_cache(&[(chunk_x, chunk_y)], chunk_size, &config.params)?;
+    let indices = cache
+        .indices_by_chunk
+        .get(&(chunk_x, chunk_y))
+        .ok_or_else(|| format!("missing cache indices for chunk ({chunk_x}, {chunk_y})"))?;
+    build_chunk_from_cache(
+        ctx,
+        region_id,
+        dimension_id,
+        chunk_x,
+        chunk_y,
+        indices,
+        &cache,
+        config,
+    )
+}
+
+fn build_chunk_from_cache(
+    ctx: &ReducerContext,
+    region_id: u64,
+    dimension_id: u32,
+    chunk_x: i32,
+    chunk_y: i32,
+    indices: &[usize],
+    cache: &RegionHydroCache,
+    config: &GenerationConfig,
+) -> Result<ChunkBuild, String> {
+    if indices.is_empty() {
+        return Err("chunk cache has no cells".to_string());
     }
 
-    let mut cells: Vec<TerrainCellSample> = Vec::with_capacity(chunk_size_usize * chunk_size_usize);
-    let mut coords: Vec<CellCoord> = Vec::with_capacity(chunk_size_usize * chunk_size_usize);
+    let mut cells = Vec::<TerrainCellSample>::with_capacity(indices.len());
+    let mut coords = Vec::<CellCoord>::with_capacity(indices.len());
     let mut biome_counts = HashMap::<u16, u32>::new();
     let mut water_count = 0_u32;
     let mut height_min = i16::MAX;
     let mut height_max = i16::MIN;
 
-    for local_z in 0..chunk_size_usize {
-        for local_x in 0..chunk_size_usize {
-            let lx = i32::try_from(local_x).map_err(|_| "local_x overflow".to_string())?;
-            let lz = i32::try_from(local_z).map_err(|_| "local_z overflow".to_string())?;
-            let hex_x = chunk_x.saturating_mul(chunk_size).saturating_add(lx);
-            let hex_z = chunk_y.saturating_mul(chunk_size).saturating_add(lz);
-
-            let cell = sample_terrain_cell(hex_x, hex_z, &config.params);
-            let mut cell = cell;
-            cell.water_body_type = if cell.elevation < config.params.sea_level {
-                1
-            } else {
-                0
-            };
-            if cell.water_level > cell.elevation {
-                water_count = water_count.saturating_add(1);
-            }
-            if cell.elevation < height_min {
-                height_min = cell.elevation;
-            }
-            if cell.elevation > height_max {
-                height_max = cell.elevation;
-            }
-            *biome_counts.entry(cell.biome_id).or_insert(0) += 1;
-            cells.push(cell);
-            coords.push(CellCoord {
-                local_x,
-                local_z,
-                hex_x,
-                hex_z,
-            });
+    for &index in indices {
+        let cell = cache.cells[index];
+        let coord = cache.coords[index];
+        if cell.water_level > cell.elevation {
+            water_count = water_count.saturating_add(1);
         }
+        height_min = height_min.min(cell.elevation);
+        height_max = height_max.max(cell.elevation);
+        *biome_counts.entry(cell.biome_id).or_insert(0) += 1;
+        cells.push(cell);
+        coords.push(coord);
     }
-
-    compute_chunk_hydrology(&mut cells, chunk_size_usize, &config.params);
 
     let biome_id = biome_counts
         .into_iter()
         .max_by_key(|(_, count)| *count)
         .map(|(biome, _)| biome)
         .unwrap_or(0);
-    let total_cells = u32::try_from(chunk_size_usize * chunk_size_usize)
-        .map_err(|_| "cell count overflow".to_string())?;
+    let total_cells = u32::try_from(indices.len()).map_err(|_| "cell count overflow".to_string())?;
     let water_ratio_permille =
         (((water_count as f64 / total_cells as f64) * 1000.0).round() as i64).clamp(0, 1000) as u16;
 
-    let mut cell_payload = Vec::<i16>::with_capacity(chunk_size_usize * chunk_size_usize * 8);
-    let cell_payload_version = CELL_PAYLOAD_VERSION_V2;
+    let mut cell_payload = Vec::<i16>::with_capacity(indices.len() * CELL_PAYLOAD_FIELDS_V2);
     for cell in &cells {
         let flags = pack_cell_flags(cell);
         cell_payload.push(cell.elevation);
@@ -819,8 +1217,7 @@ fn build_chunk(
         cell_payload.push(cell.distance_to_sea_proxy);
         cell_payload.push(cell.river_flow_permille);
     }
-    let cell_count = u32::try_from(chunk_size_usize * chunk_size_usize)
-        .map_err(|_| "cell count overflow".to_string())?;
+    let cell_payload_version = CELL_PAYLOAD_VERSION_V2;
     let cell_payload_bytes = pack_chunk_payload(&cell_payload);
 
     let chunk = TerrainChunk {
@@ -859,10 +1256,9 @@ fn build_chunk(
         chunk_y: chunk.chunk_y,
         cell_payload_version,
         cell_payload_bytes,
-        cell_count,
+        cell_count: total_cells,
         generated_at: chunk.generated_at,
     };
-
     let resources = build_chunk_resources(
         ctx,
         region_id,
@@ -873,11 +1269,84 @@ fn build_chunk(
         &coords,
         config,
     )?;
+
     Ok(ChunkBuild {
         chunk,
         chunk_stream,
         chunk_payload,
         resources,
+    })
+}
+
+fn build_region_hydro_cache(
+    chunk_coords: &[(i32, i32)],
+    chunk_size: i32,
+    params: &WorldGenParams,
+) -> Result<RegionHydroCache, String> {
+    let chunk_size_usize =
+        usize::try_from(chunk_size).map_err(|_| "chunk_size overflow".to_string())?;
+    if chunk_size_usize == 0 {
+        return Err("chunk_size must be > 0".to_string());
+    }
+
+    let mut sorted = chunk_coords.to_vec();
+    sorted.sort_by_key(|(x, y)| (*y, *x));
+    sorted.dedup();
+
+    let mut cells = Vec::<TerrainCellSample>::new();
+    let mut coords = Vec::<CellCoord>::new();
+    let mut indices_by_chunk = HashMap::<(i32, i32), Vec<usize>>::new();
+    let mut index_by_hex = HashMap::<(i32, i32), usize>::new();
+
+    for (chunk_x, chunk_y) in sorted {
+        let mut chunk_indices = Vec::<usize>::with_capacity(chunk_size_usize * chunk_size_usize);
+        for local_z in 0..chunk_size_usize {
+            for local_x in 0..chunk_size_usize {
+                let lx = i32::try_from(local_x).map_err(|_| "local_x overflow".to_string())?;
+                let lz = i32::try_from(local_z).map_err(|_| "local_z overflow".to_string())?;
+                let hex_x = chunk_x.saturating_mul(chunk_size).saturating_add(lx);
+                let hex_z = chunk_y.saturating_mul(chunk_size).saturating_add(lz);
+                let index = cells.len();
+                cells.push(sample_terrain_cell(hex_x, hex_z, params));
+                coords.push(CellCoord {
+                    local_x,
+                    local_z,
+                    hex_x,
+                    hex_z,
+                });
+                index_by_hex.insert((hex_x, hex_z), index);
+                chunk_indices.push(index);
+            }
+        }
+        indices_by_chunk.insert((chunk_x, chunk_y), chunk_indices);
+    }
+
+    for cell in &mut cells {
+        cell.river_flow_permille = 0;
+        if cell.elevation < params.sea_level {
+            cell.water_level = cell.water_level.max(params.sea_level);
+            cell.water_body_type = 1;
+            continue;
+        }
+        if cell.water_level > cell.elevation {
+            cell.water_body_type = 2;
+        } else {
+            cell.water_body_type = 0;
+            cell.water_level = cell.water_level.max(cell.elevation);
+        }
+    }
+
+    let mut lakes = detect_lake_bodies(&mut cells, &coords, &index_by_hex, params.sea_level);
+    flatten_lake_bodies(&mut cells, &mut lakes, params.sea_level);
+    let rivers = build_river_paths_mst(&cells, &coords, &index_by_hex, &lakes);
+    apply_river_paths(&mut cells, &rivers);
+    compute_distance_field_proxies(&mut cells, &coords, &index_by_hex);
+    apply_biome_post_hydrology(&mut cells);
+
+    Ok(RegionHydroCache {
+        cells,
+        coords,
+        indices_by_chunk,
     })
 }
 
@@ -898,73 +1367,31 @@ fn pack_cell_flags(cell: &TerrainCellSample) -> i16 {
     flags
 }
 
-fn compute_chunk_hydrology(
+fn detect_lake_bodies(
     cells: &mut [TerrainCellSample],
-    chunk_size: usize,
-    params: &WorldGenParams,
-) {
-    if chunk_size == 0 {
-        return;
-    }
+    coords: &[CellCoord],
+    index_by_hex: &HashMap<(i32, i32), usize>,
+    sea_level: i16,
+) -> Vec<LakeBody> {
+    let mut visited = vec![false; cells.len()];
+    let mut lakes = Vec::<LakeBody>::new();
 
-    let sea_level = params.sea_level;
-    let width = chunk_size;
-    let height = chunk_size;
-    let total = width.saturating_mul(height);
-
-    for index in 0..cells.len() {
-        if cells[index].water_level > cells[index].elevation {
-            cells[index].water_body_type = if cells[index].elevation < sea_level {
-                1
-            } else {
-                2
-            };
-            cells[index].distance_to_water_proxy = 0;
-            cells[index].distance_to_sea_proxy = if cells[index].water_body_type == 1 {
-                0
-            } else {
-                2000
-            };
-        } else {
-            cells[index].distance_to_water_proxy = i16::MAX;
-            cells[index].distance_to_sea_proxy = i16::MAX;
-            if cells[index].water_body_type == 0 {
-                cells[index].water_body_type = 0;
-            }
-            cells[index].river_flow_permille = 0;
-        }
-    }
-
-    let mut visited = vec![false; total];
-    let mut components: Vec<LakeBody> = Vec::new();
-
-    for index in 0..total {
-        if visited[index] || cells[index].water_body_type != 2 {
+    for start in 0..cells.len() {
+        if visited[start] || cells[start].water_body_type != 2 {
             continue;
         }
 
-        let mut stack = vec![index];
-        visited[index] = true;
-        let mut component = Vec::new();
-        while let Some(idx) = stack.pop() {
-            component.push(idx);
-            let x = idx % width;
-            let z = idx / width;
-            for (dx, dz) in [(0_i32, -1_i32), (-1, 0), (1, 0), (0, 1)] {
-                let nx = i32::try_from(x).unwrap_or(0).saturating_add(dx);
-                let nz = i32::try_from(z).unwrap_or(0).saturating_add(dz);
-                if nx < 0 || nz < 0 {
+        let mut component = Vec::<usize>::new();
+        let mut stack = vec![start];
+        visited[start] = true;
+        while let Some(index) = stack.pop() {
+            component.push(index);
+            let coord = coords[index];
+            for (dx, dz) in [(1_i32, 0_i32), (-1, 0), (0, 1), (0, -1)] {
+                let next = (coord.hex_x + dx, coord.hex_z + dz);
+                let Some(&nidx) = index_by_hex.get(&next) else {
                     continue;
-                }
-                let nxu = match usize::try_from(nx) {
-                    Ok(v) if v < width => v,
-                    _ => continue,
                 };
-                let nzu = match usize::try_from(nz) {
-                    Ok(v) if v < height => v,
-                    _ => continue,
-                };
-                let nidx = nzu.saturating_mul(width).saturating_add(nxu);
                 if visited[nidx] || cells[nidx].water_body_type != 2 {
                     continue;
                 }
@@ -972,102 +1399,419 @@ fn compute_chunk_hydrology(
                 stack.push(nidx);
             }
         }
-        if component.len() >= MIN_LAKE_SIZE_CELLS {
-            components.push(LakeBody {
-                id: components.len(),
-                cells: component,
-                surface_level: sea_level,
+
+        if component.len() < MIN_LAKE_SIZE_CELLS {
+            for index in component {
+                cells[index].water_body_type = 0;
+                cells[index].water_level = cells[index].elevation;
+            }
+            continue;
+        }
+
+        let mut shore_cells = Vec::<usize>::new();
+        let mut center_x_sum = 0_i64;
+        let mut center_z_sum = 0_i64;
+        for &index in &component {
+            let coord = coords[index];
+            center_x_sum += i64::from(coord.hex_x);
+            center_z_sum += i64::from(coord.hex_z);
+
+            let mut is_shore = false;
+            for (dx, dz) in [(1_i32, 0_i32), (-1, 0), (0, 1), (0, -1)] {
+                let next = (coord.hex_x + dx, coord.hex_z + dz);
+                match index_by_hex.get(&next) {
+                    Some(&nidx) if cells[nidx].water_body_type == 2 => {}
+                    _ => {
+                        is_shore = true;
+                        break;
+                    }
+                }
+            }
+            if is_shore {
+                shore_cells.push(index);
+            }
+        }
+
+        let len_i64 = i64::try_from(component.len()).unwrap_or(1).max(1);
+        let center_x = center_x_sum / len_i64;
+        let center_z = center_z_sum / len_i64;
+        let center_index = component
+            .iter()
+            .copied()
+            .min_by_key(|index| {
+                let coord = coords[*index];
+                (i64::from(coord.hex_x) - center_x).abs()
+                    + (i64::from(coord.hex_z) - center_z).abs()
+            })
+            .unwrap_or(component[0]);
+
+        lakes.push(LakeBody {
+            id: lakes.len(),
+            cells: component,
+            shore_cells,
+            center_index,
+            surface_level: sea_level,
+        });
+    }
+
+    lakes
+}
+
+fn flatten_lake_bodies(cells: &mut [TerrainCellSample], lakes: &mut [LakeBody], sea_level: i16) {
+    for lake in lakes.iter_mut() {
+        let mut levels = lake
+            .cells
+            .iter()
+            .map(|index| cells[*index].water_level)
+            .collect::<Vec<_>>();
+        levels.sort_unstable();
+        let p75 = levels.get((levels.len() * 3) / 4).copied().unwrap_or(sea_level);
+        let surface = p75.max(sea_level);
+        lake.surface_level = surface;
+
+        for index in &lake.cells {
+            let idx = *index;
+            let floor = surface.saturating_sub(LAKE_DEPTH_MAX);
+            cells[idx].elevation = cells[idx].elevation.min(floor);
+            cells[idx].water_level = surface.max(cells[idx].elevation.saturating_add(1));
+            cells[idx].water_body_type = 2;
+            cells[idx].river_flow_permille = 0;
+        }
+    }
+}
+
+fn build_river_paths_mst(
+    cells: &[TerrainCellSample],
+    coords: &[CellCoord],
+    index_by_hex: &HashMap<(i32, i32), usize>,
+    lakes: &[LakeBody],
+) -> Vec<RiverPath> {
+    if lakes.len() < 2 {
+        return Vec::new();
+    }
+
+    let mut candidate_edges = Vec::<(i32, usize, usize)>::new();
+    let mut dedupe = HashSet::<(usize, usize)>::new();
+    for left in 0..lakes.len() {
+        let left_center = coords[lakes[left].center_index];
+        let mut nearest = Vec::<(i32, usize)>::new();
+        for right in 0..lakes.len() {
+            if left == right {
+                continue;
+            }
+            let right_center = coords[lakes[right].center_index];
+            let dist = (left_center.hex_x - right_center.hex_x)
+                .abs()
+                .saturating_add((left_center.hex_z - right_center.hex_z).abs());
+            nearest.push((dist, right));
+        }
+        nearest.sort_by_key(|(dist, _)| *dist);
+        for (_, right) in nearest.into_iter().take(RIVER_KNN) {
+            let pair = if left < right {
+                (left, right)
+            } else {
+                (right, left)
+            };
+            if !dedupe.insert(pair) {
+                continue;
+            }
+            let cost = lake_connection_cost(cells, coords, &lakes[pair.0], &lakes[pair.1]);
+            candidate_edges.push((cost, pair.0, pair.1));
+        }
+    }
+    candidate_edges.sort_by_key(|(cost, _, _)| *cost);
+
+    let mut parent = (0..lakes.len()).collect::<Vec<_>>();
+    let mut rank = vec![0_u8; lakes.len()];
+    let mut paths = Vec::<RiverPath>::new();
+    for (_, left, right) in candidate_edges {
+        if !union_sets(&mut parent, &mut rank, left, right) {
+            continue;
+        }
+        if let Some((path, cost)) = find_river_path_astar(
+            lakes[left].center_index,
+            lakes[right].center_index,
+            cells,
+            coords,
+            index_by_hex,
+        ) {
+            paths.push(RiverPath {
+                from_lake_id: lakes[left].id,
+                to_lake_id: lakes[right].id,
+                path,
+                cost,
             });
         }
     }
 
-    for component in components.iter() {
-        let mut levels: Vec<i16> = component
-            .cells
-            .iter()
-            .map(|idx| cells[*idx].water_level)
-            .collect();
-        levels.sort_unstable();
-        let p75 = levels.get(levels.len() * 3 / 4).copied().unwrap_or(sea_level);
-        let surface = (p75 as i32).clamp(i32::from(sea_level), i32::from(i16::MAX)) as i16;
-        for idx in &component.cells {
-            let idx = *idx;
-            let elevation = cells[idx].elevation;
-            cells[idx].water_level = surface;
-            cells[idx].elevation = elevation.min(surface.saturating_sub(LAKE_DEPTH_MAX));
-            cells[idx].water_body_type = 2;
-        }
-    }
+    paths
+}
 
-    let mut queue = VecDeque::new();
-    for idx in 0..total {
-        if cells[idx].water_body_type != 0 {
-            cells[idx].distance_to_water_proxy = 0;
-            cells[idx].distance_to_sea_proxy = if cells[idx].water_body_type == 1 {
-                0
-            } else {
-                cells[idx].distance_to_sea_proxy
-            };
-            queue.push_back(idx as i32);
-        } else {
-            cells[idx].distance_to_water_proxy = i16::MAX;
-            cells[idx].distance_to_sea_proxy = i16::MAX;
-        }
-    }
-
-    while let Some(idx) = queue.pop_front() {
-        let idx = match usize::try_from(idx) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let x = idx % width;
-        let z = idx / width;
-        let source_water = cells[idx].distance_to_water_proxy;
-        let source_sea = cells[idx].distance_to_sea_proxy;
-        for (dx, dz) in [(0_i32, -1_i32), (-1, 0), (1, 0), (0, 1)] {
-            let nx = i32::try_from(x).unwrap_or(0).saturating_add(dx);
-            let nz = i32::try_from(z).unwrap_or(0).saturating_add(dz);
-            if nx < 0 || nz < 0 {
+fn apply_river_paths(cells: &mut [TerrainCellSample], river_paths: &[RiverPath]) {
+    let mut sorted_paths = river_paths.to_vec();
+    sorted_paths.sort_by_key(|path| (path.cost, path.from_lake_id, path.to_lake_id));
+    for path in sorted_paths {
+        let len = path.path.len().max(1);
+        for (step, index) in path.path.into_iter().enumerate() {
+            if cells[index].water_body_type == 1 {
                 continue;
             }
-            let nxu = match usize::try_from(nx) {
-                Ok(v) if v < width => v,
-                _ => continue,
+            if cells[index].water_body_type == 0 {
+                cells[index].water_body_type = 3;
+            }
+            let target_water = cells[index].elevation.saturating_add(RIVER_DEPTH);
+            cells[index].water_level = cells[index].water_level.max(target_water);
+
+            let flow = if len <= 1 {
+                RIVER_FLOW_MAX
+            } else {
+                let frac = step as f32 / (len - 1) as f32;
+                let span = (RIVER_FLOW_MAX - RIVER_FLOW_MIN) as f32;
+                (RIVER_FLOW_MAX as f32 - frac * span).round() as i16
             };
-            let nzu = match usize::try_from(nz) {
-                Ok(v) if v < height => v,
-                _ => continue,
+            if cells[index].water_body_type == 3 {
+                cells[index].river_flow_permille = cells[index].river_flow_permille.max(flow);
+            }
+        }
+    }
+}
+
+fn compute_distance_field_proxies(
+    cells: &mut [TerrainCellSample],
+    coords: &[CellCoord],
+    index_by_hex: &HashMap<(i32, i32), usize>,
+) {
+    let mut queue_water = VecDeque::<usize>::new();
+    let mut queue_sea = VecDeque::<usize>::new();
+
+    for index in 0..cells.len() {
+        if cells[index].water_body_type != 0 {
+            cells[index].distance_to_water_proxy = 0;
+            queue_water.push_back(index);
+        } else {
+            cells[index].distance_to_water_proxy = i16::MAX;
+        }
+        if cells[index].water_body_type == 1 {
+            cells[index].distance_to_sea_proxy = 0;
+            queue_sea.push_back(index);
+        } else {
+            cells[index].distance_to_sea_proxy = i16::MAX;
+        }
+    }
+
+    while let Some(index) = queue_water.pop_front() {
+        let base = cells[index].distance_to_water_proxy;
+        let coord = coords[index];
+        for (dx, dz) in [(1_i32, 0_i32), (-1, 0), (0, 1), (0, -1)] {
+            let next = (coord.hex_x + dx, coord.hex_z + dz);
+            let Some(&nidx) = index_by_hex.get(&next) else {
+                continue;
             };
-            let nidx = nzu.saturating_mul(width).saturating_add(nxu);
-            if cells[nidx].water_body_type == 0 {
-                if cells[nidx].distance_to_water_proxy > source_water.saturating_add(1) {
-                    cells[nidx].distance_to_water_proxy = source_water.saturating_add(1);
-                    queue.push_back(i32::try_from(nidx).unwrap_or(0));
-                }
-                if cells[nidx].distance_to_sea_proxy > source_sea.saturating_add(1) {
-                    cells[nidx].distance_to_sea_proxy = source_sea.saturating_add(1);
-                    queue.push_back(i32::try_from(nidx).unwrap_or(0));
-                }
+            let candidate = base.saturating_add(1);
+            if candidate < cells[nidx].distance_to_water_proxy {
+                cells[nidx].distance_to_water_proxy = candidate;
+                queue_water.push_back(nidx);
             }
         }
     }
 
-    for idx in 0..total {
-        let water_dist = cells[idx].distance_to_water_proxy.min(i16::MAX);
-        let sea_dist = cells[idx].distance_to_sea_proxy.min(i16::MAX);
-        cells[idx].distance_to_water_proxy = water_dist;
-        cells[idx].distance_to_sea_proxy = sea_dist;
-        if cells[idx].water_body_type == 2 {
-            let depth = cells[idx].water_level.saturating_sub(cells[idx].elevation);
-            if depth < cells[idx].distance_to_water_proxy {
-                cells[idx].river_flow_permille = 1_000;
-            } else {
-                cells[idx].river_flow_permille = 300;
+    while let Some(index) = queue_sea.pop_front() {
+        let base = cells[index].distance_to_sea_proxy;
+        let coord = coords[index];
+        for (dx, dz) in [(1_i32, 0_i32), (-1, 0), (0, 1), (0, -1)] {
+            let next = (coord.hex_x + dx, coord.hex_z + dz);
+            let Some(&nidx) = index_by_hex.get(&next) else {
+                continue;
+            };
+            let candidate = base.saturating_add(1);
+            if candidate < cells[nidx].distance_to_sea_proxy {
+                cells[nidx].distance_to_sea_proxy = candidate;
+                queue_sea.push_back(nidx);
             }
-        } else {
-            cells[idx].river_flow_permille = 0;
         }
     }
+
+    for cell in cells {
+        cell.distance_to_water_proxy = cell.distance_to_water_proxy.clamp(0, i16::MAX);
+        cell.distance_to_sea_proxy = cell.distance_to_sea_proxy.clamp(0, i16::MAX);
+        if cell.water_body_type != 3 {
+            cell.river_flow_permille = 0;
+        }
+    }
+}
+
+fn apply_biome_post_hydrology(cells: &mut [TerrainCellSample]) {
+    for cell in cells {
+        if cell.water_body_type == 1 {
+            cell.biome_id = 5;
+            continue;
+        }
+        if cell.water_body_type == 2 {
+            cell.biome_id = 4;
+            continue;
+        }
+        if cell.water_body_type == 3 {
+            cell.biome_id = 1;
+            continue;
+        }
+
+        if cell.distance_to_water_proxy <= 2 {
+            cell.moisture = cell.moisture.saturating_add(180).clamp(0, 1000);
+            if cell.biome_id == 2 {
+                cell.biome_id = 0;
+            }
+        }
+
+        if cell.moisture < 250 {
+            cell.biome_id = 2;
+        } else if cell.temperature < 250 {
+            cell.biome_id = 3;
+        } else if cell.moisture > 650 {
+            cell.biome_id = 1;
+        } else {
+            cell.biome_id = 0;
+        }
+    }
+}
+
+fn lake_connection_cost(
+    cells: &[TerrainCellSample],
+    coords: &[CellCoord],
+    left: &LakeBody,
+    right: &LakeBody,
+) -> i32 {
+    let left_center = coords[left.center_index];
+    let right_center = coords[right.center_index];
+    let distance = (left_center.hex_x - right_center.hex_x)
+        .abs()
+        .saturating_add((left_center.hex_z - right_center.hex_z).abs());
+
+    let mut min_shore_distance = distance;
+    for &left_idx in &left.shore_cells {
+        let lc = coords[left_idx];
+        for &right_idx in &right.shore_cells {
+            let rc = coords[right_idx];
+            let d = (lc.hex_x - rc.hex_x)
+                .abs()
+                .saturating_add((lc.hex_z - rc.hex_z).abs());
+            if d < min_shore_distance {
+                min_shore_distance = d;
+            }
+        }
+    }
+
+    let left_elevation = i32::from(cells[left.center_index].elevation);
+    let right_elevation = i32::from(cells[right.center_index].elevation);
+    let uphill_penalty = (right_elevation - left_elevation).max(0);
+    min_shore_distance
+        .saturating_mul(10)
+        .saturating_add(uphill_penalty.saturating_mul(4))
+}
+
+fn find_river_path_astar(
+    start: usize,
+    goal: usize,
+    cells: &[TerrainCellSample],
+    coords: &[CellCoord],
+    index_by_hex: &HashMap<(i32, i32), usize>,
+) -> Option<(Vec<usize>, i32)> {
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
+
+    if start == goal {
+        return Some((vec![start], 0));
+    }
+
+    let mut open = BinaryHeap::<(Reverse<i32>, usize)>::new();
+    let mut came_from = HashMap::<usize, usize>::new();
+    let mut best_cost = HashMap::<usize, i32>::new();
+
+    best_cost.insert(start, 0);
+    open.push((Reverse(heuristic(coords, start, goal)), start));
+
+    while let Some((_, current)) = open.pop() {
+        if current == goal {
+            let mut path = vec![goal];
+            let mut cursor = goal;
+            while let Some(prev) = came_from.get(&cursor) {
+                path.push(*prev);
+                cursor = *prev;
+            }
+            path.reverse();
+            let cost = *best_cost.get(&goal).unwrap_or(&0);
+            return Some((path, cost));
+        }
+
+        let current_cost = *best_cost.get(&current).unwrap_or(&i32::MAX);
+        if current_cost == i32::MAX {
+            continue;
+        }
+
+        let coord = coords[current];
+        for (dx, dz) in [(1_i32, 0_i32), (-1, 0), (0, 1), (0, -1)] {
+            let next = (coord.hex_x + dx, coord.hex_z + dz);
+            let Some(&next_idx) = index_by_hex.get(&next) else {
+                continue;
+            };
+            let step_cost = river_step_cost(cells[current], cells[next_idx]);
+            let next_cost = current_cost.saturating_add(step_cost);
+            if next_cost >= *best_cost.get(&next_idx).unwrap_or(&i32::MAX) {
+                continue;
+            }
+            came_from.insert(next_idx, current);
+            best_cost.insert(next_idx, next_cost);
+            let estimate = next_cost.saturating_add(heuristic(coords, next_idx, goal));
+            open.push((Reverse(estimate), next_idx));
+        }
+    }
+
+    None
+}
+
+fn river_step_cost(from: TerrainCellSample, to: TerrainCellSample) -> i32 {
+    let mut cost = 10_i32;
+    let uphill = i32::from(to.elevation.saturating_sub(from.elevation).max(0));
+    cost = cost.saturating_add(uphill.saturating_mul(3));
+    if to.water_body_type != 0 {
+        cost = cost.saturating_sub(3);
+    }
+    if to.water_body_type == 1 {
+        cost = cost.saturating_sub(2);
+    }
+    cost.max(1)
+}
+
+fn heuristic(coords: &[CellCoord], from: usize, to: usize) -> i32 {
+    let a = coords[from];
+    let b = coords[to];
+    (a.hex_x - b.hex_x)
+        .abs()
+        .saturating_add((a.hex_z - b.hex_z).abs())
+        .saturating_mul(4)
+}
+
+fn find_root(parent: &mut [usize], node: usize) -> usize {
+    if parent[node] != node {
+        let root = find_root(parent, parent[node]);
+        parent[node] = root;
+    }
+    parent[node]
+}
+
+fn union_sets(parent: &mut [usize], rank: &mut [u8], left: usize, right: usize) -> bool {
+    let mut root_left = find_root(parent, left);
+    let mut root_right = find_root(parent, right);
+    if root_left == root_right {
+        return false;
+    }
+    if rank[root_left] < rank[root_right] {
+        std::mem::swap(&mut root_left, &mut root_right);
+    }
+    parent[root_right] = root_left;
+    if rank[root_left] == rank[root_right] {
+        rank[root_left] = rank[root_left].saturating_add(1);
+    }
+    true
 }
 
 fn pack_chunk_payload(payload: &[i16]) -> Vec<u8> {
@@ -1549,6 +2293,7 @@ fn sample_terrain_cell(hex_x: i32, hex_z: i32, params: &WorldGenParams) -> Terra
         elevation,
         water_level,
         biome_id,
+        temperature: ((temperature01 * 1000.0).round() as i16).clamp(0, 1000),
         moisture: ((moisture01 * 1000.0).round() as i16).clamp(0, 1000),
         water_body_type: 0,
         distance_to_water_proxy: i16::MAX,

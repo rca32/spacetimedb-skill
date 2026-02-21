@@ -16,6 +16,10 @@ pub struct WorldGenParams {
     pub noise_lacunarity: f32,
     pub terrain_chunk_size: u16,
     pub regenerate_on_start: bool,
+    pub lazy_generation_enabled: bool,
+    pub lazy_seed_radius_chunks: i16,
+    pub lazy_chunks_per_tick: u16,
+    pub lazy_prefetch_ring: i16,
     pub updated_at: Timestamp,
 }
 

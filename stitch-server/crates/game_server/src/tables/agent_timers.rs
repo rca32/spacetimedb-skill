@@ -1,6 +1,6 @@
 use crate::agents::{
     environment_effect_agent_loop, npc_ai_agent_loop, player_regen_agent_loop,
-    resource_regen_agent_loop, session_cleanup_agent_loop,
+    resource_regen_agent_loop, session_cleanup_agent_loop, worldgen_lazy_agent_loop,
 };
 use spacetimedb::{ScheduleAt, Timestamp};
 
@@ -38,6 +38,14 @@ pub struct EnvironmentEffectLoopTimer {
 
 #[spacetimedb::table(name = npc_ai_loop_timer, scheduled(npc_ai_agent_loop))]
 pub struct NpcAiLoopTimer {
+    #[primary_key]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+    pub last_run_at: Timestamp,
+}
+
+#[spacetimedb::table(name = worldgen_lazy_loop_timer, scheduled(worldgen_lazy_agent_loop))]
+pub struct WorldgenLazyLoopTimer {
     #[primary_key]
     pub scheduled_id: u64,
     pub scheduled_at: ScheduleAt,

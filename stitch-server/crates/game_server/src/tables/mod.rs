@@ -40,7 +40,7 @@ pub use account::Account;
 pub use account_profile::AccountProfile;
 pub use agent_timers::{
     EnvironmentEffectLoopTimer, NpcAiLoopTimer, PlayerRegenLoopTimer, ResourceRegenLoopTimer,
-    SessionCleanupLoopTimer,
+    SessionCleanupLoopTimer, WorldgenLazyLoopTimer,
 };
 pub use building_footprint::BuildingFootprint;
 pub use building_preview_feedback_view::BuildingPreviewFeedbackView;
@@ -105,5 +105,5 @@ pub use v2::{
 pub use world_gen::{BiomeGenDef, ResourceClumpDef, ResourceGenDef, WorldGenParams};
 pub use world_state::{
     EntityCore, InstanceState, RegionState, ResourceNode, TerrainChunk, TerrainChunkPayload,
-    TerrainChunkStream,
+    TerrainChunkStream, WorldgenChunkGenerationQueue,
 };

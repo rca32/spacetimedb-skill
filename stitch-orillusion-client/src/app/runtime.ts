@@ -353,6 +353,14 @@ export class OrillusionClientRuntime {
     }
 
     const position = motor.readPosition()
+    const centerHex = worldToHex(position.x, position.z, this.activeDimensionId)
+    const centerChunkX = Math.floor(centerHex.q / this.activeChunkSize)
+    const centerChunkY = Math.floor(centerHex.r / this.activeChunkSize)
+    const minChunkX = centerChunkX - AOI_RADIUS_CHUNKS
+    const maxChunkX = centerChunkX + AOI_RADIUS_CHUNKS
+    const minChunkY = centerChunkY - AOI_RADIUS_CHUNKS
+    const maxChunkY = centerChunkY + AOI_RADIUS_CHUNKS
+
     const queries = buildAoiQueries(
       {
         regionId: this.activeRegionId,
@@ -370,6 +378,15 @@ export class OrillusionClientRuntime {
     if (hash === this.lastAoiHash) {
       return
     }
+
+    this.net.dispatchReducer('request_chunks_for_aoi', {
+      regionId: this.activeRegionId,
+      dimensionId: this.activeDimensionId,
+      minChunkX,
+      maxChunkX,
+      minChunkY,
+      maxChunkY,
+    })
 
     for (let i = 0; i < queries.length; i += 1) {
       const query = queries[i]
