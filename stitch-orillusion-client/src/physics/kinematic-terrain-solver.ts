@@ -1,5 +1,6 @@
 export interface TerrainHeightSampler {
   sampleHeight: (worldX: number, worldZ: number) => number | null
+  sampleTraversable?: (worldX: number, worldZ: number) => boolean | null
 }
 
 export interface KinematicTerrainSolverParams {
@@ -72,11 +73,23 @@ export function solveKinematicTerrainStep(
     if (Math.abs(moveX) > EPSILON || Math.abs(moveZ) > EPSILON) {
       const candidateX = x + moveX
       const candidateZ = z + moveZ
-      const fromGround = terrain.sampleHeight(x, z)
-      const toGround = terrain.sampleHeight(candidateX, candidateZ)
-      if (canTraverse(fromGround, toGround, moveX, moveZ, params)) {
+      if (canMoveTo(x, z, candidateX, candidateZ, terrain, params)) {
         x = candidateX
         z = candidateZ
+      } else {
+        // Slide fallback: keep tangential motion when diagonal path is blocked.
+        if (Math.abs(moveX) > EPSILON) {
+          const slideX = x + moveX
+          if (canMoveTo(x, z, slideX, z, terrain, params)) {
+            x = slideX
+          }
+        }
+        if (Math.abs(moveZ) > EPSILON) {
+          const slideZ = z + moveZ
+          if (canMoveTo(x, z, x, slideZ, terrain, params)) {
+            z = slideZ
+          }
+        }
       }
     }
 
@@ -130,6 +143,24 @@ export function solveKinematicTerrainStep(
     grounded,
     groundOffset,
   }
+}
+
+function canMoveTo(
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  terrain: TerrainHeightSampler,
+  params: KinematicTerrainSolverParams,
+): boolean {
+  const traversable = terrain.sampleTraversable?.(toX, toZ)
+  if (traversable === false) {
+    return false
+  }
+
+  const fromGround = terrain.sampleHeight(fromX, fromZ)
+  const toGround = terrain.sampleHeight(toX, toZ)
+  return canTraverse(fromGround, toGround, toX - fromX, toZ - fromZ, params)
 }
 
 function canTraverse(

@@ -436,6 +436,10 @@ export class WorldStreamVisualizer {
     return this.terrainHeightIndex.sampleHeight(x, z)
   }
 
+  sampleTerrainTraversable(x: number, z: number): boolean | null {
+    return this.terrainHeightIndex.sampleTraversable(x, z)
+  }
+
   update(connection: DbConnection | null, localIdentityHex: string | null): void {
     if (!connection?.isActive) {
       this.clearAll()

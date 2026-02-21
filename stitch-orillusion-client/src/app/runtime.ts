@@ -24,6 +24,7 @@ import { TokenStore } from '../infra/token-store'
 import { buildAoiQueries, hashQueries } from '../net/aoi'
 import { NetRuntime } from '../net/net-runtime'
 import { CharacterMotorComponent } from '../physics/character-motor-component'
+import { PlayerLocomotionAnimationComponent } from '../world/player-locomotion-animation-component'
 import { createPhysicsGround } from '../physics/world-physics'
 import { seedWorldScene } from '../world/world-scene'
 import { WorldStreamVisualizer } from '../world/stream-visualizer'
@@ -168,6 +169,8 @@ export class OrillusionClientRuntime {
     this.player = objects.player
 
     this.motor = objects.player.addComponent(CharacterMotorComponent)
+    const locomotionAnimation = objects.player.addComponent(PlayerLocomotionAnimationComponent)
+    locomotionAnimation.motor = this.motor
 
     const cameraFollow = this.engine.cameraObject.addComponent(CameraFollowComponent)
     cameraFollow.target = objects.player
@@ -202,6 +205,7 @@ export class OrillusionClientRuntime {
     this.motor.setGroundOffset(PLAYER_FEET_OFFSET_Y)
     this.motor.setTerrainSampler({
       sampleHeight: (x, z) => this.streamVisualizer?.sampleTerrainHeight(x, z) ?? null,
+      sampleTraversable: (x, z) => this.streamVisualizer?.sampleTerrainTraversable(x, z) ?? null,
     })
     this.installBuildPreviewGhost()
 

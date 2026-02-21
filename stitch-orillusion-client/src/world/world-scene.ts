@@ -40,7 +40,8 @@ const PLAYER_MODEL_PROFILE: SceneModelProfile = {
   preserveMaterials: true,
   shadowSafePbr: true,
   rootObjectName: 'Character',
-  defaultAnimationIndex: 1,
+  defaultAnimation: 'Idle',
+  defaultAnimationIndex: 0,
 }
 
 const LANDMARK_MODEL_PROFILE: SceneModelProfile = {

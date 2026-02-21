@@ -80,7 +80,29 @@ export class TerrainHeightfieldIndex {
     return lerp(h0, h1, tz)
   }
 
+  sampleTraversable(worldX: number, worldZ: number): boolean | null {
+    if (this.chunks.size === 0 || !Number.isFinite(worldX) || !Number.isFinite(worldZ)) {
+      return null
+    }
+
+    const sample = this.sampleCell(Math.floor(worldX), Math.floor(worldZ))
+    if (!sample) {
+      return null
+    }
+    return !isWaterCell(sample, this.waterFlag)
+  }
+
   private sampleCellHeight(worldCellX: number, worldCellZ: number): number | null {
+    const sample = this.sampleCell(worldCellX, worldCellZ)
+    if (!sample) {
+      return null
+    }
+
+    const rawHeight = terrainHeightFromCell(sample, this.waterFlag)
+    return (rawHeight - this.seaLevelBase) * this.heightScale
+  }
+
+  private sampleCell(worldCellX: number, worldCellZ: number): TerrainCellSampleLike | null {
     const chunkX = floorDivInt(worldCellX, this.chunkSizeHint)
     const chunkY = floorDivInt(worldCellZ, this.chunkSizeHint)
     const cells = this.chunks.get(chunkKey(chunkX, chunkY))
@@ -94,15 +116,17 @@ export class TerrainHeightfieldIndex {
     if (!sample) {
       return null
     }
-
-    const rawHeight = terrainHeightFromCell(sample, this.waterFlag)
-    return (rawHeight - this.seaLevelBase) * this.heightScale
+    return sample
   }
 }
 
 function terrainHeightFromCell(sample: TerrainCellSampleLike, waterFlag: number): number {
-  const isWater = (sample.flags & waterFlag) !== 0 || sample.waterLevel > sample.elevation
+  const isWater = isWaterCell(sample, waterFlag)
   return isWater ? sample.waterLevel : sample.elevation
+}
+
+function isWaterCell(sample: TerrainCellSampleLike, waterFlag: number): boolean {
+  return (sample.flags & waterFlag) !== 0 || sample.waterLevel > sample.elevation
 }
 
 function floorDivInt(value: number, divisor: number): number {

@@ -166,3 +166,49 @@
 - 사용자 런타임 확인 기준: 정상 동작 확인
 - 로컬 빌드 검증:
   - `cd stitch-orillusion-client && bun run build` 성공
+
+### 18) 클라이언트 물 진입 사전 차단
+- 배경:
+  - 물 경계 진입 시 서버 권위 보정으로 리셋이 발생해 체감이 튀는 문제
+- 적용:
+  - 클라이언트 terrain sampler에 `sampleTraversable(worldX, worldZ)` 추가
+  - 이동 solver에서 후보 위치가 비통행(`false`)이면 수평 이동을 거절
+  - `WorldStreamVisualizer`가 heightfield 기반 통행 가능 여부를 런타임에 제공
+- 반영 파일:
+  - `stitch-orillusion-client/src/physics/terrain-heightfield-index.ts`
+  - `stitch-orillusion-client/src/physics/kinematic-terrain-solver.ts`
+  - `stitch-orillusion-client/src/world/stream-visualizer.ts`
+  - `stitch-orillusion-client/src/app/runtime.ts`
+
+### 19) 물 경계 슬라이딩 이동
+- 배경:
+  - 물 진입 차단만 적용하면 경계 충돌 시 제자리에서 멈추는 느낌이 강함
+- 적용:
+  - 이동 solver에서 대각선 후보가 막히면 X/Z 축을 순차 폴백 검사
+  - 한 축이라도 통과 가능하면 해당 축으로 이동해 경계면을 따라 슬라이딩
+- 반영 파일:
+  - `stitch-orillusion-client/src/physics/kinematic-terrain-solver.ts`
+
+### 20) 플레이어 로코모션 애니메이션 상태 전환
+- 배경:
+  - 로컬 플레이어가 초기 클립(`Run`) 고정 재생으로 보여 "항상 달리기"처럼 보임
+  - 일반 게임 플레이 기준으로 `idle / run / left / right / backward` 전환이 필요
+- 적용:
+  - `orillusion/samples/animation/Sample_Skeleton3.ts`의 `AnimatorComponent` 사용 패턴을 참조
+  - 로컬 플레이어에 `PlayerLocomotionAnimationComponent`를 추가해 입력 기반 상태 계산
+  - 상태 전환 시 `AnimatorComponent.crossFade(...)`를 사용해 클립 전환을 부드럽게 처리
+  - 좌/우/후진 전용 클립이 없을 경우 `walk/run`으로 자동 폴백
+- 반영 파일:
+  - `stitch-orillusion-client/src/world/player-locomotion-animation-component.ts` (신규)
+  - `stitch-orillusion-client/src/app/runtime.ts`
+  - `stitch-orillusion-client/src/world/world-scene.ts`
+
+### 21) 기본 이동 속도(이속) 하향 튜닝
+- 배경:
+  - 애니메이션 대비 실제 이동 속도가 빠르게 체감되어 발 미끄러짐이 크게 보임
+- 적용:
+  - `CharacterMotorComponent` 기본 속도값을 보폭 체감에 맞게 하향
+  - `walkSpeed`: `5.5 -> 3.2`
+  - `runSpeed`: `8.5 -> 5.2`
+- 반영 파일:
+  - `stitch-orillusion-client/src/physics/character-motor-component.ts`

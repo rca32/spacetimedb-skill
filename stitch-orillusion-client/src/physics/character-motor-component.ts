@@ -14,8 +14,9 @@ export interface MotionIntentSnapshot {
 }
 
 export class CharacterMotorComponent extends ComponentBase {
-  public walkSpeed = 5.5
-  public runSpeed = 8.5
+  // Tuned down to better match Soldier locomotion clips and reduce foot sliding.
+  public walkSpeed = 3.2
+  public runSpeed = 5.2
 
   private readonly keys = new Set<string>()
   private rigidbody: Rigidbody | null = null

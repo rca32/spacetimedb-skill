@@ -17,6 +17,8 @@
   - `@orillusion/physics` 초기화
   - `CharacterMotorComponent` + 물리 지면/콜라이더 구성
   - `Heightfield` 기반 `KinematicTerrainSolver` 연동
+  - 로컬 플레이어 입력 기반 로코모션 애니메이션 상태 전환 추가
+    (`idle/run/left/right/backward`, cross-fade 전환)
 - Posteffect 파이프라인 통합
   - `PostFxPipelineController` (`low|medium|high`)
 - Particle 통합
@@ -39,6 +41,8 @@
   - `submit_motion_intent`에서 `build_nav_grid` 기반 지형 전이 검증
   - 위반 시 `server_correction_v2` 업서트
   - 권위 Y를 지형 샘플 + 발 오프셋으로 결정
+- 이동/애니메이션 체감 보정
+  - 기본 이속 하향(`walk 3.2`, `run 5.2`)으로 애니메이션 대비 발 미끄러짐 완화
 
 ## 최근 작업 로그
 - 상세 기록 (2026-02-19): `CLIENTDESIGN/12-implementation-log-2026-02-19.md`
