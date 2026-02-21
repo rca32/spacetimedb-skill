@@ -1,6 +1,7 @@
 import {
   BoxGeometry,
   Color,
+  Engine3D,
   Material,
   MeshRenderer,
   Object3D,
@@ -29,6 +30,259 @@ const TERRAIN_NEIGHBOR_OFFSETS: ReadonlyArray<readonly [number, number]> = [
   [1, 1],
 ]
 
+interface BuildingModelVariant {
+  readonly key: string
+  readonly pieces: ReadonlyArray<BuildingModelPiece>
+}
+
+interface BuildingModelPiece {
+  readonly key: string
+  readonly url: string
+  readonly offsetX?: number
+  readonly offsetY?: number
+  readonly offsetZ?: number
+  readonly rotationY?: number
+  readonly scale?: number
+}
+
+interface BuildingTierProfile {
+  readonly fallbackScaleY: number
+  readonly variants: ReadonlyArray<BuildingModelVariant>
+}
+
+interface MarkerModelProfile {
+  readonly key: string
+  readonly url: string
+  readonly scale: number
+  readonly offsetY?: number
+  readonly rotationY?: number
+  readonly modelColor: readonly [number, number, number]
+  readonly fallback:
+    | {
+      readonly kind: 'box'
+      readonly width: number
+      readonly height: number
+      readonly depth: number
+      readonly color: readonly [number, number, number]
+    }
+    | {
+      readonly kind: 'sphere'
+      readonly radius: number
+      readonly segments?: number
+      readonly color: readonly [number, number, number]
+    }
+}
+
+const BUILDING_PIECE_FLOOR: BuildingModelPiece = {
+  key: 'floor',
+  url: '/floor.gltf',
+  offsetY: 0.02,
+}
+
+const BUILDING_PIECE_ROOF: BuildingModelPiece = {
+  key: 'roof',
+  url: '/roof-flat-square.gltf',
+  offsetY: 2.36,
+  scale: 0.84,
+}
+
+const BUILDING_PIECE_COLUMN_NW: BuildingModelPiece = {
+  key: 'column-nw',
+  url: '/column-wide.gltf',
+  offsetX: -0.88,
+  offsetZ: -0.88,
+}
+
+const BUILDING_PIECE_COLUMN_NE: BuildingModelPiece = {
+  key: 'column-ne',
+  url: '/column-wide.gltf',
+  offsetX: 0.88,
+  offsetZ: -0.88,
+}
+
+const BUILDING_PIECE_COLUMN_SW: BuildingModelPiece = {
+  key: 'column-sw',
+  url: '/column-wide.gltf',
+  offsetX: -0.88,
+  offsetZ: 0.88,
+}
+
+const BUILDING_PIECE_COLUMN_SE: BuildingModelPiece = {
+  key: 'column-se',
+  url: '/column-wide.gltf',
+  offsetX: 0.88,
+  offsetZ: 0.88,
+}
+
+function wallRingPieces(
+  westUrl: string,
+  eastUrl: string,
+  southUrl: string,
+  northUrl: string,
+): BuildingModelPiece[] {
+  return [
+    { key: 'wall-west', url: westUrl, offsetX: -0.96 },
+    { key: 'wall-east', url: eastUrl, offsetX: 0.96 },
+    { key: 'wall-south', url: southUrl, offsetZ: -0.96, rotationY: 90 },
+    { key: 'wall-north', url: northUrl, offsetZ: 0.96, rotationY: 90 },
+  ]
+}
+
+const BUILDING_TIER_PROFILES: ReadonlyArray<BuildingTierProfile> = [
+  {
+    fallbackScaleY: 1.2,
+    variants: [
+      {
+        key: 'foundation-a',
+        pieces: [
+          BUILDING_PIECE_FLOOR,
+        ],
+      },
+      {
+        key: 'foundation-b',
+        pieces: [
+          BUILDING_PIECE_FLOOR,
+          BUILDING_PIECE_COLUMN_NW,
+          BUILDING_PIECE_COLUMN_SE,
+        ],
+      },
+    ],
+  },
+  {
+    fallbackScaleY: 1.9,
+    variants: [
+      {
+        key: 'frame-a',
+        pieces: [
+          BUILDING_PIECE_FLOOR,
+          ...wallRingPieces('/wall.gltf', '/wall.gltf', '/wall-doorway-square.gltf', '/wall-window-square.gltf'),
+        ],
+      },
+      {
+        key: 'frame-b',
+        pieces: [
+          BUILDING_PIECE_FLOOR,
+          ...wallRingPieces(
+            '/wall-window-square.gltf',
+            '/wall-window-square.gltf',
+            '/wall-doorway-square.gltf',
+            '/wall.gltf',
+          ),
+        ],
+      },
+    ],
+  },
+  {
+    fallbackScaleY: 2.6,
+    variants: [
+      {
+        key: 'house-a',
+        pieces: [
+          BUILDING_PIECE_FLOOR,
+          ...wallRingPieces('/wall.gltf', '/wall.gltf', '/wall-doorway-square.gltf', '/wall-window-square.gltf'),
+          BUILDING_PIECE_ROOF,
+          BUILDING_PIECE_COLUMN_NW,
+          BUILDING_PIECE_COLUMN_NE,
+          BUILDING_PIECE_COLUMN_SW,
+          BUILDING_PIECE_COLUMN_SE,
+        ],
+      },
+      {
+        key: 'house-b',
+        pieces: [
+          BUILDING_PIECE_FLOOR,
+          ...wallRingPieces(
+            '/wall-window-square.gltf',
+            '/wall-window-square.gltf',
+            '/wall-doorway-square.gltf',
+            '/wall.gltf',
+          ),
+          BUILDING_PIECE_ROOF,
+          BUILDING_PIECE_COLUMN_NW,
+          BUILDING_PIECE_COLUMN_SE,
+        ],
+      },
+    ],
+  },
+]
+
+const NPC_MARKER_MODEL: MarkerModelProfile = {
+  key: 'npc',
+  url: '/blocky-character-c.gltf',
+  scale: 0.17,
+  offsetY: -0.43,
+  rotationY: 180,
+  modelColor: [0.95, 0.55, 0.2],
+  fallback: {
+    kind: 'sphere',
+    radius: 0.45,
+    segments: 14,
+    color: [0.95, 0.55, 0.2],
+  },
+}
+
+const RESOURCE_MARKER_MODEL: MarkerModelProfile = {
+  key: 'resource',
+  url: '/castle-tree-small.gltf',
+  scale: 0.95,
+  offsetY: 0.5,
+  modelColor: [0.2, 0.88, 0.42],
+  fallback: {
+    kind: 'box',
+    width: 1,
+    height: 1,
+    depth: 1,
+    color: [0.2, 0.88, 0.42],
+  },
+}
+
+const PROJECT_SITE_MARKER_MODEL: MarkerModelProfile = {
+  key: 'project-site',
+  url: '/castle-flag-banner-short.gltf',
+  scale: 0.75,
+  offsetY: 0.1,
+  modelColor: [0.2, 0.72, 0.95],
+  fallback: {
+    kind: 'box',
+    width: 1,
+    height: 1,
+    depth: 1,
+    color: [0.2, 0.72, 0.95],
+  },
+}
+
+const PLAYER_LOCAL_MARKER_MODEL: MarkerModelProfile = {
+  key: 'player-local',
+  url: '/blocky-character-a.gltf',
+  scale: 0.2,
+  offsetY: -0.7,
+  rotationY: 180,
+  modelColor: [0.08, 0.95, 0.9],
+  fallback: {
+    kind: 'box',
+    width: 0.7,
+    height: 1.8,
+    depth: 0.7,
+    color: [0.08, 0.95, 0.9],
+  },
+}
+
+const PLAYER_REMOTE_MARKER_MODEL: MarkerModelProfile = {
+  key: 'player-remote',
+  url: '/blocky-character-b.gltf',
+  scale: 0.2,
+  offsetY: -0.7,
+  rotationY: 180,
+  modelColor: [0.52, 0.74, 0.98],
+  fallback: {
+    kind: 'box',
+    width: 0.7,
+    height: 1.8,
+    depth: 0.7,
+    color: [0.52, 0.74, 0.98],
+  },
+}
+
 interface VisualizerStats {
   terrain: number
   terrainDetailed: number
@@ -42,14 +296,31 @@ interface VisualizerStats {
   v2: number
 }
 
+export interface WorldStreamVisualizerOptions {
+  readonly debugBuildingModels?: boolean
+}
+
 export class WorldStreamVisualizer {
   private readonly root = new Object3D()
+  private readonly debugBuildingModels: boolean
 
   private readonly terrainObjects = new Map<string, Object3D>()
   private readonly terrainStamps = new Map<string, string>()
   private readonly npcObjects = new Map<string, Object3D>()
   private readonly resourceObjects = new Map<string, Object3D>()
   private readonly buildingObjects = new Map<string, Object3D>()
+  private readonly buildingVisualVersions = new Map<string, string>()
+  private readonly buildingModelAppliedVersions = new Map<string, string>()
+  private readonly buildingModelPendingVersions = new Map<string, string>()
+  private readonly buildingPrefabByUrl = new Map<string, Object3D>()
+  private readonly buildingPrefabLoadPromises = new Map<string, Promise<Object3D | null>>()
+  private readonly buildingPrefabFailedUrls = new Set<string>()
+  private readonly markerPrefabByKey = new Map<string, Object3D>()
+  private readonly markerPrefabLoadPromises = new Map<string, Promise<void>>()
+  private readonly markerPrefabFailedKeys = new Set<string>()
+  private readonly markerVisualStates = new WeakMap<Object3D, string>()
+  private readonly buildingDefByEntityId = new Map<string, string>()
+  private readonly buildingDefByRequirementKey = new Map<string, string>()
   private readonly projectSiteObjects = new Map<string, Object3D>()
   private readonly footprintObjects = new Map<string, Object3D>()
   private readonly playerObjects = new Map<string, Object3D>()
@@ -74,7 +345,8 @@ export class WorldStreamVisualizer {
     v2: 0,
   }
 
-  constructor(scene: Scene3D) {
+  constructor(scene: Scene3D, options: WorldStreamVisualizerOptions = {}) {
+    this.debugBuildingModels = options.debugBuildingModels === true
     scene.addChild(this.root)
   }
 
@@ -122,8 +394,9 @@ export class WorldStreamVisualizer {
     this.syncTerrain(db)
     this.syncNpcs(db)
     this.syncResources(db)
-    this.syncBuildings(db)
+    this.syncBuildingDefs(db)
     this.syncProjectSites(db)
+    this.syncBuildings(db)
     if (this.showFootprintOverlay) {
       this.syncBuildingFootprints(db)
     } else {
@@ -131,6 +404,7 @@ export class WorldStreamVisualizer {
     }
     this.syncPlayers(db, localIdentityHex)
     this.syncV2Streams(db)
+    this.pruneBuildingDefEntityCache()
 
     this.stats = {
       terrain: this.terrainObjects.size,
@@ -325,20 +599,19 @@ export class WorldStreamVisualizer {
       let object = this.npcObjects.get(npcId)
       if (!object) {
         object = new Object3D()
-        const mesh = object.addComponent(MeshRenderer)
-        mesh.geometry = new SphereGeometry(0.45, 14, 14)
-        if (!setMaterialSafe(mesh, createUnlitMaterial(0.95, 0.55, 0.2))) {
-          object.destroy()
-          continue
-        }
         this.root.addChild(object)
         this.npcObjects.set(npcId, object)
       }
+
+      this.ensureMarkerVisual(object, NPC_MARKER_MODEL)
 
       object.x = world.x
       const groundY = this.sampleTerrainHeight(world.x, world.z)
       object.y = (groundY ?? 0) + 0.6
       object.z = world.z
+      object.scaleX = 1
+      object.scaleY = 1
+      object.scaleZ = 1
     }
 
     this.prune(this.npcObjects, seen)
@@ -367,15 +640,11 @@ export class WorldStreamVisualizer {
       let object = this.resourceObjects.get(id)
       if (!object) {
         object = new Object3D()
-        const mesh = object.addComponent(MeshRenderer)
-        mesh.geometry = new BoxGeometry(1, 1, 1)
-        if (!setMaterialSafe(mesh, createUnlitMaterial(0.2, 0.88, 0.42))) {
-          object.destroy()
-          continue
-        }
         this.root.addChild(object)
         this.resourceObjects.set(id, object)
       }
+
+      this.ensureMarkerVisual(object, RESOURCE_MARKER_MODEL)
 
       object.x = world.x
       const halfHeight = depleted ? 0.09 : 0.4
@@ -390,10 +659,67 @@ export class WorldStreamVisualizer {
     this.prune(this.resourceObjects, seen)
   }
 
+  private syncBuildingDefs(db: Record<string, unknown>): void {
+    const table = getTableRows(db, 'buildingDef')
+    this.buildingDefByRequirementKey.clear()
+    if (!table) {
+      return
+    }
+
+    for (const row of table) {
+      const buildingDefId = toU64String(row.buildingDefId)
+      const requiredItemDefId = toU64String(row.requiredItemDefId)
+      const requiredItemQty = Math.max(0, Math.trunc(toNumber(row.requiredItemQty)))
+      const buildRequired = Math.max(0, Math.trunc(toNumber(row.buildRequired)))
+      const requirementKey = buildingRequirementKey(requiredItemDefId, requiredItemQty, buildRequired)
+      if (!buildingDefId || !requirementKey) {
+        continue
+      }
+
+      const prev = this.buildingDefByRequirementKey.get(requirementKey)
+      if (!prev || compareU64String(buildingDefId, prev) < 0) {
+        this.buildingDefByRequirementKey.set(requirementKey, buildingDefId)
+      }
+    }
+  }
+
+  private resolveBuildingDefId(buildingId: string, row: Record<string, unknown>): string | null {
+    const cached = this.buildingDefByEntityId.get(buildingId)
+    if (cached) {
+      return cached
+    }
+
+    const requiredItemDefId = toU64String(row.requiredItemDefId)
+    const requiredItemQty = Math.max(0, Math.trunc(toNumber(row.requiredItemQty)))
+    const buildRequired = Math.max(0, Math.trunc(toNumber(row.buildRequired)))
+    const requirementKey = buildingRequirementKey(requiredItemDefId, requiredItemQty, buildRequired)
+    if (!requirementKey) {
+      return null
+    }
+
+    const resolved = this.buildingDefByRequirementKey.get(requirementKey) ?? null
+    if (resolved) {
+      this.buildingDefByEntityId.set(buildingId, resolved)
+    }
+    return resolved
+  }
+
+  private pruneBuildingDefEntityCache(): void {
+    for (const id of this.buildingDefByEntityId.keys()) {
+      if (this.buildingObjects.has(id) || this.projectSiteObjects.has(id)) {
+        continue
+      }
+      this.buildingDefByEntityId.delete(id)
+    }
+  }
+
   private syncBuildings(db: Record<string, unknown>): void {
     const table = getTableRows(db, 'buildingState')
     if (!table) {
       this.prune(this.buildingObjects, new Set())
+      this.buildingVisualVersions.clear()
+      this.buildingModelAppliedVersions.clear()
+      this.buildingModelPendingVersions.clear()
       return
     }
 
@@ -409,31 +735,332 @@ export class WorldStreamVisualizer {
       const hexZ = toNumber(row.hexZ)
       const world = hexToWorldXZ({ q: hexX, r: hexZ, dimension: Math.max(1, toNumber(row.dimensionId)) })
       const buildState = Math.max(0, toNumber(row.state))
+      const buildingDefId = this.resolveBuildingDefId(id, row)
+      const tier = buildingTierFromState(buildState)
+      const profile = getBuildingTierProfile(tier)
+      const variant = selectBuildingVariant(id, buildingDefId, profile)
+      const rotationY = stableIndex(`${id}:rot`, 4) * 90
+      const visualVersion = `${tier}:${buildingDefId ?? 'unknown'}:${variant.key}:r${rotationY}`
 
       let object = this.buildingObjects.get(id)
       if (!object) {
         object = new Object3D()
-        const mesh = object.addComponent(MeshRenderer)
-        mesh.geometry = new BoxGeometry(1, 1, 1)
-        if (!setMaterialSafe(mesh, createUnlitMaterial(0.68, 0.52, 0.3))) {
-          object.destroy()
-          continue
-        }
         this.root.addChild(object)
         this.buildingObjects.set(id, object)
       }
 
-      const scaleY = buildState >= 2 ? 2.6 : buildState >= 1 ? 1.9 : 1.2
+      if (this.buildingVisualVersions.get(id) !== visualVersion) {
+        this.installBuildingFallbackVisual(object, profile.fallbackScaleY)
+        this.buildingVisualVersions.set(id, visualVersion)
+        this.buildingModelAppliedVersions.delete(id)
+      }
+
+      if (
+        this.buildingModelAppliedVersions.get(id) !== visualVersion &&
+        this.buildingModelPendingVersions.get(id) !== visualVersion
+      ) {
+        this.buildingModelPendingVersions.set(id, visualVersion)
+        void this.tryAttachBuildingModel(id, visualVersion, variant, profile)
+      }
+
       const groundY = this.sampleTerrainHeight(world.x, world.z)
       object.x = world.x
-      object.y = (groundY ?? 0) + scaleY * 0.5
+      object.y = groundY ?? 0
       object.z = world.z
-      object.scaleX = 1.3
-      object.scaleY = scaleY
-      object.scaleZ = 1.3
+      object.rotationY = rotationY
+      object.scaleX = 1
+      object.scaleY = 1
+      object.scaleZ = 1
     }
 
     this.prune(this.buildingObjects, seen)
+    for (const id of this.buildingVisualVersions.keys()) {
+      if (seen.has(id)) {
+        continue
+      }
+      this.buildingVisualVersions.delete(id)
+      this.buildingModelAppliedVersions.delete(id)
+      this.buildingModelPendingVersions.delete(id)
+    }
+  }
+
+  private installBuildingFallbackVisual(root: Object3D, fallbackScaleY: number): void {
+    destroyDirectChildren(root)
+
+    const fallback = new Object3D()
+    const mesh = fallback.addComponent(MeshRenderer)
+    mesh.geometry = new BoxGeometry(1, 1, 1)
+    if (!setMaterialSafe(mesh, createUnlitMaterial(0.68, 0.52, 0.3))) {
+      fallback.destroy()
+      return
+    }
+
+    fallback.y = fallbackScaleY * 0.5
+    fallback.scaleX = 1.3
+    fallback.scaleY = fallbackScaleY
+    fallback.scaleZ = 1.3
+    root.addChild(fallback)
+  }
+
+  private async tryAttachBuildingModel(
+    buildingId: string,
+    visualVersion: string,
+    variant: BuildingModelVariant,
+    profile: BuildingTierProfile,
+  ): Promise<void> {
+    try {
+      const candidates = uniqueVariantCandidates(variant, profile.variants)
+      let instance: Object3D | null = null
+      for (const candidate of candidates) {
+        const assembled = await this.buildVariantInstance(candidate)
+        if (assembled) {
+          instance = assembled
+          break
+        }
+      }
+      if (!instance) {
+        return
+      }
+
+      const root = this.buildingObjects.get(buildingId)
+      if (!root) {
+        return
+      }
+
+      if (this.buildingVisualVersions.get(buildingId) !== visualVersion) {
+        return
+      }
+
+      destroyDirectChildren(root)
+      root.addChild(instance)
+      this.buildingModelAppliedVersions.set(buildingId, visualVersion)
+      this.logBuildingDebug('attached building model', {
+        buildingId,
+        visualVersion,
+      })
+    } finally {
+      if (this.buildingModelPendingVersions.get(buildingId) === visualVersion) {
+        this.buildingModelPendingVersions.delete(buildingId)
+      }
+    }
+  }
+
+  private async buildVariantInstance(variant: BuildingModelVariant): Promise<Object3D | null> {
+    const composed = new Object3D()
+    try {
+      for (const piece of variant.pieces) {
+        const prefab = await this.loadBuildingPrefab(piece.url)
+        if (!prefab) {
+          composed.destroy()
+          return null
+        }
+
+        let part: Object3D
+        try {
+          part = prefab.instantiate()
+        } catch (error) {
+          this.buildingPrefabByUrl.delete(piece.url)
+          this.buildingPrefabFailedUrls.add(piece.url)
+          this.logBuildingWarn(`failed to instantiate building part ${piece.url}`, error)
+          composed.destroy()
+          return null
+        }
+
+        part.x = piece.offsetX ?? 0
+        part.y = piece.offsetY ?? 0
+        part.z = piece.offsetZ ?? 0
+        part.rotationY = piece.rotationY ?? 0
+        const scale = piece.scale ?? 1
+        part.scaleX *= scale
+        part.scaleY *= scale
+        part.scaleZ *= scale
+        composed.addChild(part)
+      }
+      return composed
+    } catch {
+      composed.destroy()
+      return null
+    }
+  }
+
+  private async loadBuildingPrefab(url: string): Promise<Object3D | null> {
+    if (!url) {
+      return null
+    }
+    const cached = this.buildingPrefabByUrl.get(url)
+    if (cached) {
+      return cached
+    }
+    if (this.buildingPrefabFailedUrls.has(url)) {
+      return null
+    }
+
+    const pending = this.buildingPrefabLoadPromises.get(url)
+    if (pending) {
+      return pending
+    }
+
+    const loadPromise = Engine3D.res
+      .loadGltf(url)
+      .then((loadedPrefab) => {
+        const sanitized = this.buildSanitizedBuildingPrefab(loadedPrefab)
+        this.buildingPrefabByUrl.set(url, sanitized)
+        this.logBuildingDebug('loaded building prefab', {
+          url,
+          meshCount: countMeshNodes(sanitized),
+        })
+        return sanitized
+      })
+      .catch((error) => {
+        this.buildingPrefabFailedUrls.add(url)
+        this.logBuildingWarn(`failed to load building model ${url}`, error)
+        return null
+      })
+      .finally(() => {
+        this.buildingPrefabLoadPromises.delete(url)
+      })
+
+    this.buildingPrefabLoadPromises.set(url, loadPromise)
+    return loadPromise
+  }
+
+  private ensureMarkerVisual(root: Object3D, profile: MarkerModelProfile): void {
+    const modelState = `model:${profile.key}`
+    const fallbackState = `fallback:${profile.key}`
+    const currentState = this.markerVisualStates.get(root)
+    const cachedPrefab = this.markerPrefabByKey.get(profile.key)
+    if (cachedPrefab) {
+      if (currentState === modelState) {
+        return
+      }
+
+      try {
+        const instance = cachedPrefab.instantiate()
+        instance.x = 0
+        instance.y = profile.offsetY ?? 0
+        instance.z = 0
+        instance.rotationY = profile.rotationY ?? 0
+        instance.scaleX *= profile.scale
+        instance.scaleY *= profile.scale
+        instance.scaleZ *= profile.scale
+        destroyDirectChildren(root)
+        root.addChild(instance)
+        this.markerVisualStates.set(root, modelState)
+        this.logBuildingDebug('attached marker model', {
+          key: profile.key,
+          url: profile.url,
+        })
+      } catch (error) {
+        this.markerPrefabByKey.delete(profile.key)
+        this.markerPrefabFailedKeys.add(profile.key)
+        this.logBuildingWarn(`failed to instantiate marker model ${profile.url}`, error)
+      }
+      return
+    }
+
+    if (!this.markerPrefabFailedKeys.has(profile.key) && !this.markerPrefabLoadPromises.has(profile.key)) {
+      const loadPromise = this.loadMarkerPrefab(profile)
+      this.markerPrefabLoadPromises.set(profile.key, loadPromise)
+    }
+
+    if (currentState !== fallbackState) {
+      destroyDirectChildren(root)
+      const fallback = buildMarkerFallbackObject(profile)
+      if (fallback) {
+        root.addChild(fallback)
+        this.markerVisualStates.set(root, fallbackState)
+      }
+    }
+  }
+
+  private async loadMarkerPrefab(profile: MarkerModelProfile): Promise<void> {
+    try {
+      const loadedPrefab = await Engine3D.res.loadGltf(profile.url)
+      const sanitized = this.buildSanitizedMarkerPrefab(loadedPrefab, profile.modelColor)
+      this.markerPrefabByKey.set(profile.key, sanitized)
+      this.logBuildingDebug('loaded marker prefab', {
+        key: profile.key,
+        url: profile.url,
+        meshCount: countMeshNodes(sanitized),
+      })
+    } catch (error) {
+      this.markerPrefabFailedKeys.add(profile.key)
+      this.logBuildingWarn(`failed to load marker model ${profile.url}`, error)
+    } finally {
+      this.markerPrefabLoadPromises.delete(profile.key)
+    }
+  }
+
+  private buildSanitizedBuildingPrefab(sourceRoot: Object3D): Object3D {
+    return this.cloneNodeAsUnlit(sourceRoot, [0.76, 0.64, 0.44])
+  }
+
+  private buildSanitizedMarkerPrefab(
+    sourceRoot: Object3D,
+    color: readonly [number, number, number],
+  ): Object3D {
+    return this.cloneNodeAsUnlit(sourceRoot, color)
+  }
+
+  private logBuildingDebug(message: string, fields?: Record<string, unknown>): void {
+    if (!this.debugBuildingModels) {
+      return
+    }
+
+    if (fields && Object.keys(fields).length > 0) {
+      console.info('[stitch-orillusion-client]', message, fields)
+      return
+    }
+    console.info('[stitch-orillusion-client]', message)
+  }
+
+  private logBuildingWarn(message: string, error: unknown): void {
+    if (!this.debugBuildingModels) {
+      return
+    }
+    console.warn(`[stitch-orillusion-client] ${message}`, error)
+  }
+
+  private cloneNodeAsUnlit(source: Object3D, color: readonly [number, number, number]): Object3D {
+    const clone = new Object3D()
+    clone.name = source.name
+    clone.x = source.x
+    clone.y = source.y
+    clone.z = source.z
+    clone.rotationX = source.rotationX
+    clone.rotationY = source.rotationY
+    clone.rotationZ = source.rotationZ
+    clone.scaleX = source.scaleX
+    clone.scaleY = source.scaleY
+    clone.scaleZ = source.scaleZ
+
+    if (source.hasComponent(MeshRenderer)) {
+      const sourceMesh = source.getComponent(MeshRenderer)
+      if (sourceMesh?.geometry) {
+        const mesh = clone.addComponent(MeshRenderer)
+        mesh.castGI = false
+        mesh.castShadow = false
+        mesh.receiveShadow = false
+        mesh.geometry = sourceMesh.geometry
+
+        const unlit = new UnLitMaterial()
+        unlit.baseColor = new Color(color[0], color[1], color[2], 1)
+        if (!setMaterialSafe(mesh, unlit)) {
+          unlit.destroy(false)
+          clone.removeComponent(MeshRenderer)
+        }
+      }
+    }
+
+    for (const child of source.entityChildren) {
+      if (!(child instanceof Object3D)) {
+        continue
+      }
+      const childClone = this.cloneNodeAsUnlit(child, color)
+      clone.addChild(childClone)
+    }
+
+    return clone
   }
 
   private syncProjectSites(db: Record<string, unknown>): void {
@@ -451,6 +1078,10 @@ export class WorldStreamVisualizer {
         continue
       }
       seen.add(id)
+      const buildingDefId = toU64String(row.buildingDefId)
+      if (buildingDefId) {
+        this.buildingDefByEntityId.set(id, buildingDefId)
+      }
 
       const hexX = toNumber(row.hexX)
       const hexZ = toNumber(row.hexZ)
@@ -468,29 +1099,25 @@ export class WorldStreamVisualizer {
       let object = this.projectSiteObjects.get(id)
       if (!object) {
         object = new Object3D()
-        const mesh = object.addComponent(MeshRenderer)
-        mesh.geometry = new BoxGeometry(1, 1, 1)
-        if (!setMaterialSafe(mesh, createUnlitMaterial(0.2, 0.72, 0.95))) {
-          object.destroy()
-          continue
-        }
         this.root.addChild(object)
         this.projectSiteObjects.set(id, object)
       }
+
+      this.ensureMarkerVisual(object, PROJECT_SITE_MARKER_MODEL)
 
       const phase = stablePhase(id)
       const pulse =
         progressRatio >= 1
           ? 0
-          : (Math.sin(Date.now() * 0.008 + phase) + 1) * 0.06
-      const scaleY = 0.4 + progressRatio * 1.0 + pulse
+          : (Math.sin(Date.now() * 0.008 + phase) + 1) * 0.04
+      const scaleY = 0.45 + progressRatio * 0.55 + pulse
       const groundY = this.sampleTerrainHeight(world.x, world.z)
       object.x = world.x
       object.y = (groundY ?? 0) + scaleY * 0.5
       object.z = world.z
-      object.scaleX = 1.05
+      object.scaleX = 0.9
       object.scaleY = scaleY
-      object.scaleZ = 1.05
+      object.scaleZ = 0.9
     }
 
     this.prune(this.projectSiteObjects, seen)
@@ -571,18 +1198,14 @@ export class WorldStreamVisualizer {
       let object = this.playerObjects.get(identityHex)
       if (!object) {
         object = new Object3D()
-        const mesh = object.addComponent(MeshRenderer)
-        mesh.geometry = new BoxGeometry(1, 1, 1)
-        const material = identityHex === localIdentityHex
-          ? createUnlitMaterial(0.08, 0.95, 0.9)
-          : createUnlitMaterial(0.52, 0.74, 0.98)
-        if (!setMaterialSafe(mesh, material)) {
-          object.destroy()
-          continue
-        }
         this.root.addChild(object)
         this.playerObjects.set(identityHex, object)
       }
+
+      this.ensureMarkerVisual(
+        object,
+        identityHex === localIdentityHex ? PLAYER_LOCAL_MARKER_MODEL : PLAYER_REMOTE_MARKER_MODEL,
+      )
 
       object.x = toNumber(position[0])
       const x = toNumber(position[0])
@@ -590,9 +1213,9 @@ export class WorldStreamVisualizer {
       const groundY = this.sampleTerrainHeight(x, z)
       object.y = (groundY ?? toNumber(position[1])) + 0.9
       object.z = toNumber(position[2])
-      object.scaleX = 0.7
-      object.scaleY = 1.8
-      object.scaleZ = 0.7
+      object.scaleX = 1
+      object.scaleY = 1
+      object.scaleZ = 1
     }
 
     this.prune(this.playerObjects, seen)
@@ -660,6 +1283,11 @@ export class WorldStreamVisualizer {
     this.prune(this.npcObjects, new Set())
     this.prune(this.resourceObjects, new Set())
     this.prune(this.buildingObjects, new Set())
+    this.buildingVisualVersions.clear()
+    this.buildingModelAppliedVersions.clear()
+    this.buildingModelPendingVersions.clear()
+    this.buildingDefByEntityId.clear()
+    this.buildingDefByRequirementKey.clear()
     this.prune(this.projectSiteObjects, new Set())
     this.prune(this.footprintObjects, new Set())
     this.prune(this.playerObjects, new Set())
@@ -700,6 +1328,31 @@ function createTerrainMaterial(biomeId: number): UnLitMaterial {
   return createUnlitMaterial(r, g, b)
 }
 
+function buildMarkerFallbackObject(profile: MarkerModelProfile): Object3D | null {
+  const fallback = new Object3D()
+  const mesh = fallback.addComponent(MeshRenderer)
+  const fallbackShape = profile.fallback
+
+  if (fallbackShape.kind === 'sphere') {
+    const segments = Math.max(6, fallbackShape.segments ?? 14)
+    mesh.geometry = new SphereGeometry(fallbackShape.radius, segments, segments)
+    const [r, g, b] = fallbackShape.color
+    if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
+      fallback.destroy()
+      return null
+    }
+    return fallback
+  }
+
+  mesh.geometry = new BoxGeometry(fallbackShape.width, fallbackShape.height, fallbackShape.depth)
+  const [r, g, b] = fallbackShape.color
+  if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
+    fallback.destroy()
+    return null
+  }
+  return fallback
+}
+
 function setMaterialSafe(mesh: MeshRenderer, material: Material): boolean {
   try {
     mesh.material = material
@@ -708,6 +1361,30 @@ function setMaterialSafe(mesh: MeshRenderer, material: Material): boolean {
     console.warn('[stitch-orillusion-client] material assignment failed in stream visualizer', error)
     return false
   }
+}
+
+function countMeshNodes(root: Object3D): number {
+  let count = 0
+  const stack: Object3D[] = [root]
+
+  while (stack.length > 0) {
+    const node = stack.pop()
+    if (!node) {
+      continue
+    }
+
+    if (node.hasComponent(MeshRenderer)) {
+      count += 1
+    }
+
+    for (const child of node.entityChildren) {
+      if (child instanceof Object3D) {
+        stack.push(child)
+      }
+    }
+  }
+
+  return count
 }
 
 interface TerrainCellSample {
@@ -1029,6 +1706,141 @@ function chunkCoordKey(chunkX: number, chunkY: number): string {
   return `${chunkX}:${chunkY}`
 }
 
+function buildingTierFromState(state: number): number {
+  if (state >= 2) {
+    return 2
+  }
+  if (state >= 1) {
+    return 1
+  }
+  return 0
+}
+
+function getBuildingTierProfile(tier: number): BuildingTierProfile {
+  if (tier <= 0) {
+    return BUILDING_TIER_PROFILES[0]!
+  }
+  if (tier >= BUILDING_TIER_PROFILES.length - 1) {
+    return BUILDING_TIER_PROFILES[BUILDING_TIER_PROFILES.length - 1]!
+  }
+  return BUILDING_TIER_PROFILES[tier]!
+}
+
+function selectBuildingVariant(
+  buildingId: string,
+  buildingDefId: string | null,
+  profile: BuildingTierProfile,
+): BuildingModelVariant {
+  const variants = profile.variants
+  if (variants.length === 0) {
+    return { key: 'fallback', pieces: [] }
+  }
+  const index =
+    buildingDefId
+      ? moduloU64String(buildingDefId, variants.length)
+      : stableIndex(`${buildingId}:variant`, variants.length)
+  return variants[index] ?? variants[0]!
+}
+
+function uniqueVariantCandidates(
+  preferred: BuildingModelVariant,
+  variants: ReadonlyArray<BuildingModelVariant>,
+): BuildingModelVariant[] {
+  const keys = new Set<string>()
+  const ordered: BuildingModelVariant[] = [preferred, ...variants]
+  const result: BuildingModelVariant[] = []
+  for (const entry of ordered) {
+    if (!entry.key || keys.has(entry.key)) {
+      continue
+    }
+    keys.add(entry.key)
+    result.push(entry)
+  }
+  return result
+}
+
+function buildingRequirementKey(
+  requiredItemDefId: string | null,
+  requiredItemQty: number,
+  buildRequired: number,
+): string | null {
+  if (!requiredItemDefId) {
+    return null
+  }
+  return `${requiredItemDefId}:${requiredItemQty}:${buildRequired}`
+}
+
+function toU64String(value: unknown): string | null {
+  if (typeof value === 'bigint') {
+    return value >= 0n ? value.toString() : null
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value < 0) {
+      return null
+    }
+    return Math.trunc(value).toString()
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim().replace(/^0x/i, '')
+    if (!trimmed) {
+      return null
+    }
+    if (/^[0-9]+$/.test(trimmed)) {
+      return trimmed
+    }
+    if (/^[0-9a-fA-F]+$/.test(trimmed)) {
+      try {
+        return BigInt(`0x${trimmed}`).toString()
+      } catch {
+        return null
+      }
+    }
+    return null
+  }
+  if (typeof value === 'object' && value !== null && 'toString' in value) {
+    return toU64String(String(value))
+  }
+  return null
+}
+
+function compareU64String(a: string, b: string): number {
+  try {
+    const aa = BigInt(a)
+    const bb = BigInt(b)
+    if (aa === bb) {
+      return 0
+    }
+    return aa < bb ? -1 : 1
+  } catch {
+    if (a === b) {
+      return 0
+    }
+    return a < b ? -1 : 1
+  }
+}
+
+function moduloU64String(value: string, modulo: number): number {
+  if (modulo <= 0) {
+    return 0
+  }
+  try {
+    const m = BigInt(modulo)
+    return Number(BigInt(value) % m)
+  } catch {
+    return stableIndex(value, modulo)
+  }
+}
+
+function destroyDirectChildren(object: Object3D): void {
+  const children = [...object.entityChildren]
+  for (const child of children) {
+    if (object.hasChild(child)) {
+      object.removeChild(child)
+    }
+    child.destroy()
+  }
+}
+
 function terrainColorByBiome(biomeId: number): readonly [number, number, number] {
   const hue = ((biomeId % 12) + 12) % 12
   const colors: ReadonlyArray<readonly [number, number, number]> = [
@@ -1053,12 +1865,23 @@ function v2ColorByEntityType(entityType: number): readonly [number, number, numb
   return colors[Math.abs(entityType) % colors.length] ?? [0.85, 0.2, 0.2]
 }
 
+function stableIndex(value: string, modulo: number): number {
+  if (modulo <= 0) {
+    return 0
+  }
+  return stableHash32(value) % modulo
+}
+
 function stablePhase(value: string): number {
+  return (stableHash32(value) % 628) / 100
+}
+
+function stableHash32(value: string): number {
   let hash = 0
   for (let i = 0; i < value.length; i += 1) {
     hash = (hash * 31 + value.charCodeAt(i)) | 0
   }
-  return (Math.abs(hash) % 628) / 100
+  return hash >>> 0
 }
 
 function footprintColor(tileType: number, isPerimeter: boolean): readonly [number, number, number] {

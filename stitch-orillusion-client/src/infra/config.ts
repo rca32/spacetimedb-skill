@@ -6,10 +6,10 @@ export interface AppConfig {
   readonly displayName: string
   readonly defaultRegionId: bigint
   readonly defaultDimensionId: number
-  readonly useV2Streams: boolean
   readonly devicePixelRatio: number
   readonly postFxProfile: PostFxProfile
   readonly debugPhysics: boolean
+  readonly debugBuildingModels: boolean
   readonly enableStatsPanel: boolean
   readonly tokenStorageKey: string
 }
@@ -23,10 +23,10 @@ export function loadConfig(): AppConfig {
     displayName: import.meta.env.VITE_DISPLAY_NAME ?? 'OrillusionPlayer',
     defaultRegionId: BigInt(import.meta.env.VITE_REGION_ID ?? '1'),
     defaultDimensionId: Number.parseInt(import.meta.env.VITE_DIMENSION_ID ?? '1', 10),
-    useV2Streams: (import.meta.env.VITE_USE_V2_STREAMS ?? '1') === '1',
     devicePixelRatio: Number.isFinite(dprRaw) && dprRaw > 0 ? dprRaw : 1,
     postFxProfile: (import.meta.env.VITE_POSTFX_PROFILE ?? 'low') as PostFxProfile,
     debugPhysics: (import.meta.env.VITE_DEBUG_PHYSICS ?? '0') === '1',
+    debugBuildingModels: (import.meta.env.VITE_DEBUG_BUILDING_MODELS ?? '0') === '1',
     enableStatsPanel: (import.meta.env.VITE_ENABLE_STATS ?? '1') === '1',
     tokenStorageKey: import.meta.env.VITE_TOKEN_STORAGE_KEY ?? 'stitch-orillusion-token',
   }

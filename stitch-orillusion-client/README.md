@@ -19,6 +19,6 @@ bun run build
 ## 환경변수
 - `VITE_SPACETIME_URI` (default: `ws://127.0.0.1:3000`)
 - `VITE_SPACETIME_MODULE` (default: `stitch-server`)
-- `VITE_USE_V2_STREAMS` (`1`/`0`, default: `1`)
 - `VITE_POSTFX_PROFILE` (`low|medium|high`)
 - `VITE_DEVICE_PIXEL_RATIO` (default: `1`)
+- `VITE_DEBUG_BUILDING_MODELS` (`1`일 때 빌딩 모델 로드/부착 디버그 로그 출력)

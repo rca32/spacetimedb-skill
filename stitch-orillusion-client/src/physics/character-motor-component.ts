@@ -17,17 +17,35 @@ export class CharacterMotorComponent extends ComponentBase {
   private viewYawDegrees = 180
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
+    if (isEditableTarget(event.target)) {
+      return
+    }
+
+    if (isMovementKeyEvent(event)) {
+      event.preventDefault()
+    }
+
     this.keys.add(event.code)
     this.keys.add(normalizeKey(event.key))
   }
 
   private readonly onKeyUp = (event: KeyboardEvent) => {
+    if (isMovementKeyEvent(event)) {
+      event.preventDefault()
+    }
+
     this.keys.delete(event.code)
     this.keys.delete(normalizeKey(event.key))
   }
 
   private readonly onWindowBlur = () => {
     this.keys.clear()
+  }
+
+  private readonly onVisibilityChange = () => {
+    if (document.visibilityState !== 'visible') {
+      this.keys.clear()
+    }
   }
 
   public start(): void {
@@ -45,9 +63,10 @@ export class CharacterMotorComponent extends ComponentBase {
       console.warn('[stitch-orillusion-client] character motor running without rigidbody', error)
     }
 
-    window.addEventListener('keydown', this.onKeyDown)
-    window.addEventListener('keyup', this.onKeyUp)
+    document.addEventListener('keydown', this.onKeyDown, true)
+    document.addEventListener('keyup', this.onKeyUp, true)
     window.addEventListener('blur', this.onWindowBlur)
+    document.addEventListener('visibilitychange', this.onVisibilityChange)
   }
 
   public onUpdate(): void {
@@ -95,8 +114,9 @@ export class CharacterMotorComponent extends ComponentBase {
     const yaw = (this.viewYawDegrees * Math.PI) / 180
     const forwardX = -Math.sin(yaw)
     const forwardZ = -Math.cos(yaw)
-    const rightX = forwardZ
-    const rightZ = -forwardX
+    // Y-up plane right vector = (-forward.z, forward.x)
+    const rightX = -forwardZ
+    const rightZ = forwardX
 
     const worldX = rightX * local.inputX + forwardX * local.inputZ
     const worldZ = rightZ * local.inputX + forwardZ * local.inputZ
@@ -126,9 +146,10 @@ export class CharacterMotorComponent extends ComponentBase {
   }
 
   public destroy(force?: boolean): void {
-    window.removeEventListener('keydown', this.onKeyDown)
-    window.removeEventListener('keyup', this.onKeyUp)
+    document.removeEventListener('keydown', this.onKeyDown, true)
+    document.removeEventListener('keyup', this.onKeyUp, true)
     window.removeEventListener('blur', this.onWindowBlur)
+    document.removeEventListener('visibilitychange', this.onVisibilityChange)
     super.destroy(force)
   }
 
@@ -147,4 +168,45 @@ function normalizeKey(raw: string): string {
     return raw
   }
   return raw.length === 1 ? raw.toLowerCase() : raw
+}
+
+function isMovementKeyEvent(event: KeyboardEvent): boolean {
+  switch (event.code) {
+    case 'KeyW':
+    case 'KeyA':
+    case 'KeyS':
+    case 'KeyD':
+    case 'ArrowUp':
+    case 'ArrowDown':
+    case 'ArrowLeft':
+    case 'ArrowRight':
+    case 'ShiftLeft':
+    case 'ShiftRight':
+    case 'Space':
+      return true
+    default:
+      break
+  }
+
+  const key = normalizeKey(event.key)
+  return (
+    key === 'w' ||
+    key === 'a' ||
+    key === 's' ||
+    key === 'd' ||
+    key === 'arrowup' ||
+    key === 'arrowdown' ||
+    key === 'arrowleft' ||
+    key === 'arrowright' ||
+    key === 'shift' ||
+    key === ' '
+  )
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false
+  }
+
+  return target.closest('input, textarea, select, [contenteditable], [role="textbox"]') !== null
 }

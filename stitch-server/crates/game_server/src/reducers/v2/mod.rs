@@ -12,6 +12,7 @@ use crate::tables::{
 const PHYSICS_DT_SECONDS: f32 = 1.0 / 60.0;
 const MAX_REQUESTED_SPEED: f32 = 14.0;
 const MAX_DISTANCE_PER_TICK: f32 = 0.5;
+const MAX_FRAME_STEP: u64 = 12;
 const PLAYER_HALF_EXTENT: f32 = 0.45;
 const CHUNK_SIZE_METERS: f32 = 32.0;
 
@@ -111,13 +112,20 @@ pub fn submit_motion_intent(
         });
 
     let current_position = vec3_or_zero(&current.position);
+    // The client may send intents at a lower cadence than render FPS.
+    // Integrate using frame delta so server motion speed matches client intent speed.
+    let frame_step = frame_no
+        .saturating_sub(current.last_frame_no)
+        .clamp(1, MAX_FRAME_STEP);
+    let step_dt = PHYSICS_DT_SECONDS * (frame_step as f32);
+
     let (dir_x, dir_z) = normalize_2d(input_x, input_z);
     let velocity_x = dir_x * speed;
     let velocity_z = dir_z * speed;
 
     let mut next_position = current_position;
-    next_position[0] += velocity_x * PHYSICS_DT_SECONDS;
-    next_position[2] += velocity_z * PHYSICS_DT_SECONDS;
+    next_position[0] += velocity_x * step_dt;
+    next_position[2] += velocity_z * step_dt;
 
     let distance = ((next_position[0] - current_position[0]).powi(2)
         + (next_position[2] - current_position[2]).powi(2))
@@ -157,7 +165,8 @@ pub fn submit_motion_intent(
     );
     upsert_aoi_player(ctx, ctx.sender, region_id, dimension_id, next_position);
 
-    if distance > MAX_DISTANCE_PER_TICK {
+    let max_distance_for_step = MAX_DISTANCE_PER_TICK * (frame_step as f32);
+    if distance > max_distance_for_step {
         let correction_id = format!("{}:{}", intent_id, frame_no);
         ctx.db.server_correction_v2().insert(ServerCorrectionV2 {
             correction_id,

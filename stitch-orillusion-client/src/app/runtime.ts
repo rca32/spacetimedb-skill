@@ -4,7 +4,6 @@ import {
   MeshRenderer,
   Object3D,
   PointerEvent3D,
-  Time,
   UnLitMaterial,
 } from '@orillusion/core'
 import { CameraAimComponent } from '../camera/camera-aim-component'
@@ -36,7 +35,6 @@ const DEFAULT_BUILDING_DEF_ID = 1n
 export class OrillusionClientRuntime {
   private readonly bus = new FxEventBus()
   private readonly net: NetRuntime
-  private useV2Streams: boolean
   private activeRegionId: bigint
   private activeDimensionId: number
   private activeChunkSize: number
@@ -59,9 +57,6 @@ export class OrillusionClientRuntime {
   private readonly seenCombatHitIds = new Set<string>()
   private readonly seenCorrectionIds = new Set<string>()
   private lastAppliedAuthoritativeFrameNo = 0
-  private lastMoveDispatchOk = true
-  private lastV2DispatchOk = false
-  private lastPlaceDispatchOk = true
 
   private buildModeEnabled = true
   private selectedBuildingDefId = DEFAULT_BUILDING_DEF_ID
@@ -78,11 +73,17 @@ export class OrillusionClientRuntime {
   private buildPreviewMaterial: UnLitMaterial | null = null
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
+    if (isEditableTarget(event.target)) {
+      return
+    }
+
+    const key = normalizeKey(event.key)
     if (event.repeat) {
       return
     }
 
-    if (event.key === 'b' || event.key === 'B') {
+    if (key === 'b') {
+      event.preventDefault()
       this.buildModeEnabled = !this.buildModeEnabled
       if (!this.buildModeEnabled) {
         this.pendingPreviewRequestId = null
@@ -94,19 +95,22 @@ export class OrillusionClientRuntime {
       return
     }
 
-    if (event.key === 'q' || event.key === 'Q') {
+    if (key === 'q') {
+      event.preventDefault()
       this.buildFacing = (this.buildFacing + 5) % 6
       this.retryLatestPreview()
       return
     }
 
-    if (event.key === 'e' || event.key === 'E') {
+    if (key === 'e') {
+      event.preventDefault()
       this.buildFacing = (this.buildFacing + 1) % 6
       this.retryLatestPreview()
       return
     }
 
-    if (event.key === 'Enter') {
+    if (key === 'enter') {
+      event.preventDefault()
       this.tryPlaceFromPreview()
     }
   }
@@ -134,7 +138,6 @@ export class OrillusionClientRuntime {
     tokenStore: TokenStore,
   ) {
     this.net = new NetRuntime(config, logger, tokenStore)
-    this.useV2Streams = config.useV2Streams
     this.activeRegionId = config.defaultRegionId
     this.activeDimensionId = config.defaultDimensionId
     this.activeChunkSize = DEFAULT_CHUNK_SIZE
@@ -165,19 +168,21 @@ export class OrillusionClientRuntime {
     this.postFx.applyProfile(this.config.postFxProfile)
 
     this.particles = new ParticleSystemController(this.engine.scene, this.bus)
-    this.streamVisualizer = new WorldStreamVisualizer(this.engine.scene)
+    this.streamVisualizer = new WorldStreamVisualizer(this.engine.scene, {
+      debugBuildingModels: this.config.debugBuildingModels,
+    })
     this.streamVisualizer.setChunkWorldSize(this.activeChunkSize)
     this.streamVisualizer.setShowFootprintOverlay(this.buildModeEnabled)
     this.installBuildPreviewGhost()
 
     await this.net.start()
     this.installBaselineSubscriptions()
-    window.addEventListener('keydown', this.onKeyDown)
+    document.addEventListener('keydown', this.onKeyDown, true)
     this.engine.view.pickFire.addEventListener(PointerEvent3D.PICK_CLICK, this.onPickClick, this)
   }
 
   stop(): void {
-    window.removeEventListener('keydown', this.onKeyDown)
+    document.removeEventListener('keydown', this.onKeyDown, true)
     this.engine?.view.pickFire.removeEventListener(PointerEvent3D.PICK_CLICK, this.onPickClick, this)
     this.buildPreviewGhost?.destroy()
     this.buildPreviewGhost = null
@@ -189,8 +194,8 @@ export class OrillusionClientRuntime {
   }
 
   private tick(): void {
+    this.frameNo += 1
     this.net.poll(this.logger)
-    this.maybeDowngradeToLegacy()
     this.ensureIdentityBootstrap()
     this.syncSelectedBuildingDef()
     this.syncBuildPreviewFeedback()
@@ -218,45 +223,27 @@ export class OrillusionClientRuntime {
       return
     }
 
-    this.frameNo += 1
     const position = motor.readPosition()
 
     const intent = motor.readWorldIntentSnapshot()
-
-    const moveRequestId = this.makeShortRequestId('mv', this.frameNo)
-    const moveOk = this.net.dispatchReducer('move_to', {
-      requestId: moveRequestId,
+    this.net.dispatchReducer('sync_client_frame', {
+      frameNo: BigInt(this.frameNo),
       regionId: this.activeRegionId,
-      clientTsMs: BigInt(Date.now()),
-      x: position.x,
-      y: position.y,
-      z: position.z,
+      dimensionId: this.activeDimensionId,
+      clientTimeMs: BigInt(Date.now()),
     })
-    this.lastMoveDispatchOk = moveOk
 
-    if (this.useV2Streams) {
-      const frameOk = this.net.dispatchReducer('sync_client_frame', {
-        frameNo: BigInt(this.frameNo),
-        regionId: this.activeRegionId,
-        dimensionId: this.activeDimensionId,
-        clientTimeMs: BigInt(Date.now()),
-      })
-
-      const motionIntentId = this.makeShortRequestId('mi', this.frameNo)
-      const intentOk = this.net.dispatchReducer('submit_motion_intent', {
-        intentId: motionIntentId,
-        regionId: this.activeRegionId,
-        dimensionId: this.activeDimensionId,
-        frameNo: BigInt(this.frameNo),
-        inputX: intent.inputX,
-        inputZ: intent.inputZ,
-        requestedSpeed: intent.requestedSpeed,
-        jump: intent.jump,
-      })
-      this.lastV2DispatchOk = frameOk && intentOk
-    } else {
-      this.lastV2DispatchOk = false
-    }
+    const motionIntentId = this.makeShortRequestId('mi', this.frameNo)
+    this.net.dispatchReducer('submit_motion_intent', {
+      intentId: motionIntentId,
+      regionId: this.activeRegionId,
+      dimensionId: this.activeDimensionId,
+      frameNo: BigInt(this.frameNo),
+      inputX: intent.inputX,
+      inputZ: intent.inputZ,
+      requestedSpeed: intent.requestedSpeed,
+      jump: intent.jump,
+    })
 
     if (Math.abs(intent.inputX) + Math.abs(intent.inputZ) > 0) {
       this.bus.emit({
@@ -290,7 +277,6 @@ export class OrillusionClientRuntime {
         identityHex: this.net.getIdentityHex(),
         includeFootprintOverlay: this.buildModeEnabled,
       },
-      this.useV2Streams,
     )
 
     const hash = hashQueries(queries)
@@ -454,7 +440,6 @@ export class OrillusionClientRuntime {
     const ok = this.net.dispatchReducer('building_place_from_preview', {
       requestId: this.lastPreviewRequestId,
     })
-    this.lastPlaceDispatchOk = ok
     if (!ok) {
       return
     }
@@ -498,23 +483,11 @@ export class OrillusionClientRuntime {
       return
     }
 
-    if (this.useV2Streams) {
-      this.net.setSubscription(
-        SESSION_SUBSCRIPTION_KEY,
-        [
-          `SELECT * FROM physics_state_v2 WHERE entity_id = 0x${identityHex}`,
-          `SELECT * FROM server_correction_v2 WHERE identity = 0x${identityHex} AND region_id = ${this.activeRegionId.toString()} AND dimension_id = ${this.activeDimensionId}`,
-          `SELECT * FROM player_session_view WHERE identity = 0x${identityHex}`,
-          `SELECT * FROM building_preview_feedback_view WHERE identity = 0x${identityHex}`,
-        ],
-        this.logger,
-      )
-      return
-    }
-
     this.net.setSubscription(
       SESSION_SUBSCRIPTION_KEY,
       [
+        `SELECT * FROM physics_state_v2 WHERE entity_id = 0x${identityHex}`,
+        `SELECT * FROM server_correction_v2 WHERE identity = 0x${identityHex} AND region_id = ${this.activeRegionId.toString()} AND dimension_id = ${this.activeDimensionId}`,
         `SELECT * FROM player_session_view WHERE identity = 0x${identityHex}`,
         `SELECT * FROM building_preview_feedback_view WHERE identity = 0x${identityHex}`,
       ],
@@ -638,7 +611,7 @@ export class OrillusionClientRuntime {
     const connection = this.net.getConnection()
     const motor = this.motor
     const identityHex = this.net.getIdentityHex()
-    if (!this.useV2Streams || !connection?.isActive || !motor || !identityHex) {
+    if (!connection?.isActive || !motor || !identityHex) {
       return
     }
 
@@ -716,57 +689,28 @@ export class OrillusionClientRuntime {
     const connection = this.net.getConnection()
     const connected = Boolean(connection?.isActive)
     const position = this.motor?.readPosition()
-    const intent = this.motor?.readIntentSnapshot()
-
-    const fps = Time.frame
     const streamStats = this.streamVisualizer?.getStats()
     const projectLabels = this.streamVisualizer?.getProjectLabels(4) ?? []
     this.hudEl.innerHTML = [
       '<strong>stitch-orillusion-client</strong>',
       `<div>connection: ${connected ? 'connected' : 'disconnected'}</div>`,
       `<div>identity: ${identity}</div>`,
-      `<div>frame: ${this.frameNo}</div>`,
-      `<div>render-frame: ${fps}</div>`,
       `<div>profile: ${this.config.postFxProfile}</div>`,
-      `<div>streams: ${this.useV2Streams ? 'v2' : 'legacy'} (pref=${this.config.useV2Streams ? 'v2' : 'legacy'})</div>`,
+      '<div>streams: v2</div>',
       `<div>region/dimension: ${this.activeRegionId.toString()}/${this.activeDimensionId}</div>`,
       `<div>chunk-size: ${this.activeChunkSize}</div>`,
       `<div>terrain/npc/res/bld/prj/fpt/player/v2: ${streamStats ? `${streamStats.terrain}/${streamStats.npc}/${streamStats.resource}/${streamStats.building}/${streamStats.project}/${streamStats.footprint}/${streamStats.players}/${streamStats.v2}` : '-'}</div>`,
       `<div>project labels: ${projectLabels.length > 0 ? projectLabels.join(' | ') : '-'}</div>`,
       `<div>terrain detail/fallback: ${streamStats ? `${streamStats.terrainDetailed}/${streamStats.terrainFallback}` : '-'}</div>`,
-      `<div>dispatch move/v2/place: ${this.lastMoveDispatchOk ? 'ok' : 'fail'}/${this.lastV2DispatchOk ? 'ok' : '-'}/${this.lastPlaceDispatchOk ? 'ok' : 'fail'}</div>`,
-      `<div>authoritative frame: ${this.lastAppliedAuthoritativeFrameNo}</div>`,
-      `<div>pending corrections: ${this.seenCorrectionIds.size}</div>`,
       `<div>build mode: ${this.buildModeEnabled ? 'on' : 'off'} (B toggle)</div>`,
       `<div>build def/facing: ${this.selectedBuildingDefId.toString()}/${this.buildFacing}</div>`,
       `<div>build preview: ${this.previewHexX !== null && this.previewHexZ !== null ? `${this.previewHexX},${this.previewHexZ}` : '-'}</div>`,
       `<div>build valid/reason: ${this.previewIsValid ? 'valid' : 'invalid'} / ${this.previewReason}</div>`,
       `<div>build checked_at: ${this.previewCheckedAt}</div>`,
-      `<div>input xz: ${intent ? `${intent.inputX}/${intent.inputZ}` : '-'}</div>`,
       `<div>pos: ${position ? `${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}` : '-'}</div>`,
       '<div>move: WASD / run: Shift / look: LMB,RMB drag / zoom: wheel</div>',
       '<div>build: click world -> preview / Q,E rotate / Enter place</div>',
     ].join('')
-  }
-
-  private maybeDowngradeToLegacy(): void {
-    if (!this.useV2Streams) {
-      return
-    }
-
-    const connection = this.net.getConnection()
-    if (!connection?.isActive) {
-      return
-    }
-
-    const db = connection.db as Record<string, unknown>
-    if ('physicsStateV2' in db && 'aoiStreamV2' in db && 'serverCorrectionV2' in db) {
-      return
-    }
-
-    this.logger.warn('v2 stream tables unavailable in published module, fallback to legacy streams')
-    this.useV2Streams = false
-    this.resetStreamSubscriptions()
   }
 
   private syncPlayerFacing(): void {
@@ -850,6 +794,17 @@ function createHud(root: HTMLElement): HTMLDivElement {
   hud.className = 'hud'
   root.appendChild(hud)
   return hud
+}
+
+function normalizeKey(raw: string): string {
+  return raw.toLowerCase()
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false
+  }
+  return target.closest('input, textarea, select, [contenteditable], [role="textbox"]') !== null
 }
 
 function toIdentityHex(value: unknown): string | null {
