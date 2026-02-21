@@ -10,7 +10,7 @@
         "@orillusion/particle": "0.1.6",
         "@orillusion/physics": "0.3.4",
         "@orillusion/stats": "0.2.6",
-        "spacetimedb": "^1.4.0",
+        "spacetimedb": "1.11.3",
       },
       "devDependencies": {
         "typescript": "^5.7.2",
@@ -157,13 +157,11 @@
 
     "prettier": ["prettier@3.8.1", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-UOnG6LftzbdaHZcKoPFtOcCKztrQ57WkHDeRD9t/PTQtmT0NHSeWWepj6pS0z/N7+08BHFDQVUrfmfMRcZwbMg=="],
 
-    "pure-rand": ["pure-rand@7.0.1", "", {}, "sha512-oTUZM/NAZS8p7ANR3SHh30kXB+zK2r2BPcEn/awJIbOvq82WoMN4p62AWWp3Hhw50G0xMsw1mhIBLqHw64EcNQ=="],
-
     "rollup": ["rollup@4.57.1", "", { "dependencies": { "@types/estree": "1.0.8" }, "optionalDependencies": { "@rollup/rollup-android-arm-eabi": "4.57.1", "@rollup/rollup-android-arm64": "4.57.1", "@rollup/rollup-darwin-arm64": "4.57.1", "@rollup/rollup-darwin-x64": "4.57.1", "@rollup/rollup-freebsd-arm64": "4.57.1", "@rollup/rollup-freebsd-x64": "4.57.1", "@rollup/rollup-linux-arm-gnueabihf": "4.57.1", "@rollup/rollup-linux-arm-musleabihf": "4.57.1", "@rollup/rollup-linux-arm64-gnu": "4.57.1", "@rollup/rollup-linux-arm64-musl": "4.57.1", "@rollup/rollup-linux-loong64-gnu": "4.57.1", "@rollup/rollup-linux-loong64-musl": "4.57.1", "@rollup/rollup-linux-ppc64-gnu": "4.57.1", "@rollup/rollup-linux-ppc64-musl": "4.57.1", "@rollup/rollup-linux-riscv64-gnu": "4.57.1", "@rollup/rollup-linux-riscv64-musl": "4.57.1", "@rollup/rollup-linux-s390x-gnu": "4.57.1", "@rollup/rollup-linux-x64-gnu": "4.57.1", "@rollup/rollup-linux-x64-musl": "4.57.1", "@rollup/rollup-openbsd-x64": "4.57.1", "@rollup/rollup-openharmony-arm64": "4.57.1", "@rollup/rollup-win32-arm64-msvc": "4.57.1", "@rollup/rollup-win32-ia32-msvc": "4.57.1", "@rollup/rollup-win32-x64-gnu": "4.57.1", "@rollup/rollup-win32-x64-msvc": "4.57.1", "fsevents": "~2.3.2" }, "bin": { "rollup": "dist/bin/rollup" } }, "sha512-oQL6lgK3e2QZeQ7gcgIkS2YZPg5slw37hYufJ3edKlfQSGGm8ICoxswK15ntSzF/a8+h7ekRy7k7oWc3BQ7y8A=="],
 
     "source-map-js": ["source-map-js@1.2.1", "", {}, "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA=="],
 
-    "spacetimedb": ["spacetimedb@1.12.0", "", { "dependencies": { "base64-js": "^1.5.1", "fast-text-encoding": "^1.0.0", "headers-polyfill": "^4.0.3", "prettier": "^3.3.3", "pure-rand": "^7.0.1", "statuses": "^2.0.2", "url-polyfill": "^1.1.14" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0-0 || ^19.0.0", "svelte": "^4.0.0 || ^5.0.0", "undici": "^6.19.2", "vue": "^3.3.0" }, "optionalPeers": ["react", "svelte", "undici", "vue"] }, "sha512-I0pK7Ra6jIrfgqQO2K+W1GBC4m7ICWzUp6pvhz1/3ozE19xlLerQOXkJtsfuwjRZHEKBmBl18EX01FaJBVdPyg=="],
+    "spacetimedb": ["spacetimedb@1.11.3", "", { "dependencies": { "base64-js": "^1.5.1", "fast-text-encoding": "^1.0.0", "headers-polyfill": "^4.0.3", "prettier": "^3.3.3", "statuses": "^2.0.2", "url-polyfill": "^1.1.14" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0-0 || ^19.0.0", "undici": "^6.19.2" }, "optionalPeers": ["react", "undici"] }, "sha512-NoWufoZFHrTf6FXTwpyGHklCawni8D20EVx5JDAyObQe+aq1jjrI+8Yz/cQBFJULk7X+jCsXa5XDj3Xc7AVZxg=="],
 
     "statuses": ["statuses@2.0.2", "", {}, "sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw=="],
 

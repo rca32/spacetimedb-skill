@@ -2,10 +2,12 @@
 
 ## 빠른 앵커
 - [SpacetimeDB 작업 규칙](#spacetimedb-작업-규칙)
+- [SpacetimeDB 디코딩 RangeError 대응](#spacetimedb-디코딩-rangeerror-대응)
 - [WSL 브라우저 자동화 규칙](#wsl-브라우저-자동화-규칙)
 - [stitch-server Workflow Cheat Sheet](#stitch-server-workflow-cheat-sheet)
 - [stitch-web-client 기본 안내](#stitch-web-client-기본-안내)
 - [stitch-orillusion-client 기본 안내](#stitch-orillusion-client-기본-안내)
+- [orillusion samples asset 규칙](#orillusion-samples-asset-규칙)
 - [데이터 초기화 및 기본값 로딩 규칙](#데이터-초기화-및-기본값-로딩-규칙)
 - [assetdirectory 안내](#assetdirectory-안내)
 
@@ -24,6 +26,23 @@
 
 ## SpacetimeDB 작업 규칙
 - SpacetimeDB 관련 작업은 반드시 `.opencode/skills/spacetimedb-korean/SKILL.md` 스킬을 참조한다.
+
+## SpacetimeDB 디코딩 RangeError 대응
+- 증상 예시: `binary_reader.ts` / `algebraic_type.ts`에서 `RangeError: Tried to read ... byte(s)`가 반복 발생.
+- 우선 의심: **클라이언트 SDK/바인딩과 실행 DB 스키마 불일치** 또는 `byteArray(Vec<u8>)` 포함 테이블 구독.
+- 1차 분리: AOI/세션 구독을 최소화하고, 테이블을 반씩 다시 켜서 문제 테이블을 고정한다.
+- 2차 정렬:
+  - 클라이언트 `spacetimedb` npm 패키지 버전을 서버 CLI 계열과 맞춘다.
+  - `cd stitch-orillusion-client && bun run spacetime:generate`
+- 3차 복구(지속 재발 시):
+```bash
+cd /home/rca32/workspaces/spacetimedb-skill/stitch-server/crates/game_server
+spacetime publish --delete-data=always --yes stitch-server
+spacetime call stitch-server seed_data
+spacetime call stitch-server import_csv_data
+spacetime call stitch-server start_world_agents
+```
+- 4차 확인: 클라이언트 dev 서버 재시작 + 브라우저 hard reload 후, 제외했던 구독을 순차 복원한다.
 
 ## WSL 브라우저 자동화 규칙
 - WSL에서 OAuth/CAPTCHA/2FA/다운로드 제한으로 자동화가 막히면 기본 스킬로 `.agents/skills/wsl-human-cdp-download/SKILL.md`를 사용한다.
@@ -88,6 +107,12 @@ bun run build
   - `VITE_POSTFX_PROFILE` (`low|medium|high`)
   - `VITE_DEVICE_PIXEL_RATIO` (기본: `1`)
   - `VITE_DEBUG_BUILDING_MODELS` (`1`일 때 빌딩 모델/부착 디버그 로그 출력)
+
+## orillusion samples asset 규칙
+- `orillusion/samples`에서 사용하는 기본 에셋은 `orillusion-assets/`를 기준으로 한다.
+- `stitch-orillusion-client`에서 샘플 에셋이 필요하면 `orillusion-assets/`에서 필요한 파일만 복사해 사용한다.
+- 복사 대상 경로는 현재 클라이언트의 Vite `publicDir` 하위(예: `assetdirectory/pack/kenney/building-kit/Models/GLB format/...`)로 맞춘다.
+- 예시: `orillusion-assets/sky/LDR_sky.jpg` → `assetdirectory/pack/kenney/building-kit/Models/GLB format/sky/LDR_sky.jpg`
 
 ## 데이터 초기화 및 기본값 로딩 규칙
 - 개발 중 데이터 삭제(`--delete-data`)는 필요 시 언제든 수행할 수 있다.

@@ -17,7 +17,7 @@
     "@orillusion/particle": "0.1.6",
     "@orillusion/physics": "0.3.4",
     "@orillusion/stats": "0.2.6",
-    "spacetimedb": "^1.4.0"
+    "spacetimedb": "1.11.3"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

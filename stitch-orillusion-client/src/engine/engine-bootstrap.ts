@@ -1,11 +1,11 @@
 import {
-  AtmosphericComponent,
   Camera3D,
   DirectLight,
   Engine3D,
   KelvinUtil,
   Object3D,
   Scene3D,
+  SkyRenderer,
   View3D,
 } from '@orillusion/core'
 import { Physics } from '@orillusion/physics'
@@ -55,9 +55,10 @@ export async function bootstrapEngine(
   })
 
   const scene = new Scene3D()
-  const sky = scene.addComponent(AtmosphericComponent)
-  sky.sunY = 0.58
-  sky.exposure = 1.2
+  const sky = scene.getOrAddComponent(SkyRenderer)
+  const skyMap = await Engine3D.res.loadLDRTextureCube('sky/LDR_sky.jpg')
+  sky.map = skyMap
+  scene.envMap = skyMap
 
   if (config.enableStatsPanel) {
     scene.addComponent(Stats)
@@ -72,7 +73,6 @@ export async function bootstrapEngine(
   light.intensity = 3
   light.indirect = 0.32
   scene.addChild(lightObj)
-  sky.relativeTransform = lightObj.transform
 
   const cameraObject = new Object3D()
   const camera = cameraObject.addComponent(Camera3D)

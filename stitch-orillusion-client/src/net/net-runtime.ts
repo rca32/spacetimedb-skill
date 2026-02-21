@@ -5,6 +5,11 @@ import { createNetConnectionRuntime } from './connection'
 import { NetEventQueue } from './events'
 import { SubscriptionRegistry } from './subscriptions'
 
+const QUIET_REDUCER_LOGS = new Set([
+  'sync_client_frame',
+  'submit_motion_intent',
+])
+
 export class NetRuntime {
   private readonly events = new NetEventQueue()
   private readonly subscriptions = new SubscriptionRegistry()
@@ -67,7 +72,9 @@ export class NetRuntime {
         }
 
         case 'reducer-dispatched': {
-          logger.debug('reducer dispatched', { reducer: event.reducer })
+          if (!QUIET_REDUCER_LOGS.has(event.reducer)) {
+            logger.debug('reducer dispatched', { reducer: event.reducer })
+          }
           break
         }
 

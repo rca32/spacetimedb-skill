@@ -1,0 +1,30 @@
+사용스킬[$orillusion-best-practices,$spacetimedb-korean]
+
+[최근작업]
+prompts/20260220_worklog.md
+stitch-orillusion-client
+
+
+아래 샘플과 asset을 사용해서 player를 교체 하자 animation도 추가
+orillusion/samples/animation/Sample_Skeleton3.ts
+orillusion-assets/gltfs/glb/Soldier_draco.glb
+
+
+
+
+
+prompts/20260220_plan.md
+
+이제 까지 작업 내용 저장
+prompts/20260221_worklog.md
+
+사용스킬[$orillusion-best-practices,$spacetimedb-korean]
+[최근 작업 내용]
+prompts/20260221_plan.md
+
+최근 작업한 player 가 wasd로 움직이면 코스트 형상이 나타는데. 무엇이 문제가 될수 있는지 조사
+
+
+orillusion/samples/octree
+orillusion/samples 에대 한 asset이  orillusion-assets  있고
+필요하면 copy해서 쓰면 된다고  AGENTS.md 명시 해죠

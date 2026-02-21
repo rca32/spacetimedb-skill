@@ -1,5 +1,10 @@
 # Orillusion Porting 작업 로그 (2026-02-19)
 
+## 후속 문서 안내 (2026-02-21)
+- 본 문서는 2026-02-19 기준 로그이다.
+- 최신 반영(고스트 원인/해결, heightfield 기반 이동, 서버 지형 검증)은
+  `CLIENTDESIGN/13-implementation-log-2026-02-21.md`를 우선 참조한다.
+
 ## 범위
 - 대상 프로젝트:
   - `stitch-orillusion-client`

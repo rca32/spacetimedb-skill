@@ -523,11 +523,9 @@ export class OrillusionClientRuntime {
     if (!identityHex) {
       return
     }
-
     this.net.setSubscription(
       SESSION_SUBSCRIPTION_KEY,
       [
-        `SELECT * FROM physics_state_v2 WHERE entity_id = 0x${identityHex}`,
         `SELECT * FROM server_correction_v2 WHERE identity = 0x${identityHex} AND region_id = ${this.activeRegionId.toString()} AND dimension_id = ${this.activeDimensionId}`,
         `SELECT * FROM player_session_view WHERE identity = 0x${identityHex}`,
         `SELECT * FROM building_preview_feedback_view WHERE identity = 0x${identityHex}`,
