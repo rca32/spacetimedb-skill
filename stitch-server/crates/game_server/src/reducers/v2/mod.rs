@@ -1,5 +1,6 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
+use crate::services::nav::build_nav_grid;
 use crate::tables::v2::{
     aoi_stream_v2, client_frame_v2, collision_proxy_v2, combat_hit_v2, combat_intent_v2,
     motion_intent_v2, physics_state_v2, server_correction_v2,
@@ -15,6 +16,9 @@ const MAX_DISTANCE_PER_TICK: f32 = 0.5;
 const MAX_FRAME_STEP: u64 = 12;
 const PLAYER_HALF_EXTENT: f32 = 0.45;
 const CHUNK_SIZE_METERS: f32 = 32.0;
+const PLAYER_FEET_OFFSET_Y: f32 = 0.9;
+const KINEMATIC_MAX_STEP_HEIGHT_METERS: f32 = 0.45;
+const KINEMATIC_MAX_SLOPE_DEGREES: f32 = 42.0;
 
 #[spacetimedb::reducer]
 pub fn sync_client_frame(
@@ -123,9 +127,31 @@ pub fn submit_motion_intent(
     let velocity_x = dir_x * speed;
     let velocity_z = dir_z * speed;
 
-    let mut next_position = current_position;
-    next_position[0] += velocity_x * step_dt;
-    next_position[2] += velocity_z * step_dt;
+    let mut proposed_position = current_position;
+    proposed_position[0] += velocity_x * step_dt;
+    proposed_position[2] += velocity_z * step_dt;
+
+    let nav = build_nav_grid(ctx, region_id, dimension_id);
+    let mut next_position = proposed_position;
+    let mut next_velocity = [velocity_x, 0.0, velocity_z];
+    let mut correction_reason: Option<&'static str> = None;
+
+    match nav.validate_kinematic_transition_positions(
+        dimension_id,
+        &current_position,
+        &proposed_position,
+        KINEMATIC_MAX_STEP_HEIGHT_METERS,
+        KINEMATIC_MAX_SLOPE_DEGREES,
+    ) {
+        Ok(ground_height) => {
+            next_position[1] = ground_height + PLAYER_FEET_OFFSET_Y;
+        }
+        Err(reason) => {
+            correction_reason = Some(reason);
+            next_position = current_position;
+            next_velocity = [0.0, 0.0, 0.0];
+        }
+    }
 
     let distance = ((next_position[0] - current_position[0]).powi(2)
         + (next_position[2] - current_position[2]).powi(2))
@@ -136,8 +162,8 @@ pub fn submit_motion_intent(
         region_id,
         dimension_id,
         position: next_position.to_vec(),
-        velocity: vec![velocity_x, 0.0, velocity_z],
-        grounded: !jump,
+        velocity: next_velocity.to_vec(),
+        grounded: correction_reason.is_some() || !jump,
         last_intent_id: intent_id.clone(),
         last_frame_no: frame_no,
         updated_at: ctx.timestamp,
@@ -165,22 +191,34 @@ pub fn submit_motion_intent(
     );
     upsert_aoi_player(ctx, ctx.sender, region_id, dimension_id, next_position);
 
-    let max_distance_for_step = MAX_DISTANCE_PER_TICK * (frame_step as f32);
-    if distance > max_distance_for_step {
-        let correction_id = format!("{}:{}", intent_id, frame_no);
-        ctx.db.server_correction_v2().insert(ServerCorrectionV2 {
+    if let Some(reason) = correction_reason {
+        let correction_id = format!("{}:{}:{reason}", intent_id, frame_no);
+        upsert_server_correction(
+            ctx,
             correction_id,
-            identity: ctx.sender,
+            ctx.sender,
             region_id,
             dimension_id,
-            reason: "speed_audit_soft".to_string(),
-            authoritative_position: next_position.to_vec(),
-            authoritative_velocity: vec![velocity_x, 0.0, velocity_z],
-            created_at: ctx.timestamp,
-            acknowledged: false,
-            acked_client_frame_no: 0,
-            acked_at: ctx.timestamp,
-        });
+            reason,
+            next_position,
+            next_velocity,
+        );
+        return Ok(());
+    }
+
+    let max_distance_for_step = MAX_DISTANCE_PER_TICK * (frame_step as f32);
+    if distance > max_distance_for_step {
+        let correction_id = format!("{}:{}:speed", intent_id, frame_no);
+        upsert_server_correction(
+            ctx,
+            correction_id,
+            ctx.sender,
+            region_id,
+            dimension_id,
+            "speed_audit_soft",
+            next_position,
+            next_velocity,
+        );
     }
 
     Ok(())
@@ -426,6 +464,43 @@ fn upsert_aoi_player(
         ctx.db.aoi_stream_v2().stream_key().update(next);
     } else {
         ctx.db.aoi_stream_v2().insert(next);
+    }
+}
+
+fn upsert_server_correction(
+    ctx: &ReducerContext,
+    correction_id: String,
+    identity: Identity,
+    region_id: u64,
+    dimension_id: u32,
+    reason: &str,
+    authoritative_position: [f32; 3],
+    authoritative_velocity: [f32; 3],
+) {
+    let row = ServerCorrectionV2 {
+        correction_id: correction_id.clone(),
+        identity,
+        region_id,
+        dimension_id,
+        reason: reason.to_string(),
+        authoritative_position: authoritative_position.to_vec(),
+        authoritative_velocity: authoritative_velocity.to_vec(),
+        created_at: ctx.timestamp,
+        acknowledged: false,
+        acked_client_frame_no: 0,
+        acked_at: ctx.timestamp,
+    };
+
+    if ctx
+        .db
+        .server_correction_v2()
+        .correction_id()
+        .find(correction_id)
+        .is_some()
+    {
+        ctx.db.server_correction_v2().correction_id().update(row);
+    } else {
+        ctx.db.server_correction_v2().insert(row);
     }
 }
 

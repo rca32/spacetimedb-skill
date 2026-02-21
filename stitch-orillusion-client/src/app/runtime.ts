@@ -42,6 +42,9 @@ const CAMERA_DEFAULT_HEIGHT_OFFSET = 1.1
 const CAMERA_DEFAULT_LOOK_AT_HEIGHT = 0.15
 const CAMERA_MIN_DISTANCE = 1.6
 const CAMERA_MAX_DISTANCE = 7
+const SERVER_RECONCILE_IGNORE_DISTANCE_XZ = 0.03
+const SERVER_RECONCILE_SNAP_DISTANCE_XZ = 0.35
+const LOCAL_MOVING_EPSILON = 0.001
 
 export class OrillusionClientRuntime {
   private readonly bus = new FxEventBus()
@@ -194,6 +197,10 @@ export class OrillusionClientRuntime {
     })
     this.streamVisualizer.setChunkWorldSize(this.activeChunkSize)
     this.streamVisualizer.setShowFootprintOverlay(this.buildModeEnabled)
+    this.motor.setGroundOffset(PLAYER_FEET_OFFSET_Y)
+    this.motor.setTerrainSampler({
+      sampleHeight: (x, z) => this.streamVisualizer?.sampleTerrainHeight(x, z) ?? null,
+    })
     this.installBuildPreviewGhost()
 
     await this.net.start()
@@ -224,7 +231,6 @@ export class OrillusionClientRuntime {
     this.syncActiveShardFromSession()
     this.syncWorldGenParams()
     this.syncPlayerFacing()
-    this.syncLocalPlayerGround()
 
     const now = Date.now()
     if (now - this.lastNetworkTickAtMs >= NETWORK_TICK_MS) {
@@ -233,7 +239,6 @@ export class OrillusionClientRuntime {
     }
 
     this.streamVisualizer?.update(this.net.getConnection(), this.net.getIdentityHex())
-    this.syncLocalPlayerGround()
     this.syncBuildPreviewGhost()
     this.syncAoiSubscription()
     this.syncHud()
@@ -255,6 +260,7 @@ export class OrillusionClientRuntime {
     if (!motor || !this.net.getIdentityHex()) {
       return
     }
+    const isLocallyMoving = this.isLocallyMoving()
 
     const position = motor.readPosition()
 
@@ -287,8 +293,10 @@ export class OrillusionClientRuntime {
       })
     }
 
-    this.applyAuthoritativePhysicsIfAvailable()
-    this.applyPendingCorrections()
+    if (!isLocallyMoving) {
+      this.applyAuthoritativePhysicsIfAvailable()
+    }
+    this.applyPendingCorrections(isLocallyMoving)
     this.emitCombatFxIfAny()
   }
 
@@ -672,15 +680,13 @@ export class OrillusionClientRuntime {
         continue
       }
 
-      this.player.x = Number(position[0] ?? this.player.x)
-      this.player.y = Number(position[1] ?? this.player.y)
-      this.player.z = Number(position[2] ?? this.player.z)
+      this.applyAuthoritativeXZ(position)
       this.lastAppliedAuthoritativeFrameNo = serverFrameNo
       break
     }
   }
 
-  private applyPendingCorrections(): void {
+  private applyPendingCorrections(isLocallyMoving: boolean): void {
     const connection = this.net.getConnection()
     if (!connection?.isActive) {
       return
@@ -701,9 +707,9 @@ export class OrillusionClientRuntime {
 
       const position = row.authoritativePosition as number[] | undefined
       if (position && this.player && position.length >= 3) {
-        this.player.x = Number(position[0] ?? this.player.x)
-        this.player.y = Number(position[1] ?? this.player.y)
-        this.player.z = Number(position[2] ?? this.player.z)
+        if (!isLocallyMoving) {
+          this.applyAuthoritativeXZ(position)
+        }
       }
 
       this.net.dispatchReducer('ack_server_correction', {
@@ -751,21 +757,6 @@ export class OrillusionClientRuntime {
       return
     }
     this.motor.setViewYawDegrees(this.cameraFollow.yawDegrees)
-  }
-
-  private syncLocalPlayerGround(): void {
-    const motor = this.motor
-    const visualizer = this.streamVisualizer
-    if (!motor || !visualizer) {
-      return
-    }
-
-    const pos = motor.readPosition()
-    const groundY = visualizer.sampleTerrainHeight(pos.x, pos.z)
-    if (groundY === null) {
-      return
-    }
-    motor.snapToGround(groundY + PLAYER_FEET_OFFSET_Y)
   }
 
   private syncWorldGenParams(): void {
@@ -819,6 +810,41 @@ export class OrillusionClientRuntime {
       return raw
     }
     return raw.slice(0, 64)
+  }
+
+  private applyAuthoritativeXZ(position: number[]): void {
+    const player = this.player
+    if (!player || position.length < 3) {
+      return
+    }
+
+    const nextX = Number(position[0] ?? player.x)
+    const nextZ = Number(position[2] ?? player.z)
+    const dx = nextX - player.x
+    const dz = nextZ - player.z
+    const distanceXZ = Math.hypot(dx, dz)
+
+    if (!Number.isFinite(distanceXZ) || distanceXZ <= SERVER_RECONCILE_IGNORE_DISTANCE_XZ) {
+      return
+    }
+
+    if (distanceXZ >= SERVER_RECONCILE_SNAP_DISTANCE_XZ) {
+      player.x = nextX
+      player.z = nextZ
+      return
+    }
+
+    const alpha = 0.35
+    player.x += dx * alpha
+    player.z += dz * alpha
+  }
+
+  private isLocallyMoving(): boolean {
+    const intent = this.motor?.readIntentSnapshot()
+    if (!intent) {
+      return false
+    }
+    return Math.abs(intent.inputX) > LOCAL_MOVING_EPSILON || Math.abs(intent.inputZ) > LOCAL_MOVING_EPSILON
   }
 }
 

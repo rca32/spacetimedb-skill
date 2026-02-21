@@ -16,6 +16,7 @@ import {
 import { TerrainGeometry } from '@orillusion/geometry'
 import { hexToWorldXZ } from '../core/hex/hex-coords'
 import type { DbConnection } from '../module_bindings'
+import { TerrainHeightfieldIndex } from '../physics/terrain-heightfield-index'
 
 const DEFAULT_CHUNK_WORLD_SIZE = 32
 const TERRAIN_PAYLOAD_VERSION_V1 = 1
@@ -341,6 +342,11 @@ export class WorldStreamVisualizer {
   private readonly footprintObjects = new Map<string, Object3D>()
   private readonly playerObjects = new Map<string, Object3D>()
   private readonly v2Objects = new Map<string, Object3D>()
+  private readonly terrainHeightIndex = new TerrainHeightfieldIndex({
+    heightScale: TERRAIN_HEIGHT_SCALE,
+    seaLevelBase: TERRAIN_SEA_LEVEL_BASE,
+    waterFlag: TERRAIN_WATER_FLAG,
+  })
   private terrainCellsByCoord = new Map<string, DecodedTerrainCells>()
   private terrainChunkSizeHint = DEFAULT_CHUNK_WORLD_SIZE
   private showFootprintOverlay = false
@@ -396,7 +402,7 @@ export class WorldStreamVisualizer {
   }
 
   sampleTerrainHeight(x: number, z: number): number | null {
-    return sampleTerrainHeightAtWorld(x, z, this.terrainChunkSizeHint, this.terrainCellsByCoord)
+    return this.terrainHeightIndex.sampleHeight(x, z)
   }
 
   update(connection: DbConnection | null, localIdentityHex: string | null): void {
@@ -442,6 +448,7 @@ export class WorldStreamVisualizer {
       this.prune(this.terrainObjects, new Set())
       this.terrainStamps.clear()
       this.terrainCellsByCoord.clear()
+      this.terrainHeightIndex.clear()
       return
     }
     const streamRows = Array.from(streamTable)
@@ -460,6 +467,7 @@ export class WorldStreamVisualizer {
 
     const payloadCellsByCoord = new Map<string, DecodedTerrainCells>()
     const payloadSignatureByCoord = new Map<string, string>()
+    this.terrainHeightIndex.clear()
     for (const row of streamRows) {
       const chunkKey = String(row.chunkKey ?? '')
       if (!chunkKey) {
@@ -473,6 +481,7 @@ export class WorldStreamVisualizer {
       const cells = decodeTerrainPayload(payloadRow)
       if (cells) {
         payloadCellsByCoord.set(coord, cells)
+        this.terrainHeightIndex.setChunk(chunkX, chunkY, cells)
       }
     }
     this.terrainCellsByCoord = payloadCellsByCoord
@@ -480,6 +489,7 @@ export class WorldStreamVisualizer {
     if (firstCells && firstCells.chunkSize > 0) {
       this.terrainChunkSizeHint = firstCells.chunkSize
     }
+    this.terrainHeightIndex.setChunkSizeHint(this.terrainChunkSizeHint)
 
     const seen = new Set<string>()
     let detailedCount = 0
@@ -1350,6 +1360,7 @@ export class WorldStreamVisualizer {
     this.prune(this.playerObjects, new Set())
     this.prune(this.v2Objects, new Set())
     this.terrainCellsByCoord.clear()
+    this.terrainHeightIndex.clear()
 
     this.stats = {
       terrain: 0,

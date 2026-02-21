@@ -1,7 +1,27 @@
 import { bootstrap } from './app/bootstrap'
 import './styles.css'
 
-void bootstrap(document.getElementById('app')).catch((error: unknown) => {
+declare global {
+  interface Window {
+    __stitchOrillusionDispose?: () => void
+  }
+}
+
+window.__stitchOrillusionDispose?.()
+window.__stitchOrillusionDispose = undefined
+
+void bootstrap(document.getElementById('app'))
+  .then((dispose) => {
+    window.__stitchOrillusionDispose = dispose
+
+    if (import.meta.hot) {
+      import.meta.hot.dispose(() => {
+        window.__stitchOrillusionDispose?.()
+        window.__stitchOrillusionDispose = undefined
+      })
+    }
+  })
+  .catch((error: unknown) => {
   console.error('[stitch-orillusion-client] bootstrap failed', error)
 
   const root = document.getElementById('app')
@@ -13,7 +33,7 @@ void bootstrap(document.getElementById('app')).catch((error: unknown) => {
   panel.className = 'hud'
   panel.textContent = `bootstrap failed\\n\\n${toErrorMessage(error)}`
   root.appendChild(panel)
-})
+  })
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {

@@ -17,6 +17,8 @@ pub const TERRAIN_REASON_INVALID_INPUT: &str = "invalid_position";
 
 pub const TERRAIN_PAYLOAD_VERSION_V1: u16 = 1;
 pub const TERRAIN_WATER_FLAG: u16 = 0b0000_0000_0000_0001;
+pub const TERRAIN_HEIGHT_SCALE: f32 = 0.2;
+pub const TERRAIN_SEA_LEVEL_BASE: i16 = 12;
 pub const DEFAULT_SLOPE_THRESHOLD: i16 = 2;
 pub const DEFAULT_SLOPE_PENALTY_FACTOR: f32 = 0.05;
 
@@ -152,6 +154,86 @@ impl NavGrid {
         Ok(())
     }
 
+    pub fn sample_height_world(
+        self: &Self,
+        dimension_id: u32,
+        world_x: f32,
+        world_z: f32,
+    ) -> Option<f32> {
+        if !world_x.is_finite() || !world_z.is_finite() {
+            return None;
+        }
+
+        let x0 = world_x.floor() as i32;
+        let z0 = world_z.floor() as i32;
+        let tx = world_x - (x0 as f32);
+        let tz = world_z - (z0 as f32);
+
+        let h00 = self.sample_cell_height_world(dimension_id, x0, z0);
+        let h10 = self.sample_cell_height_world(dimension_id, x0 + 1, z0);
+        let h01 = self.sample_cell_height_world(dimension_id, x0, z0 + 1);
+        let h11 = self.sample_cell_height_world(dimension_id, x0 + 1, z0 + 1);
+
+        let mut sum = 0.0_f32;
+        let mut count = 0_u8;
+        for value in [h00, h10, h01, h11] {
+            if let Some(height) = value {
+                sum += height;
+                count += 1;
+            }
+        }
+        if count == 0 {
+            return None;
+        }
+        let fallback = sum / f32::from(count);
+
+        let a00 = h00.unwrap_or(fallback);
+        let a10 = h10.unwrap_or(fallback);
+        let a01 = h01.unwrap_or(fallback);
+        let a11 = h11.unwrap_or(fallback);
+
+        let h0 = lerp(a00, a10, tx);
+        let h1 = lerp(a01, a11, tx);
+        Some(lerp(h0, h1, tz))
+    }
+
+    pub fn validate_kinematic_transition_positions(
+        self: &Self,
+        dimension_id: u32,
+        from: &[f32],
+        to: &[f32],
+        max_step_height: f32,
+        max_slope_deg: f32,
+    ) -> Result<f32, &'static str> {
+        self.validate_world_segment_positions(dimension_id, from, to)?;
+
+        if from.len() < 3 || to.len() < 3 {
+            return Err(TERRAIN_REASON_INVALID_INPUT);
+        }
+
+        let from_height = self
+            .sample_height_world(dimension_id, from[0], from[2])
+            .ok_or(TERRAIN_REASON_MISSING)?;
+        let to_height = self
+            .sample_height_world(dimension_id, to[0], to[2])
+            .ok_or(TERRAIN_REASON_MISSING)?;
+
+        let climb = to_height - from_height;
+        if climb > max_step_height {
+            return Err(TERRAIN_REASON_SLOPE);
+        }
+
+        let dx = to[0] - from[0];
+        let dz = to[2] - from[2];
+        let horizontal_distance = dx.hypot(dz).max(0.0001);
+        let slope_deg = climb.abs().atan2(horizontal_distance).to_degrees();
+        if slope_deg > max_slope_deg {
+            return Err(TERRAIN_REASON_SLOPE);
+        }
+
+        Ok(to_height)
+    }
+
     pub fn validate_world_segment(
         self: &Self,
         from: HexCoord,
@@ -190,6 +272,21 @@ impl NavGrid {
             biome_id: read_i16_le(&row.cell_payload_bytes, byte_index + 4),
             flags: read_u16_le(&row.cell_payload_bytes, byte_index + 6),
         })
+    }
+
+    fn sample_cell_height_world(
+        self: &Self,
+        dimension_id: u32,
+        world_cell_x: i32,
+        world_cell_z: i32,
+    ) -> Option<f32> {
+        let cell = self.cell_at(HexCoord::new(world_cell_x, world_cell_z, dimension_id))?;
+        let raw = if cell.is_water() {
+            cell.water_level
+        } else {
+            cell.elevation
+        };
+        Some((f32::from(raw) - f32::from(TERRAIN_SEA_LEVEL_BASE)) * TERRAIN_HEIGHT_SCALE)
     }
 }
 
@@ -235,6 +332,10 @@ fn read_i16_le(bytes: &[u8], index: usize) -> i16 {
 
 fn read_u16_le(bytes: &[u8], index: usize) -> u16 {
     u16::from_le_bytes([bytes[index], bytes[index + 1]])
+}
+
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
 }
 
 #[cfg(test)]

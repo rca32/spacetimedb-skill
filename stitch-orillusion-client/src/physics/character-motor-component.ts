@@ -1,5 +1,10 @@
 import { BoxColliderShape, ColliderComponent, ComponentBase, Time, Vector3 } from '@orillusion/core'
 import { Rigidbody } from '@orillusion/physics'
+import {
+  solveKinematicTerrainStep,
+  type KinematicTerrainState,
+  type TerrainHeightSampler,
+} from './kinematic-terrain-solver'
 
 export interface MotionIntentSnapshot {
   readonly inputX: number
@@ -15,6 +20,9 @@ export class CharacterMotorComponent extends ComponentBase {
   private readonly keys = new Set<string>()
   private rigidbody: Rigidbody | null = null
   private viewYawDegrees = 180
+  private terrainSampler: TerrainHeightSampler | null = null
+  private kinematicState: KinematicTerrainState | null = null
+  private groundOffset = 0.9
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
     if (isEditableTarget(event.target)) {
@@ -67,6 +75,16 @@ export class CharacterMotorComponent extends ComponentBase {
     document.addEventListener('keyup', this.onKeyUp, true)
     window.addEventListener('blur', this.onWindowBlur)
     document.addEventListener('visibilitychange', this.onVisibilityChange)
+
+    const pos = this.object3D.transform.worldPosition
+    this.kinematicState = {
+      x: pos.x,
+      y: pos.y,
+      z: pos.z,
+      velocityY: 0,
+      grounded: false,
+      groundOffset: this.groundOffset,
+    }
   }
 
   public onUpdate(): void {
@@ -76,14 +94,42 @@ export class CharacterMotorComponent extends ComponentBase {
 
     // Face the same heading as camera yaw (FPS/TPS-style coupling).
     this.object3D.rotationY = this.viewYawDegrees + 180
+    const terrain = this.terrainSampler
+    if (!terrain) {
+      if (intent.inputX === 0 && intent.inputZ === 0) {
+        return
+      }
 
-    if (intent.inputX === 0 && intent.inputZ === 0) {
+      this.object3D.x += intent.inputX * intent.requestedSpeed * dtSeconds
+      this.object3D.z += intent.inputZ * intent.requestedSpeed * dtSeconds
+      this.rigidbody?.updateTransform(undefined, undefined, true)
       return
     }
 
-    this.object3D.x += intent.inputX * intent.requestedSpeed * dtSeconds
-    this.object3D.z += intent.inputZ * intent.requestedSpeed * dtSeconds
+    const pos = this.object3D.transform.worldPosition
+    const next = solveKinematicTerrainStep(
+      {
+        x: pos.x,
+        y: pos.y,
+        z: pos.z,
+        velocityY: this.kinematicState?.velocityY ?? 0,
+        grounded: this.kinematicState?.grounded ?? false,
+        groundOffset: this.kinematicState?.groundOffset ?? this.groundOffset,
+      },
+      {
+        inputX: intent.inputX,
+        inputZ: intent.inputZ,
+        requestedSpeed: intent.requestedSpeed,
+        jump: intent.jump,
+        dtSeconds,
+      },
+      terrain,
+    )
 
+    this.kinematicState = next
+    this.object3D.x = next.x
+    this.object3D.y = next.y
+    this.object3D.z = next.z
     this.rigidbody?.updateTransform(undefined, undefined, true)
   }
 
@@ -133,6 +179,25 @@ export class CharacterMotorComponent extends ComponentBase {
     this.viewYawDegrees = yawDegrees
   }
 
+  public setTerrainSampler(terrainSampler: TerrainHeightSampler | null): void {
+    this.terrainSampler = terrainSampler
+  }
+
+  public setGroundOffset(yOffset: number): void {
+    if (!Number.isFinite(yOffset)) {
+      return
+    }
+    this.groundOffset = yOffset
+    const current = this.kinematicState
+    if (!current) {
+      return
+    }
+    this.kinematicState = {
+      ...current,
+      groundOffset: yOffset,
+    }
+  }
+
   public readPosition(): Vector3 {
     return this.object3D.transform.worldPosition
   }
@@ -142,6 +207,14 @@ export class CharacterMotorComponent extends ComponentBase {
       return
     }
     this.object3D.y = y
+    if (this.kinematicState) {
+      this.kinematicState = {
+        ...this.kinematicState,
+        y,
+        velocityY: 0,
+        grounded: true,
+      }
+    }
     this.rigidbody?.updateTransform(undefined, undefined, true)
   }
 

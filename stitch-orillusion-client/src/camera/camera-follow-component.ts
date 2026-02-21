@@ -21,6 +21,7 @@ export class CameraFollowComponent extends ComponentBase {
     }
 
     const targetWorld = this.target.transform.worldPosition
+
     const yaw = (this.yawDegrees * Math.PI) / 180
     const pitch = (this.pitchDegrees * Math.PI) / 180
 
