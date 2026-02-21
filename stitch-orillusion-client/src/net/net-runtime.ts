@@ -8,6 +8,11 @@ import { SubscriptionRegistry } from './subscriptions'
 const QUIET_REDUCER_LOGS = new Set([
   'sync_client_frame',
   'submit_motion_intent',
+  'npc_talk',
+  'npc_trade',
+  'npc_quest',
+  'npc_dialogue_request',
+  'npc_action_resolve',
 ])
 
 export class NetRuntime {

@@ -47,6 +47,7 @@
 ## 최근 작업 로그
 - 상세 기록 (2026-02-19): `CLIENTDESIGN/12-implementation-log-2026-02-19.md`
 - 상세 기록 (2026-02-21): `CLIENTDESIGN/13-implementation-log-2026-02-21.md`
+- NPC 클라이언트 실행 가이드 (2026-02-21): `CLIENTDESIGN/14-npc-client-execution-guide-2026-02-21.md`
 - 핵심 반영:
   - 잔상 원인 분석 및 런타임 중복 제거
   - 지형 관통 대응을 위한 클라/서버 동시 보강

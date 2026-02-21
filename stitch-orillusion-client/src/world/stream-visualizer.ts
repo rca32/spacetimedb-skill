@@ -331,6 +331,14 @@ interface VisualizerStats {
   v2: number
 }
 
+export interface NpcStateSnapshot {
+  readonly npcId: bigint
+  readonly regionId: bigint
+  readonly dimensionId: number
+  readonly worldX: number
+  readonly worldZ: number
+}
+
 export interface WorldStreamVisualizerOptions {
   readonly debugBuildingModels?: boolean
   readonly postFxProfile?: WaterRenderProfile
@@ -352,6 +360,7 @@ export class WorldStreamVisualizer {
   private readonly terrainStamps = new Map<string, string>()
   private readonly waterResourcesByChunkKey = new Map<string, WaterSurfaceChunkResources>()
   private readonly npcObjects = new Map<string, Object3D>()
+  private readonly npcStateSnapshots = new Map<string, NpcStateSnapshot>()
   private readonly resourceObjects = new Map<string, Object3D>()
   private readonly buildingObjects = new Map<string, Object3D>()
   private readonly buildingVisualVersions = new Map<string, string>()
@@ -430,6 +439,14 @@ export class WorldStreamVisualizer {
       return []
     }
     return this.projectLabels.slice(0, Math.trunc(maxItems))
+  }
+
+  getNpcStateSnapshot(npcId: bigint): NpcStateSnapshot | null {
+    return this.npcStateSnapshots.get(npcId.toString()) ?? null
+  }
+
+  getNpcStateSnapshots(): NpcStateSnapshot[] {
+    return [...this.npcStateSnapshots.values()]
   }
 
   sampleTerrainHeight(x: number, z: number): number | null {
@@ -716,26 +733,31 @@ export class WorldStreamVisualizer {
     const table = getTableRows(db, 'npcStateStream')
     if (!table) {
       this.prune(this.npcObjects, new Set())
+      this.npcStateSnapshots.clear()
       return
     }
 
     const seen = new Set<string>()
     for (const row of table) {
-      const npcId = String(row.npcId ?? '')
-      if (!npcId) {
+      const npcId = toU64BigInt(row.npcId, -1n)
+      if (npcId < 0n) {
         continue
       }
-      seen.add(npcId)
+      const npcIdString = npcId.toString()
+      seen.add(npcIdString)
+
+      const regionId = toU64BigInt(row.regionId, -1n)
+      const dimensionId = Math.max(1, toU64Number(row.dimensionId))
 
       const hexX = toNumber(row.hexX)
       const hexZ = toNumber(row.hexZ)
       const world = hexToWorldXZ({ q: hexX, r: hexZ, dimension: Math.max(1, toNumber(row.dimensionId)) })
 
-      let object = this.npcObjects.get(npcId)
+      let object = this.npcObjects.get(npcIdString)
       if (!object) {
         object = new Object3D()
         this.root.addChild(object)
-        this.npcObjects.set(npcId, object)
+        this.npcObjects.set(npcIdString, object)
       }
 
       this.ensureMarkerVisual(object, NPC_MARKER_MODEL)
@@ -747,9 +769,22 @@ export class WorldStreamVisualizer {
       object.scaleX = 1
       object.scaleY = 1
       object.scaleZ = 1
+
+      this.npcStateSnapshots.set(npcIdString, {
+        npcId,
+        regionId,
+        dimensionId,
+        worldX: world.x,
+        worldZ: world.z,
+      })
     }
 
     this.prune(this.npcObjects, seen)
+    for (const key of this.npcStateSnapshots.keys()) {
+      if (!seen.has(key)) {
+        this.npcStateSnapshots.delete(key)
+      }
+    }
   }
 
   private syncResources(db: Record<string, unknown>): void {
@@ -1462,6 +1497,7 @@ export class WorldStreamVisualizer {
     this.prune(this.terrainObjects, new Set(), (key) => this.releaseTerrainWaterResources(key))
     this.terrainStamps.clear()
     this.prune(this.npcObjects, new Set())
+    this.npcStateSnapshots.clear()
     this.prune(this.resourceObjects, new Set())
     this.prune(this.buildingObjects, new Set())
     this.buildingVisualVersions.clear()
@@ -2391,6 +2427,44 @@ function toNumber(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0
   }
   return 0
+}
+
+function toU64BigInt(value: unknown, fallback: bigint): bigint {
+  if (typeof value === 'bigint') {
+    return value
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return fallback
+    }
+    return BigInt(Math.trunc(value))
+  }
+  if (typeof value === 'string') {
+    if (!value) {
+      return fallback
+    }
+    try {
+      return BigInt(value)
+    } catch {
+      return fallback
+    }
+  }
+  if (typeof value === 'object' && value !== null && 'toString' in value) {
+    try {
+      return BigInt(String(value))
+    } catch {
+      return fallback
+    }
+  }
+  return fallback
+}
+
+function toU64Number(value: unknown): number {
+  const num = toNumber(value)
+  if (!Number.isFinite(num)) {
+    return 0
+  }
+  return num < 0 ? 0 : num
 }
 
 function toIdentityHex(value: unknown): string | null {

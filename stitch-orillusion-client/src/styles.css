@@ -35,3 +35,79 @@ body,
   font-weight: 700;
   letter-spacing: 0.03em;
 }
+
+.npc-dialogue-panel {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 12;
+  width: min(360px, 45vw);
+  max-height: calc(100vh - 24px);
+  overflow: hidden;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #2d3d5c;
+  background: rgba(4, 10, 22, 0.75);
+  backdrop-filter: blur(6px);
+  color: #e6f0ff;
+  font-size: 12px;
+}
+
+.npc-dialogue-panel-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.npc-dialogue-panel-block,
+.npc-dialogue-panel-nearest,
+.npc-dialogue-panel-status,
+.npc-dialogue-panel-hint {
+  padding: 6px 8px;
+  border: 1px solid #33435f;
+  background: rgba(7, 14, 27, 0.6);
+}
+
+.npc-dialogue-panel-section-title {
+  margin-bottom: 6px;
+  font-weight: 700;
+  font-size: 11px;
+  color: #b8cbff;
+}
+
+.npc-dialogue-panel-list {
+  margin: 0;
+  padding-left: 14px;
+  list-style-type: none;
+}
+
+.npc-dialogue-panel-list .npc-dialogue-panel-item {
+  margin: 2px 0;
+  padding: 2px 4px;
+  border-left: 3px solid #5f6a85;
+}
+
+.npc-dialogue-panel-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+.npc-dialogue-panel-form input,
+.npc-dialogue-panel-form button {
+  border: 1px solid #3b4d72;
+  background: #070f1f;
+  color: #e6f0ff;
+}
+
+.npc-status-queued {
+  border-left-color: #d3c24a !important;
+}
+
+.npc-status-done {
+  border-left-color: #4fbf5a !important;
+}
+
+.npc-status-failed {
+  border-left-color: #d45d5d !important;
+}

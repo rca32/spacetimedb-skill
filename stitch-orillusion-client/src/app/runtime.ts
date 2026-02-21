@@ -23,6 +23,10 @@ import type { Logger } from '../infra/logger'
 import { TokenStore } from '../infra/token-store'
 import { buildAoiQueries, hashQueries } from '../net/aoi'
 import { NetRuntime } from '../net/net-runtime'
+import { NpcInteractionController } from '../npc/npc-interaction-controller'
+import { NpcDialogueStore } from '../npc/npc-dialogue-store'
+import type { NpcInteractionKind } from '../npc/types'
+import { NpcDialoguePanel } from '../ui/npc-dialogue-panel'
 import { CharacterMotorComponent } from '../physics/character-motor-component'
 import { PlayerLocomotionAnimationComponent } from '../world/player-locomotion-animation-component'
 import { createPhysicsGround } from '../physics/world-physics'
@@ -46,10 +50,14 @@ const CAMERA_MAX_DISTANCE = 7
 const SERVER_RECONCILE_IGNORE_DISTANCE_XZ = 0.03
 const SERVER_RECONCILE_SNAP_DISTANCE_XZ = 0.35
 const LOCAL_MOVING_EPSILON = 0.001
+const NPC_INTERACTION_RADIUS = 6
+const NPC_PANEL_MESSAGE_TTL_MS = 2500
 
 export class OrillusionClientRuntime {
   private readonly bus = new FxEventBus()
   private readonly net: NetRuntime
+  private readonly npcInteractionController: NpcInteractionController
+  private readonly npcDialogueStore = new NpcDialogueStore()
   private activeRegionId: bigint
   private activeDimensionId: number
   private activeChunkSize: number
@@ -61,6 +69,7 @@ export class OrillusionClientRuntime {
   private motor: CharacterMotorComponent | null = null
   private cameraFollow: CameraFollowComponent | null = null
   private streamVisualizer: WorldStreamVisualizer | null = null
+  private npcDialoguePanel: NpcDialoguePanel | null = null
 
   private frameNo = 0
   private lastAoiHash = ''
@@ -73,6 +82,9 @@ export class OrillusionClientRuntime {
   private readonly seenCorrectionIds = new Set<string>()
   private lastAppliedAuthoritativeFrameNo = 0
   private shadowMaterialGuardFrame = 0
+  private npcAiEnabled = true
+  private panelMessage = ''
+  private panelMessageExpiresAtMs = 0
 
   private buildModeEnabled = false
   private selectedBuildingDefId = DEFAULT_BUILDING_DEF_ID
@@ -108,6 +120,21 @@ export class OrillusionClientRuntime {
     }
 
     if (!this.buildModeEnabled) {
+      if (key === 't') {
+        event.preventDefault()
+        this.tryNpcInteraction('talk')
+        return
+      }
+      if (key === 'y') {
+        event.preventDefault()
+        this.tryNpcInteraction('trade')
+        return
+      }
+      if (key === 'u') {
+        event.preventDefault()
+        this.tryNpcInteraction('quest')
+        return
+      }
       return
     }
 
@@ -154,6 +181,11 @@ export class OrillusionClientRuntime {
     tokenStore: TokenStore,
   ) {
     this.net = new NetRuntime(config, logger, tokenStore)
+    this.npcInteractionController = new NpcInteractionController({
+      getIdentityHex: () => this.net.getIdentityHex(),
+      dispatchReducer: (reducerName, payload) => this.net.dispatchReducer(reducerName, payload),
+      onQueuedRequest: (request, localText) => this.npcDialogueStore.recordQueuedRequest(request, localText),
+    })
     this.activeRegionId = config.defaultRegionId
     this.activeDimensionId = config.defaultDimensionId
     this.activeChunkSize = DEFAULT_CHUNK_SIZE
@@ -161,6 +193,9 @@ export class OrillusionClientRuntime {
 
   async start(): Promise<void> {
     this.hudEl = createHud(this.root)
+    this.npcDialoguePanel = new NpcDialoguePanel(this.root, {
+      onSubmitDialogue: this.handleDialogueSubmit,
+    })
 
     this.engine = await bootstrapEngine(this.root, this.config, () => this.tick())
     createPhysicsGround(this.engine.scene)
@@ -225,6 +260,8 @@ export class OrillusionClientRuntime {
     this.streamVisualizer?.dispose()
     this.particles?.dispose()
     this.engine?.stop()
+    this.npcDialoguePanel?.dispose()
+    this.npcDialoguePanel = null
   }
 
   private tick(): void {
@@ -234,9 +271,12 @@ export class OrillusionClientRuntime {
     this.ensureIdentityBootstrap()
     this.syncSelectedBuildingDef()
     this.syncBuildPreviewFeedback()
+    this.syncNpcFeatureFlags()
+    this.npcDialogueStore.syncFromConnection(this.net.getConnection(), this.net.getIdentityHex())
     this.syncActiveShardFromSession()
     this.syncWorldGenParams()
     this.syncPlayerFacing()
+    this.syncNpcPanel()
 
     const now = Date.now()
     if (now - this.lastNetworkTickAtMs >= NETWORK_TICK_MS) {
@@ -536,6 +576,8 @@ export class OrillusionClientRuntime {
         `SELECT * FROM server_correction_v2 WHERE identity = 0x${identityHex} AND region_id = ${this.activeRegionId.toString()} AND dimension_id = ${this.activeDimensionId}`,
         `SELECT * FROM player_session_view WHERE identity = 0x${identityHex}`,
         `SELECT * FROM building_preview_feedback_view WHERE identity = 0x${identityHex}`,
+        `SELECT * FROM npc_interaction_log WHERE caller_identity = 0x${identityHex}`,
+        'SELECT * FROM feature_flags',
       ],
       this.logger,
     )
@@ -549,6 +591,9 @@ export class OrillusionClientRuntime {
 
     if (this.authBootstrappedForIdentity !== identityHex) {
       this.authBootstrappedForIdentity = identityHex
+      this.npcDialogueStore.clear()
+      this.panelMessage = ''
+      this.panelMessageExpiresAtMs = 0
       this.net.dispatchReducer('account_bootstrap', { displayName: this.config.displayName })
       this.net.dispatchReducer('sign_in', { regionId: this.activeRegionId })
     }
@@ -625,6 +670,135 @@ export class OrillusionClientRuntime {
     })
     this.resetStreamSubscriptions(true)
     this.installBaselineSubscriptions()
+  }
+
+  private syncNpcFeatureFlags(): void {
+    const identityHex = this.net.getIdentityHex()
+    if (!identityHex) {
+      this.npcAiEnabled = false
+      return
+    }
+
+    const connection = this.net.getConnection()
+    if (!connection?.isActive) {
+      return
+    }
+
+    const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>).featureFlags
+    if (!table) {
+      this.npcAiEnabled = true
+      return
+    }
+
+    let found = false
+    for (const row of table.iter()) {
+      if (String(row.flagKey ?? '') !== 'npc_ai_enabled') {
+        continue
+      }
+      found = true
+      this.npcAiEnabled = toBoolean(row.enabled)
+      return
+    }
+
+    if (!found) {
+      this.npcAiEnabled = true
+    }
+  }
+
+  private syncNpcPanel(): void {
+    const nearest = this.getNearestNpcForInteraction()
+    const now = Date.now()
+    const systemMessage = now < this.panelMessageExpiresAtMs ? this.panelMessage : null
+
+    this.npcDialoguePanel?.render({
+      nearestNpcId: nearest ? nearest.npcId.toString() : null,
+      nearestNpcDistance: nearest ? nearest.distance : null,
+      states: this.npcDialogueStore.getRequestStates(),
+      timeline: this.npcDialogueStore.getTimelineEntries(),
+      canInteract: this.canUseNpcInteraction(),
+      systemMessage,
+    })
+  }
+
+  private readonly handleDialogueSubmit = (utterance: string): void => {
+    this.tryNpcInteraction('dialogue', utterance)
+  }
+
+  private tryNpcInteraction(kind: NpcInteractionKind, utterance = ''): void {
+    const identityHex = this.net.getIdentityHex()
+    if (!identityHex) {
+      this.setPanelMessage('로그인이 필요합니다.')
+      return
+    }
+
+    if (!this.npcAiEnabled) {
+      this.setPanelMessage('NPC 기능이 비활성화되어 있습니다.')
+      return
+    }
+
+    const nearest = this.getNearestNpcForInteraction()
+    if (!nearest) {
+      this.setPanelMessage('근처 NPC가 없습니다. (거리 6 이하)')
+      return
+    }
+
+    let result
+    if (kind === 'dialogue') {
+      result = this.npcInteractionController.interactDialogue(nearest.npcId, utterance)
+    } else if (kind === 'trade') {
+      result = this.npcInteractionController.interactTrade(nearest.npcId)
+    } else if (kind === 'quest') {
+      result = this.npcInteractionController.interactQuest(nearest.npcId)
+    } else {
+      result = this.npcInteractionController.interactTalk(nearest.npcId)
+    }
+
+    if (!result.ok) {
+      this.setPanelMessage(result.error ?? '요청 전송 실패')
+      return
+    }
+
+    if (kind === 'dialogue') {
+      this.setPanelMessage('대화 요청을 전송했습니다.')
+    } else {
+      this.setPanelMessage(`${kindNameForLabel(kind)} 요청을 전송했습니다.`)
+    }
+  }
+
+  private getNearestNpcForInteraction(): { npcId: bigint; distance: number } | null {
+    const player = this.motor?.readPosition()
+    if (!player || !this.streamVisualizer) {
+      return null
+    }
+
+    const snapshots = this.streamVisualizer.getNpcStateSnapshots()
+    let nearest: { npcId: bigint; distance: number } | null = null
+    for (const snapshot of snapshots) {
+      if (snapshot.regionId !== this.activeRegionId || snapshot.dimensionId !== this.activeDimensionId) {
+        continue
+      }
+
+      const dx = snapshot.worldX - player.x
+      const dz = snapshot.worldZ - player.z
+      const distance = Math.sqrt(dx * dx + dz * dz)
+      if (distance > NPC_INTERACTION_RADIUS) {
+        continue
+      }
+      if (!nearest || distance < nearest.distance) {
+        nearest = { npcId: snapshot.npcId, distance }
+      }
+    }
+
+    return nearest
+  }
+
+  private canUseNpcInteraction(): boolean {
+    return Boolean(this.npcAiEnabled) && Boolean(this.net.getIdentityHex()) && Boolean(this.getNearestNpcForInteraction())
+  }
+
+  private setPanelMessage(message: string): void {
+    this.panelMessage = message
+    this.panelMessageExpiresAtMs = Date.now() + NPC_PANEL_MESSAGE_TTL_MS
   }
 
   private emitCombatFxIfAny(): void {
@@ -758,6 +932,8 @@ export class OrillusionClientRuntime {
       `<div>pos: ${position ? `${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}` : '-'}</div>`,
       '<div>move: WASD / run: Shift / look: LMB,RMB drag / zoom: wheel</div>',
       '<div>build: click world -> preview / Q,E rotate / Enter place</div>',
+      `<div>npc: T 대화 / Y 거래 / U 퀘스트 / Enter 대화 입력</div>`,
+      `<div>npc ai: ${this.npcAiEnabled ? 'enabled' : 'disabled'}</div>`,
     ].join('')
   }
 
@@ -928,6 +1104,16 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return target.closest('input, textarea, select, [contenteditable], [role="textbox"]') !== null
 }
 
+function kindNameForLabel(kind: NpcInteractionKind): string {
+  if (kind === 'trade') {
+    return '거래'
+  }
+  if (kind === 'quest') {
+    return '퀘스트'
+  }
+  return '대화'
+}
+
 function toIdentityHex(value: unknown): string | null {
   if (typeof value === 'object' && value !== null && 'toHexString' in value) {
     const candidate = value as { toHexString?: () => string }
@@ -940,6 +1126,19 @@ function toIdentityHex(value: unknown): string | null {
   }
 
   return null
+}
+
+function toBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') {
+    return value
+  }
+  if (typeof value === 'number') {
+    return value !== 0
+  }
+  if (typeof value === 'string') {
+    return value.trim().toLowerCase() === 'true' || value.trim() === '1'
+  }
+  return false
 }
 
 function toU64Number(value: unknown): number {

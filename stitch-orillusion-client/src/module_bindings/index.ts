@@ -10,7 +10,6 @@ import {
   DbConnectionImpl as __DbConnectionImpl,
   SubscriptionBuilderImpl as __SubscriptionBuilderImpl,
   TypeBuilder as __TypeBuilder,
-  Uuid as __Uuid,
   convertToAccessorMap as __convertToAccessorMap,
   procedureSchema as __procedureSchema,
   procedures as __procedures,
@@ -2475,4 +2474,3 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
-
