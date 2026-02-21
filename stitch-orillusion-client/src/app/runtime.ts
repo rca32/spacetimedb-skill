@@ -194,6 +194,8 @@ export class OrillusionClientRuntime {
     this.particles = new ParticleSystemController(this.engine.scene, this.bus)
     this.streamVisualizer = new WorldStreamVisualizer(this.engine.scene, {
       debugBuildingModels: this.config.debugBuildingModels,
+      postFxProfile: this.config.postFxProfile,
+      waterQuality: this.config.postFxProfile === 'high' ? 'high' : 'balanced',
     })
     this.streamVisualizer.setChunkWorldSize(this.activeChunkSize)
     this.streamVisualizer.setShowFootprintOverlay(this.buildModeEnabled)

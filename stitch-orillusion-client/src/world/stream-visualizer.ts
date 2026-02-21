@@ -12,6 +12,7 @@ import {
   SkinnedMeshRenderer2,
   SphereGeometry,
   Time,
+  Float16ArrayTexture,
   UnLitMaterial,
   VertexAttributeName,
 } from '@orillusion/core'
@@ -19,6 +20,12 @@ import { TerrainGeometry } from '@orillusion/geometry'
 import { hexToWorldXZ } from '../core/hex/hex-coords'
 import type { DbConnection } from '../module_bindings'
 import { TerrainHeightfieldIndex } from '../physics/terrain-heightfield-index'
+import {
+  createWaterSurfaceMaterial,
+  WaterSurfaceMaterial,
+  type WaterQualityLevel,
+  type WaterRenderProfile,
+} from './materials/water-material'
 
 const DEFAULT_CHUNK_WORLD_SIZE = 32
 const TERRAIN_PAYLOAD_VERSION_V1 = 1
@@ -42,18 +49,8 @@ let terrainSampleBaseMapPromise: Promise<TerrainBaseMap | null> | null = null
 const WATER_SURFACE_OBJECT_NAME = '__terrain-water-surface__'
 const WATER_SURFACE_OFFSET = 0.06
 const WATER_SURFACE_HIDDEN_DEPTH = 0.04
-const WATER_WAVE_AMPLITUDE = 0.08
 const WATER_WAVE_TIME_SCALE = 0.0018
-type TerrainPositionAttribute = NonNullable<ReturnType<TerrainGeometry['getAttribute']>>
-
-interface WaterSurfaceAnimationState {
-  readonly positionAttribute: TerrainPositionAttribute
-  readonly baseHeights: Float32Array
-  readonly waveMask: Uint8Array
-  readonly phase: number
-}
-
-const WATER_SURFACE_STATES = new WeakMap<TerrainGeometry, WaterSurfaceAnimationState>()
+const WATER_DEPTH_MAX_WORLD = 2.4
 
 interface BuildingModelVariant {
   readonly key: string
@@ -336,14 +333,24 @@ interface VisualizerStats {
 
 export interface WorldStreamVisualizerOptions {
   readonly debugBuildingModels?: boolean
+  readonly postFxProfile?: WaterRenderProfile
+  readonly waterQuality?: WaterQualityLevel
+}
+
+interface WaterSurfaceChunkResources {
+  readonly material: WaterSurfaceMaterial
+  readonly depthTexture: Float16ArrayTexture
 }
 
 export class WorldStreamVisualizer {
   private readonly root = new Object3D()
   private readonly debugBuildingModels: boolean
+  private readonly waterProfile: WaterRenderProfile
+  private readonly waterQuality: WaterQualityLevel
 
   private readonly terrainObjects = new Map<string, Object3D>()
   private readonly terrainStamps = new Map<string, string>()
+  private readonly waterResourcesByChunkKey = new Map<string, WaterSurfaceChunkResources>()
   private readonly npcObjects = new Map<string, Object3D>()
   private readonly resourceObjects = new Map<string, Object3D>()
   private readonly buildingObjects = new Map<string, Object3D>()
@@ -390,10 +397,13 @@ export class WorldStreamVisualizer {
 
   constructor(scene: Scene3D, options: WorldStreamVisualizerOptions = {}) {
     this.debugBuildingModels = options.debugBuildingModels === true
+    this.waterProfile = options.postFxProfile ?? 'low'
+    this.waterQuality = options.waterQuality ?? 'balanced'
     scene.addChild(this.root)
   }
 
   dispose(): void {
+    this.clearAll()
     this.root.destroy()
   }
 
@@ -466,7 +476,7 @@ export class WorldStreamVisualizer {
   private syncTerrain(db: Record<string, unknown>): void {
     const streamTable = getTableRows(db, 'terrainChunkStream')
     if (!streamTable) {
-      this.prune(this.terrainObjects, new Set())
+      this.prune(this.terrainObjects, new Set(), (key) => this.releaseTerrainWaterResources(key))
       this.terrainStamps.clear()
       this.terrainCellsByCoord.clear()
       this.terrainHeightIndex.clear()
@@ -541,10 +551,12 @@ export class WorldStreamVisualizer {
       if (!object || prevStamp !== stamp) {
         if (object) {
           object.destroy()
+          this.releaseTerrainWaterResources(chunkKey)
           this.terrainObjects.delete(chunkKey)
         }
 
         object = this.buildTerrainChunkObject(
+          chunkKey,
           biomeId,
           chunkX,
           chunkY,
@@ -567,7 +579,7 @@ export class WorldStreamVisualizer {
       object.z = chunkY * chunkWorldSize
     }
 
-    this.prune(this.terrainObjects, seen)
+    this.prune(this.terrainObjects, seen, (key) => this.releaseTerrainWaterResources(key))
     for (const key of this.terrainStamps.keys()) {
       if (!seen.has(key)) {
         this.terrainStamps.delete(key)
@@ -579,6 +591,7 @@ export class WorldStreamVisualizer {
   }
 
   private buildTerrainChunkObject(
+    chunkKey: string,
     biomeId: number,
     chunkX: number,
     chunkY: number,
@@ -628,10 +641,15 @@ export class WorldStreamVisualizer {
       waterObject.name = WATER_SURFACE_OBJECT_NAME
       const waterMesh = waterObject.addComponent(MeshRenderer)
       waterMesh.geometry = waterSurface.geometry
-      if (setMaterialSafe(waterMesh, createWaterMaterial())) {
-        WATER_SURFACE_STATES.set(waterSurface.geometry, waterSurface.state)
+      const waterMaterial = this.createWaterMaterial(chunkKey, waterSurface.state)
+      if (setMaterialSafe(waterMesh, waterMaterial)) {
+        this.registerTerrainWaterResources(chunkKey, waterMaterial, waterSurface.state.depthTexture)
         chunk.addChild(waterObject)
       } else {
+        if (waterMaterial instanceof WaterSurfaceMaterial) {
+          waterMaterial.destroy(false)
+          waterSurface.state.depthTexture.destroy(true)
+        }
         waterObject.destroy()
       }
     }
@@ -641,39 +659,52 @@ export class WorldStreamVisualizer {
 
   private animateWaterSurfaces(): void {
     const phaseTime = Time.time * WATER_WAVE_TIME_SCALE
-    for (const terrainChunk of this.terrainObjects.values()) {
-      for (const child of terrainChunk.entityChildren) {
-        if (!(child instanceof Object3D) || child.name !== WATER_SURFACE_OBJECT_NAME) {
-          continue
-        }
-        const mesh = child.getComponent(MeshRenderer)
-        if (!mesh) {
-          continue
-        }
-        const geometry = mesh.geometry
-        if (!(geometry instanceof TerrainGeometry)) {
-          continue
-        }
-        const state = WATER_SURFACE_STATES.get(geometry)
-        if (!state) {
-          continue
-        }
+    for (const { material } of this.waterResourcesByChunkKey.values()) {
+      material.setTime(phaseTime)
+    }
+  }
 
-        const positionData = state.positionAttribute.data as Float32Array
-        for (let i = 0; i < state.baseHeights.length; i += 1) {
-          if (state.waveMask[i] === 0) {
-            continue
-          }
-          const offset = i * 3
-          const localX = positionData[offset] ?? 0
-          const localZ = positionData[offset + 2] ?? 0
-          const wave =
-            Math.sin(phaseTime + localX * 0.45 + localZ * 0.3 + state.phase) * WATER_WAVE_AMPLITUDE +
-            Math.cos(phaseTime * 1.7 + localX * 0.2 - localZ * 0.25 + state.phase * 0.5) * (WATER_WAVE_AMPLITUDE * 0.5)
-          positionData[offset + 1] = (state.baseHeights[i] ?? 0) + wave
-        }
-        geometry.vertexBuffer.upload(VertexAttributeName.position, state.positionAttribute)
-      }
+  private createWaterMaterial(chunkKey: string, state: WaterSurfaceRenderState): Material {
+    this.releaseTerrainWaterResources(chunkKey)
+    try {
+      return createWaterSurfaceMaterial({
+        depthTexture: state.depthTexture,
+        profile: this.waterProfile,
+        quality: this.waterQuality,
+        phase: state.phase,
+      })
+    } catch (error) {
+      console.warn('[stitch-orillusion-client] custom water material fallback to unlit', error)
+      state.depthTexture.destroy(true)
+      return createWaterFallbackMaterial()
+    }
+  }
+
+  private registerTerrainWaterResources(
+    chunkKey: string,
+    material: Material,
+    depthTexture: Float16ArrayTexture,
+  ): void {
+    if (!(material instanceof WaterSurfaceMaterial)) {
+      return
+    }
+    this.waterResourcesByChunkKey.set(chunkKey, {
+      material,
+      depthTexture,
+    })
+  }
+
+  private releaseTerrainWaterResources(chunkKey: string): void {
+    const resources = this.waterResourcesByChunkKey.get(chunkKey)
+    if (!resources) {
+      return
+    }
+
+    this.waterResourcesByChunkKey.delete(chunkKey)
+    try {
+      resources.depthTexture.destroy(true)
+    } catch {
+      // Texture may already be disposed by parent object lifecycle.
     }
   }
 
@@ -1408,18 +1439,23 @@ export class WorldStreamVisualizer {
     this.prune(this.v2Objects, new Set())
   }
 
-  private prune(objects: Map<string, Object3D>, seen: Set<string>): void {
+  private prune(
+    objects: Map<string, Object3D>,
+    seen: Set<string>,
+    onPrune?: (key: string, object: Object3D) => void,
+  ): void {
     for (const [key, object] of objects) {
       if (seen.has(key)) {
         continue
       }
+      onPrune?.(key, object)
       object.destroy()
       objects.delete(key)
     }
   }
 
   private clearAll(): void {
-    this.prune(this.terrainObjects, new Set())
+    this.prune(this.terrainObjects, new Set(), (key) => this.releaseTerrainWaterResources(key))
     this.terrainStamps.clear()
     this.prune(this.npcObjects, new Set())
     this.prune(this.resourceObjects, new Set())
@@ -1435,6 +1471,7 @@ export class WorldStreamVisualizer {
     this.prune(this.v2Objects, new Set())
     this.terrainCellsByCoord.clear()
     this.terrainHeightIndex.clear()
+    this.waterResourcesByChunkKey.clear()
 
     this.stats = {
       terrain: 0,
@@ -1521,10 +1558,12 @@ function ensureTerrainSampleBaseMap(): Promise<TerrainBaseMap | null> {
   return terrainSampleBaseMapPromise
 }
 
-function createWaterMaterial(): UnLitMaterial {
+function createWaterFallbackMaterial(): UnLitMaterial {
   const material = new UnLitMaterial()
   material.baseColor = new Color(0.16, 0.48, 0.82, 0.56)
   material.doubleSide = true
+  material.transparent = true
+  material.depthWriteEnabled = false
   material.acceptShadow = false
   material.castShadow = false
   try {
@@ -1766,7 +1805,12 @@ function buildTerrainSurfaceGeometry(
 
 interface WaterSurfaceGeometryBuildResult {
   readonly geometry: TerrainGeometry
-  readonly state: WaterSurfaceAnimationState
+  readonly state: WaterSurfaceRenderState
+}
+
+interface WaterSurfaceRenderState {
+  readonly phase: number
+  readonly depthTexture: Float16ArrayTexture
 }
 
 function buildWaterSurfaceGeometry(
@@ -1782,18 +1826,15 @@ function buildWaterSurfaceGeometry(
 
   const segments = Math.max(1, chunkSize)
   const geometry = new TerrainGeometry(chunkSize, chunkSize, segments, segments)
-  const positionAttribute = geometry.getAttribute(VertexAttributeName.position)
-  const data = positionAttribute?.data as Float32Array | undefined
-  if (!positionAttribute || !data) {
+  const position = geometry.getAttribute(VertexAttributeName.position)
+  const data = position?.data as Float32Array | undefined
+  if (!position || !data) {
     return null
   }
 
   const half = chunkSize * 0.5
   const chunkOriginX = chunkX * chunkSize
   const chunkOriginZ = chunkY * chunkSize
-  const vertexCount = Math.floor(data.length / 3)
-  const baseHeights = new Float32Array(vertexCount)
-  const waveMask = new Uint8Array(vertexCount)
   let hasWater = false
 
   for (let i = 0; i < data.length; i += 3) {
@@ -1802,7 +1843,6 @@ function buildWaterSurfaceGeometry(
     data[i] = localX
     data[i + 2] = localZ
 
-    const vertexIndex = Math.floor(i / 3)
     const worldVertexX = Math.round(chunkOriginX + localX)
     const worldVertexZ = Math.round(chunkOriginZ + localZ)
     const sample = sampleWaterSurfaceVertex(
@@ -1813,8 +1853,6 @@ function buildWaterSurfaceGeometry(
       cells,
     )
     data[i + 1] = sample.height
-    baseHeights[vertexIndex] = sample.height
-    waveMask[vertexIndex] = sample.hasWater ? 1 : 0
     hasWater = hasWater || sample.hasWater
   }
 
@@ -1822,14 +1860,14 @@ function buildWaterSurfaceGeometry(
     return null
   }
 
-  geometry.vertexBuffer.upload(VertexAttributeName.position, positionAttribute)
+  geometry.vertexBuffer.upload(VertexAttributeName.position, position)
+  geometry.computeNormals()
+  const depthTexture = buildWaterDepthMaskTexture(cells, chunkX, chunkY, payloadCellsByCoord)
   return {
     geometry,
     state: {
-      positionAttribute,
-      baseHeights,
-      waveMask,
       phase: stablePhase(`${chunkX}:${chunkY}:water`),
+      depthTexture,
     },
   }
 }
@@ -1856,7 +1894,7 @@ function sampleWaterSurfaceVertex(
   let waterTotal = 0
   let waterCount = 0
   for (const sample of samples) {
-    if (!sample || (sample.flags & TERRAIN_WATER_FLAG) === 0) {
+    if (!sample || !isWaterCell(sample)) {
       continue
     }
     waterTotal += elevationToWorldY(Math.max(sample.elevation, sample.waterLevel))
@@ -1895,6 +1933,93 @@ function sampleWaterSurfaceVertex(
     height: fallbackHeight - WATER_SURFACE_HIDDEN_DEPTH,
     hasWater: false,
   }
+}
+
+interface WaterDepthMaskSample {
+  readonly hasWater: boolean
+  readonly depthWorld: number
+}
+
+function buildWaterDepthMaskTexture(
+  cells: DecodedTerrainCells,
+  chunkX: number,
+  chunkY: number,
+  payloadCellsByCoord: Map<string, DecodedTerrainCells>,
+): Float16ArrayTexture {
+  const chunkSize = Math.max(1, cells.chunkSize)
+  const pixelData: number[] = new Array(chunkSize * chunkSize * 4)
+  const chunkOriginX = chunkX * chunkSize
+  const chunkOriginZ = chunkY * chunkSize
+
+  for (let z = 0; z < chunkSize; z += 1) {
+    for (let x = 0; x < chunkSize; x += 1) {
+      const worldCellX = chunkOriginX + x
+      const worldCellZ = chunkOriginZ + z
+      const sample = sampleWaterDepthMaskCell(worldCellX, worldCellZ, chunkSize, payloadCellsByCoord, cells)
+
+      const offset = (z * chunkSize + x) * 4
+      const normalizedDepth = clamp01(sample.depthWorld / WATER_DEPTH_MAX_WORLD)
+      pixelData[offset] = normalizedDepth
+      pixelData[offset + 1] = sample.hasWater ? 1 : 0
+      pixelData[offset + 2] = 0
+      pixelData[offset + 3] = 1
+    }
+  }
+
+  const texture = new Float16ArrayTexture()
+  texture.create(chunkSize, chunkSize, pixelData, false)
+  texture.addressModeU = 'clamp-to-edge'
+  texture.addressModeV = 'clamp-to-edge'
+  texture.magFilter = 'nearest'
+  texture.minFilter = 'nearest'
+  texture.mipmapFilter = 'nearest'
+  return texture
+}
+
+function sampleWaterDepthMaskCell(
+  worldCellX: number,
+  worldCellZ: number,
+  chunkSize: number,
+  payloadCellsByCoord: Map<string, DecodedTerrainCells>,
+  fallbackCells: DecodedTerrainCells,
+): WaterDepthMaskSample {
+  const sample = readTerrainCellAtWorldCellOrFallback(
+    worldCellX,
+    worldCellZ,
+    chunkSize,
+    payloadCellsByCoord,
+    fallbackCells,
+  )
+  if (!sample || !isWaterCell(sample)) {
+    return {
+      hasWater: false,
+      depthWorld: 0,
+    }
+  }
+
+  const waterY = elevationToWorldY(Math.max(sample.waterLevel, sample.elevation))
+  const groundY = elevationToWorldY(sample.elevation)
+  return {
+    hasWater: true,
+    depthWorld: Math.max(0, waterY - groundY),
+  }
+}
+
+function readTerrainCellAtWorldCellOrFallback(
+  worldCellX: number,
+  worldCellZ: number,
+  chunkSize: number,
+  payloadCellsByCoord: Map<string, DecodedTerrainCells>,
+  fallbackCells: DecodedTerrainCells,
+): TerrainCellSample | null {
+  const sample = readTerrainCellAtWorldCell(worldCellX, worldCellZ, chunkSize, payloadCellsByCoord)
+  if (sample) {
+    return sample
+  }
+
+  const fallbackX = positiveModInt(worldCellX, fallbackCells.chunkSize)
+  const fallbackZ = positiveModInt(worldCellZ, fallbackCells.chunkSize)
+  return fallbackCells.read(fallbackX, fallbackZ)
 }
 
 function sampleTerrainVertexHeight(
@@ -1980,8 +2105,16 @@ function readTerrainCellAtWorldCell(
 }
 
 function terrainHeightFromCell(sample: TerrainCellSample): number {
-  const isWater = (sample.flags & TERRAIN_WATER_FLAG) !== 0 || sample.waterLevel > sample.elevation
+  const isWater = isWaterCell(sample)
   return isWater ? sample.waterLevel : sample.elevation
+}
+
+function isWaterCell(sample: TerrainCellSample): boolean {
+  return (sample.flags & TERRAIN_WATER_FLAG) !== 0 || sample.waterLevel > sample.elevation
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value))
 }
 
 function toByteArray(value: unknown): Uint8Array | null {
