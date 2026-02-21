@@ -80,4 +80,4 @@
 
 ## 7. 관련 문서
 - 작업 로그(원본): `prompts/20260221_worklog.md`
-- 상위 마스터: `IMPLEMENTDOC/00-master.md`
+- 상위 마스터: `IMPLEMENTDOC/overview/master.md`

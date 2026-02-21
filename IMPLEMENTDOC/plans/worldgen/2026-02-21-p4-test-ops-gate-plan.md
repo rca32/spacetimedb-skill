@@ -2,10 +2,10 @@
 
 작성일: 2026-02-21  
 선행 문서:
-- `IMPLEMENTDOC/18-worldgen-p2-resource-rules-harvest-api-plan-2026-02-21.md`
-- `IMPLEMENTDOC/19-worldgen-p3-generation-streaming-architecture-plan-2026-02-21.md`
-- `IMPLEMENTDOC/17-worldgen-p1-hydrology-biome-gap-closure-plan-2026-02-21.md`
-상위 분석: `IMPLEMENTDOC/15-world-generation-gap-analysis-2026-02-21.md`  
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-p2-resource-rules-harvest-api-plan.md`
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-p3-generation-streaming-architecture-plan.md`
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-p1-hydrology-biome-gap-closure-plan.md`
+상위 분석: `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`  
 대상 스크립트:
 - `stitch-server/scripts/worldgen_determinism_snapshot.sh`
 - `stitch-server/scripts/worldgen_determinism_compare.sh`
@@ -173,6 +173,6 @@ spacetime sql stitch-server "SELECT COUNT(*) AS total, COUNT(DISTINCT entity_id)
 ```
 
 ## 10. 후속 링크
-- P2 문서: `IMPLEMENTDOC/18-worldgen-p2-resource-rules-harvest-api-plan-2026-02-21.md`
-- P3 문서: `IMPLEMENTDOC/19-worldgen-p3-generation-streaming-architecture-plan-2026-02-21.md`
-- 상위 분석: `IMPLEMENTDOC/15-world-generation-gap-analysis-2026-02-21.md`
+- P2 문서: `IMPLEMENTDOC/plans/worldgen/2026-02-21-p2-resource-rules-harvest-api-plan.md`
+- P3 문서: `IMPLEMENTDOC/plans/worldgen/2026-02-21-p3-generation-streaming-architecture-plan.md`
+- 상위 분석: `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`

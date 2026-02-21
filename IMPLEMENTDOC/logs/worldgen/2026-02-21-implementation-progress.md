@@ -4,12 +4,12 @@
 업데이트 시각: 2026-02-21 (2차 반영)
 
 기준 문서:
-- `IMPLEMENTDOC/15-world-generation-gap-analysis-2026-02-21.md`
-- `IMPLEMENTDOC/16-worldgen-p0-baseline-freeze-plan-2026-02-21.md`
-- `IMPLEMENTDOC/17-worldgen-p1-hydrology-biome-gap-closure-plan-2026-02-21.md`
-- `IMPLEMENTDOC/18-worldgen-p2-resource-rules-harvest-api-plan-2026-02-21.md`
-- `IMPLEMENTDOC/19-worldgen-p3-generation-streaming-architecture-plan-2026-02-21.md`
-- `IMPLEMENTDOC/20-worldgen-p4-test-ops-gate-plan-2026-02-21.md`
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-p0-baseline-freeze-plan.md`
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-p1-hydrology-biome-gap-closure-plan.md`
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-p2-resource-rules-harvest-api-plan.md`
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-p3-generation-streaming-architecture-plan.md`
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-p4-test-ops-gate-plan.md`
 
 ## 1) 이번 작업 요약
 

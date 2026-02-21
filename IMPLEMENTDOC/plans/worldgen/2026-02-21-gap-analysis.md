@@ -146,8 +146,8 @@
 - 설계 문서의 BitCraft 참고 항목은 구현 근거가 아니라 아이디어 레벨로만 유지해야 함
 
 ## 7. 후속 상세 실행계획 문서
-- P0 상세 실행계획: `IMPLEMENTDOC/16-worldgen-p0-baseline-freeze-plan-2026-02-21.md`
-- P1 상세 실행계획: `IMPLEMENTDOC/17-worldgen-p1-hydrology-biome-gap-closure-plan-2026-02-21.md`
-- P2 상세 실행계획: `IMPLEMENTDOC/18-worldgen-p2-resource-rules-harvest-api-plan-2026-02-21.md`
-- P3 상세 실행계획: `IMPLEMENTDOC/19-worldgen-p3-generation-streaming-architecture-plan-2026-02-21.md`
-- P4 상세 실행계획: `IMPLEMENTDOC/20-worldgen-p4-test-ops-gate-plan-2026-02-21.md`
+- P0 상세 실행계획: `IMPLEMENTDOC/plans/worldgen/2026-02-21-p0-baseline-freeze-plan.md`
+- P1 상세 실행계획: `IMPLEMENTDOC/plans/worldgen/2026-02-21-p1-hydrology-biome-gap-closure-plan.md`
+- P2 상세 실행계획: `IMPLEMENTDOC/plans/worldgen/2026-02-21-p2-resource-rules-harvest-api-plan.md`
+- P3 상세 실행계획: `IMPLEMENTDOC/plans/worldgen/2026-02-21-p3-generation-streaming-architecture-plan.md`
+- P4 상세 실행계획: `IMPLEMENTDOC/plans/worldgen/2026-02-21-p4-test-ops-gate-plan.md`

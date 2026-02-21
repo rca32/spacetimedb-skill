@@ -1,7 +1,7 @@
 # 월드 생성 P0 상세 실행계획: 설계-구현 기준선 고정 (2026-02-21)
 
 작성일: 2026-02-21  
-기준 분석: `IMPLEMENTDOC/15-world-generation-gap-analysis-2026-02-21.md`  
+기준 분석: `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`  
 기준 설계: `DESIGN/DETAIL/world-generation-system.md`  
 기준 구현:
 - `stitch-server/crates/game_server/src/worldgen/mod.rs`
@@ -153,7 +153,7 @@ spacetime call stitch-server start_world_agents
 2. 설계 항목 처리 결정표가 유지/폐기/연기로 분류되어 있다.
 3. OpenSimplex 채택 여부가 결정되어 있고, 설계 문서 반영 액션이 명시되어 있다.
 4. 운영 검증 명령 실행 시 월드 생성/카운트 조회가 정상 동작한다.
-5. 후속 문서(`IMPLEMENTDOC/17-worldgen-p1-hydrology-biome-gap-closure-plan-2026-02-21.md`)와 양방향 링크가 있다.
+5. 후속 문서(`IMPLEMENTDOC/plans/worldgen/2026-02-21-p1-hydrology-biome-gap-closure-plan.md`)와 양방향 링크가 있다.
 
 ## 9. 리스크 및 롤백
 - 리스크: 설계 문서와 코드 계약이 다시 벌어질 수 있음
@@ -164,5 +164,5 @@ spacetime call stitch-server start_world_agents
   - P1 브랜치에서 문제 발생 시 `cell_payload_version=1` 경로로 재생성하여 즉시 복귀
 
 ## 10. 후속 링크
-- 상위 분석: `IMPLEMENTDOC/15-world-generation-gap-analysis-2026-02-21.md`
-- 다음 단계(P1): `IMPLEMENTDOC/17-worldgen-p1-hydrology-biome-gap-closure-plan-2026-02-21.md`
+- 상위 분석: `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`
+- 다음 단계(P1): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p1-hydrology-biome-gap-closure-plan.md`

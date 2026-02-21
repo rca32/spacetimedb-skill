@@ -2,9 +2,9 @@
 
 작성일: 2026-02-21  
 선행 문서:
-- `IMPLEMENTDOC/16-worldgen-p0-baseline-freeze-plan-2026-02-21.md`
-- `IMPLEMENTDOC/17-worldgen-p1-hydrology-biome-gap-closure-plan-2026-02-21.md`
-상위 분석: `IMPLEMENTDOC/15-world-generation-gap-analysis-2026-02-21.md`  
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-p0-baseline-freeze-plan.md`
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-p1-hydrology-biome-gap-closure-plan.md`
+상위 분석: `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`  
 기준 구현:
 - `stitch-server/crates/game_server/src/worldgen/mod.rs`
 - `stitch-server/crates/game_server/src/reducers/worldgen/mod.rs`
@@ -205,6 +205,6 @@ spacetime publish --server 127.0.0.1:3000 stitch-server
 - 필요 시 worldgen 재생성으로 리소스 상태 초기화
 
 ## 10. 후속 링크
-- 선행(P1): `IMPLEMENTDOC/17-worldgen-p1-hydrology-biome-gap-closure-plan-2026-02-21.md`
-- 다음 단계(P3): `IMPLEMENTDOC/19-worldgen-p3-generation-streaming-architecture-plan-2026-02-21.md`
-- 게이트 고정(P4): `IMPLEMENTDOC/20-worldgen-p4-test-ops-gate-plan-2026-02-21.md`
+- 선행(P1): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p1-hydrology-biome-gap-closure-plan.md`
+- 다음 단계(P3): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p3-generation-streaming-architecture-plan.md`
+- 게이트 고정(P4): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p4-test-ops-gate-plan.md`

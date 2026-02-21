@@ -1,8 +1,8 @@
 # 월드 생성 P1 상세 실행계획: 수계/바이옴 핵심 갭 해소 (2026-02-21)
 
 작성일: 2026-02-21  
-선행 기준선: `IMPLEMENTDOC/16-worldgen-p0-baseline-freeze-plan-2026-02-21.md`  
-근거 분석: `IMPLEMENTDOC/15-world-generation-gap-analysis-2026-02-21.md`  
+선행 기준선: `IMPLEMENTDOC/plans/worldgen/2026-02-21-p0-baseline-freeze-plan.md`  
+근거 분석: `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`  
 대상 구현:
 - `stitch-server/crates/game_server/src/worldgen/mod.rs`
 - `stitch-server/crates/game_server/src/reducers/worldgen/mod.rs`
@@ -264,5 +264,5 @@ spacetime call stitch-server start_world_agents
 - `generate_world_from_params_in_dimension ... overwrite=true`로 청크 재생성
 
 ## 11. 후속 링크
-- 선행(P0): `IMPLEMENTDOC/16-worldgen-p0-baseline-freeze-plan-2026-02-21.md`
-- 상위 분석: `IMPLEMENTDOC/15-world-generation-gap-analysis-2026-02-21.md`
+- 선행(P0): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p0-baseline-freeze-plan.md`
+- 상위 분석: `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`

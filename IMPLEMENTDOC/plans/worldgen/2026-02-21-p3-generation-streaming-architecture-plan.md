@@ -2,9 +2,9 @@
 
 작성일: 2026-02-21  
 선행 문서:
-- `IMPLEMENTDOC/18-worldgen-p2-resource-rules-harvest-api-plan-2026-02-21.md`
-- `IMPLEMENTDOC/17-worldgen-p1-hydrology-biome-gap-closure-plan-2026-02-21.md`
-상위 분석: `IMPLEMENTDOC/15-world-generation-gap-analysis-2026-02-21.md`  
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-p2-resource-rules-harvest-api-plan.md`
+- `IMPLEMENTDOC/plans/worldgen/2026-02-21-p1-hydrology-biome-gap-closure-plan.md`
+상위 분석: `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`  
 대상 구현:
 - `stitch-server/crates/game_server/src/worldgen/mod.rs`
 - `stitch-server/crates/game_server/src/reducers/worldgen/mod.rs`
@@ -188,6 +188,6 @@ spacetime call stitch-server regenerate_chunks_in_dimension 1 1 -1 1 -1 1
 - 필요 시 `generate_world_from_params_in_dimension ... overwrite=true` 재실행
 
 ## 11. 후속 링크
-- 선행(P2): `IMPLEMENTDOC/18-worldgen-p2-resource-rules-harvest-api-plan-2026-02-21.md`
-- 게이트 고정(P4): `IMPLEMENTDOC/20-worldgen-p4-test-ops-gate-plan-2026-02-21.md`
-- 상위 분석: `IMPLEMENTDOC/15-world-generation-gap-analysis-2026-02-21.md`
+- 선행(P2): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p2-resource-rules-harvest-api-plan.md`
+- 게이트 고정(P4): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p4-test-ops-gate-plan.md`
+- 상위 분석: `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`

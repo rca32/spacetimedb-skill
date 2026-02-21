@@ -45,16 +45,20 @@
   - 기본 이속 하향(`walk 3.2`, `run 5.2`)으로 애니메이션 대비 발 미끄러짐 완화
 
 ## 최근 작업 로그
-- 상세 기록 (2026-02-19): `CLIENTDESIGN/12-implementation-log-2026-02-19.md`
-- 상세 기록 (2026-02-21): `CLIENTDESIGN/13-implementation-log-2026-02-21.md`
-- NPC 클라이언트 실행 가이드 (2026-02-21): `CLIENTDESIGN/14-npc-client-execution-guide-2026-02-21.md`
-- 월드 생성 설계-구현 갭 분석 및 개발 계획 (2026-02-21): `IMPLEMENTDOC/15-world-generation-gap-analysis-2026-02-21.md`
-- 월드 생성 P0 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/16-worldgen-p0-baseline-freeze-plan-2026-02-21.md`
-- 월드 생성 P1 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/17-worldgen-p1-hydrology-biome-gap-closure-plan-2026-02-21.md`
-- 월드 생성 P2 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/18-worldgen-p2-resource-rules-harvest-api-plan-2026-02-21.md`
-- 월드 생성 P3 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/19-worldgen-p3-generation-streaming-architecture-plan-2026-02-21.md`
-- 월드 생성 P4 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/20-worldgen-p4-test-ops-gate-plan-2026-02-21.md`
-- resource(나무) 렌더 최적화 기록 (2026-02-21): `IMPLEMENTDOC/23-resource-render-instancing-optimization-2026-02-21.md`
+- IMPLEMENTDOC 구조 가이드: `IMPLEMENTDOC/README.md`
+- 상세 기록 (2026-02-19): `IMPLEMENTDOC/logs/implementation/2026-02-19.md`
+- 상세 기록 (2026-02-21): `IMPLEMENTDOC/logs/implementation/2026-02-21.md`
+- NPC 클라이언트 실행 가이드 (2026-02-21): `IMPLEMENTDOC/guides/npc-client-execution-guide-2026-02-21.md`
+- 서버 운영 가이드: `IMPLEMENTDOC/guides/stitch-server-operations-guide.md`
+- 클라이언트 개발 가이드: `IMPLEMENTDOC/guides/stitch-orillusion-client-development-guide.md`
+- SpacetimeDB RangeError 대응: `IMPLEMENTDOC/guides/spacetimedb-rangeerror-troubleshooting.md`
+- 월드 생성 설계-구현 갭 분석 및 개발 계획 (2026-02-21): `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`
+- 월드 생성 P0 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p0-baseline-freeze-plan.md`
+- 월드 생성 P1 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p1-hydrology-biome-gap-closure-plan.md`
+- 월드 생성 P2 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p2-resource-rules-harvest-api-plan.md`
+- 월드 생성 P3 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p3-generation-streaming-architecture-plan.md`
+- 월드 생성 P4 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p4-test-ops-gate-plan.md`
+- resource(나무) 렌더 최적화 기록 (2026-02-21): `IMPLEMENTDOC/optimizations/2026-02-21-resource-render-instancing.md`
 - 핵심 반영:
   - 잔상 원인 분석 및 런타임 중복 제거
   - 지형 관통 대응을 위한 클라/서버 동시 보강
