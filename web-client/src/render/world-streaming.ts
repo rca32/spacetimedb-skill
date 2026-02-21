@@ -45,7 +45,7 @@ const GLTF_BUILDING_SCALE = 0.8
 const GLTF_RESOURCE_SCALE = 0.8
 const GLTF_PLAYER_SCALE = 0.9
 const GLTF_NPC_SCALE = 0.85
-const LOCAL_PLAYER_SCALE = Number.parseFloat(import.meta.env.VITE_LOCAL_PLAYER_SCALE ?? '0.01')
+const LOCAL_PLAYER_SCALE = Number.parseFloat(import.meta.env.VITE_LOCAL_PLAYER_SCALE ?? '0.9')
 const CHARACTER_DETAIL_DISTANCE = Number.parseFloat(import.meta.env.VITE_CHARACTER_DETAIL_DISTANCE ?? '12')
 const CHARACTER_DETAIL_DISTANCE_SQ = Number.isFinite(CHARACTER_DETAIL_DISTANCE)
   ? CHARACTER_DETAIL_DISTANCE * CHARACTER_DETAIL_DISTANCE
@@ -62,6 +62,7 @@ const FAR_ANIM_UPDATE_FRAME_INTERVAL = (() => {
   const raw = Number.parseInt(import.meta.env.VITE_FAR_ANIM_UPDATE_FRAME_INTERVAL ?? '4', 10)
   return Number.isFinite(raw) && raw > 0 ? raw : 4
 })()
+const ENABLE_IDLE_TURN_ANIMATIONS = (import.meta.env.VITE_ENABLE_IDLE_TURN_ANIMATIONS ?? '0') === '1'
 const TERRAIN_CHUNK_SIZE = 16
 const TERRAIN_HEIGHT_SCALE = 0.2
 const TERRAIN_SEA_LEVEL_BASE = 12
@@ -1393,15 +1394,20 @@ export class WorldStreamingRenderer {
         'run_right_external',
         'run',
       ) ?? runForward
-    const turnLeft =
-      this.resolveExternalActionByAlias(animator, aliases.turn_left_external, 'turn_left_external') ??
-      this.resolveActionByAlias(animator, aliases.turn_left)
-    const turnRight =
-      this.resolveExternalActionByAlias(animator, aliases.turn_right_external, 'turn_right_external') ??
-      this.resolveActionByAlias(animator, aliases.turn_right)
-    const turnBack =
-      this.resolveExternalActionByAlias(animator, aliases.turn_back_external, 'turn_back_external') ??
-      this.resolveActionByAlias(animator, aliases.turn_back)
+    // Prefer same-rig turn clips first to avoid visual separation between split skinned meshes
+    // (e.g. character_gamer body/head) when external retargeted clips are mixed in.
+    const turnLeft = ENABLE_IDLE_TURN_ANIMATIONS
+      ? this.resolveActionByAlias(animator, aliases.turn_left) ??
+        this.resolveExternalActionByAlias(animator, aliases.turn_left_external, 'turn_left_external')
+      : undefined
+    const turnRight = ENABLE_IDLE_TURN_ANIMATIONS
+      ? this.resolveActionByAlias(animator, aliases.turn_right) ??
+        this.resolveExternalActionByAlias(animator, aliases.turn_right_external, 'turn_right_external')
+      : undefined
+    const turnBack = ENABLE_IDLE_TURN_ANIMATIONS
+      ? this.resolveActionByAlias(animator, aliases.turn_back) ??
+        this.resolveExternalActionByAlias(animator, aliases.turn_back_external, 'turn_back_external')
+      : undefined
     const directionalActions: DirectionalActionSet = {
       idle,
       walkForward,

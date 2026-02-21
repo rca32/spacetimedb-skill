@@ -1,9 +1,13 @@
 import {
   BoxGeometry,
   Color,
+  Material,
   MeshRenderer,
   Object3D,
   PointerEvent3D,
+  Scene3D,
+  SkinnedMeshRenderer,
+  SkinnedMeshRenderer2,
   UnLitMaterial,
 } from '@orillusion/core'
 import { CameraAimComponent } from '../camera/camera-aim-component'
@@ -31,6 +35,13 @@ const DEFAULT_CHUNK_SIZE = 32
 const NETWORK_TICK_MS = 100
 const PLAYER_FEET_OFFSET_Y = 0.9
 const DEFAULT_BUILDING_DEF_ID = 1n
+const ENABLE_MOVEMENT_DUST_FX = false
+const CAMERA_DEFAULT_DISTANCE = 2.1
+const CAMERA_DEFAULT_PITCH_DEGREES = 10
+const CAMERA_DEFAULT_HEIGHT_OFFSET = 1.1
+const CAMERA_DEFAULT_LOOK_AT_HEIGHT = 0.15
+const CAMERA_MIN_DISTANCE = 1.6
+const CAMERA_MAX_DISTANCE = 7
 
 export class OrillusionClientRuntime {
   private readonly bus = new FxEventBus()
@@ -57,8 +68,9 @@ export class OrillusionClientRuntime {
   private readonly seenCombatHitIds = new Set<string>()
   private readonly seenCorrectionIds = new Set<string>()
   private lastAppliedAuthoritativeFrameNo = 0
+  private shadowMaterialGuardFrame = 0
 
-  private buildModeEnabled = true
+  private buildModeEnabled = false
   private selectedBuildingDefId = DEFAULT_BUILDING_DEF_ID
   private buildFacing = 0
   private previewRequestSeq = 0
@@ -156,13 +168,22 @@ export class OrillusionClientRuntime {
 
     const cameraFollow = this.engine.cameraObject.addComponent(CameraFollowComponent)
     cameraFollow.target = objects.player
+    cameraFollow.distance = CAMERA_DEFAULT_DISTANCE
+    cameraFollow.pitchDegrees = CAMERA_DEFAULT_PITCH_DEGREES
+    cameraFollow.heightOffset = CAMERA_DEFAULT_HEIGHT_OFFSET
+    cameraFollow.lookAtHeight = CAMERA_DEFAULT_LOOK_AT_HEIGHT
     this.cameraFollow = cameraFollow
 
     const cameraCollision = this.engine.cameraObject.addComponent(CameraCollisionComponent)
     cameraCollision.target = objects.player
+    cameraCollision.maxDistance = CAMERA_MAX_DISTANCE + 1
 
     const cameraAim = this.engine.cameraObject.addComponent(CameraAimComponent)
     cameraAim.pointerLockCanvas = this.engine.canvas
+    cameraAim.normalFov = 62
+    cameraAim.aimFov = 50
+    cameraAim.minDistance = CAMERA_MIN_DISTANCE
+    cameraAim.maxDistance = CAMERA_MAX_DISTANCE
 
     this.postFx = new PostFxPipelineController(this.engine.scene)
     this.postFx.applyProfile(this.config.postFxProfile)
@@ -195,6 +216,7 @@ export class OrillusionClientRuntime {
 
   private tick(): void {
     this.frameNo += 1
+    this.enforceSceneShadowSafety()
     this.net.poll(this.logger)
     this.ensureIdentityBootstrap()
     this.syncSelectedBuildingDef()
@@ -215,6 +237,17 @@ export class OrillusionClientRuntime {
     this.syncBuildPreviewGhost()
     this.syncAoiSubscription()
     this.syncHud()
+  }
+
+  private enforceSceneShadowSafety(): void {
+    if (!this.engine) {
+      return
+    }
+    if (this.frameNo - this.shadowMaterialGuardFrame < 5) {
+      return
+    }
+    this.shadowMaterialGuardFrame = this.frameNo
+    enforceShadowSafeForScene(this.engine.scene)
   }
 
   private pushNetworkFrame(): void {
@@ -245,7 +278,7 @@ export class OrillusionClientRuntime {
       jump: intent.jump,
     })
 
-    if (Math.abs(intent.inputX) + Math.abs(intent.inputZ) > 0) {
+    if (ENABLE_MOVEMENT_DUST_FX && Math.abs(intent.inputX) + Math.abs(intent.inputZ) > 0) {
       this.bus.emit({
         type: 'movement-dust',
         x: position.x,
@@ -786,6 +819,59 @@ export class OrillusionClientRuntime {
       return raw
     }
     return raw.slice(0, 64)
+  }
+}
+
+type AnyRuntimeMeshRenderer = MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2
+
+function enforceShadowSafeForScene(scene: Scene3D): void {
+  const root = scene as unknown as Object3D
+  const visited = new Set<AnyRuntimeMeshRenderer>()
+  const renderers: AnyRuntimeMeshRenderer[] = []
+
+  for (const renderer of root.getComponentsInChild(MeshRenderer)) {
+    if (!visited.has(renderer)) {
+      visited.add(renderer)
+      renderers.push(renderer)
+    }
+  }
+  for (const renderer of root.getComponentsInChild(SkinnedMeshRenderer)) {
+    if (!visited.has(renderer)) {
+      visited.add(renderer)
+      renderers.push(renderer)
+    }
+  }
+  for (const renderer of root.getComponentsInChild(SkinnedMeshRenderer2)) {
+    if (!visited.has(renderer)) {
+      visited.add(renderer)
+      renderers.push(renderer)
+    }
+  }
+
+  for (const renderer of renderers) {
+    renderer.castShadow = false
+    renderer.castGI = false
+    renderer.receiveShadow = false
+    try {
+      const mats = renderer.materials
+      if (Array.isArray(mats)) {
+        for (const mat of mats) {
+          applyShadowSafeMaterial(mat)
+        }
+      }
+    } catch {
+      // Keep render loop alive if a renderer has transient material state.
+    }
+  }
+}
+
+function applyShadowSafeMaterial(material: Material): void {
+  material.acceptShadow = false
+  material.castShadow = false
+  try {
+    material.setDefine('USE_SHADOWMAPING', false)
+  } catch {
+    // Some materials do not expose this define.
   }
 }
 

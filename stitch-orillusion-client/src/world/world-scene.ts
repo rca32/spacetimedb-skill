@@ -1,11 +1,13 @@
 import {
-  BoxGeometry,
+  AnimatorComponent,
   Color,
   Engine3D,
   Material,
   MeshRenderer,
   Object3D,
   Scene3D,
+  SkinnedMeshRenderer,
+  SkinnedMeshRenderer2,
   SphereGeometry,
   UnLitMaterial,
 } from '@orillusion/core'
@@ -21,15 +23,24 @@ interface SceneModelProfile {
   readonly offsetY?: number
   readonly rotationY?: number
   readonly color: readonly [number, number, number]
+  readonly preserveMaterials?: boolean
+  readonly shadowSafePbr?: boolean
+  readonly rootObjectName?: string
+  readonly defaultAnimation?: string
+  readonly defaultAnimationIndex?: number
 }
 
 const PLAYER_MODEL_PROFILE: SceneModelProfile = {
   key: 'scene-player',
-  url: '/blocky-character-a.gltf',
-  scale: 0.2,
-  offsetY: -0.7,
+  url: '/Soldier_draco.glb',
+  scale: 0.3,
+  offsetY: -0.9,
   rotationY: 180,
   color: [0.08, 0.95, 0.9],
+  preserveMaterials: true,
+  shadowSafePbr: true,
+  rootObjectName: 'Character',
+  defaultAnimationIndex: 1,
 }
 
 const LANDMARK_MODEL_PROFILE: SceneModelProfile = {
@@ -52,14 +63,6 @@ export function seedWorldScene(scene: Scene3D): WorldSceneObjects {
 
 function createPlayer(scene: Scene3D): Object3D {
   const player = new Object3D()
-  const fallback = new Object3D()
-  const mesh = fallback.addComponent(MeshRenderer)
-  mesh.geometry = new BoxGeometry(0.9, 1.8, 0.9)
-  if (setMaterialSafe(mesh, createUnlitMaterial(0.1, 0.95, 0.95))) {
-    player.addChild(fallback)
-  } else {
-    fallback.destroy()
-  }
   attachSceneModelAsync(player, PLAYER_MODEL_PROFILE)
 
   player.y = 1.0
@@ -115,8 +118,13 @@ function attachSceneModelAsync(target: Object3D, profile: SceneModelProfile): vo
     instance.scaleY *= profile.scale
     instance.scaleZ *= profile.scale
 
+    if (profile.shadowSafePbr) {
+      applyPbrShadowSafety(instance)
+    }
+
     destroyDirectChildren(target)
     target.addChild(instance)
+    playSceneAnimation(instance, profile.defaultAnimation, profile.defaultAnimationIndex)
   })
 }
 
@@ -137,9 +145,13 @@ function loadScenePrefab(profile: SceneModelProfile): Promise<Object3D | null> {
   const loadPromise = Engine3D.res
     .loadGltf(profile.url)
     .then((loadedRoot) => {
-      const sanitized = cloneNodeAsUnlit(loadedRoot, profile.color)
-      scenePrefabByKey.set(profile.key, sanitized)
-      return sanitized
+      const sourceRoot = resolveModelRoot(loadedRoot, profile.rootObjectName)
+      const prefab = profile.preserveMaterials ? sourceRoot : cloneNodeAsUnlit(sourceRoot, profile.color)
+      if (profile.shadowSafePbr) {
+        applyPbrShadowSafety(prefab)
+      }
+      scenePrefabByKey.set(profile.key, prefab)
+      return prefab
     })
     .catch((error) => {
       scenePrefabFailedKeys.add(profile.key)
@@ -207,6 +219,125 @@ function setMaterialSafe(mesh: MeshRenderer, material: Material): boolean {
     console.warn('[stitch-orillusion-client] material assignment failed in world scene', error)
     return false
   }
+}
+
+type AnyMeshRenderer = MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2
+
+function applyPbrShadowSafety(root: Object3D): void {
+  for (const mesh of collectMeshRenderers(root)) {
+    mesh.castGI = false
+    mesh.castShadow = false
+    mesh.receiveShadow = false
+
+    const materials = getMaterialsSafe(mesh)
+    if (materials.length === 0) {
+      continue
+    }
+    for (const material of materials) {
+      applyShadowSafeMaterial(material)
+    }
+  }
+}
+
+function collectMeshRenderers(root: Object3D): AnyMeshRenderer[] {
+  const out: AnyMeshRenderer[] = []
+  const visited = new Set<AnyMeshRenderer>()
+
+  for (const renderer of root.getComponentsInChild(MeshRenderer)) {
+    if (!visited.has(renderer)) {
+      visited.add(renderer)
+      out.push(renderer)
+    }
+  }
+  for (const renderer of root.getComponentsInChild(SkinnedMeshRenderer)) {
+    if (!visited.has(renderer)) {
+      visited.add(renderer)
+      out.push(renderer)
+    }
+  }
+  for (const renderer of root.getComponentsInChild(SkinnedMeshRenderer2)) {
+    if (!visited.has(renderer)) {
+      visited.add(renderer)
+      out.push(renderer)
+    }
+  }
+
+  return out
+}
+
+function getMaterialsSafe(mesh: AnyMeshRenderer): Material[] {
+  try {
+    const materials = mesh.materials
+    if (Array.isArray(materials) && materials.length > 0) {
+      return materials
+    }
+
+    const single = mesh.material
+    return single ? [single] : []
+  } catch (error) {
+    console.warn('[stitch-orillusion-client] material read failed in world scene', error)
+    return []
+  }
+}
+
+function applyShadowSafeMaterial(material: Material): void {
+  material.acceptShadow = false
+  material.castShadow = false
+  try {
+    material.setDefine('USE_SHADOWMAPING', false)
+  } catch {
+    // Some material variants may not expose this define; ignore safely.
+  }
+}
+
+function resolveModelRoot(loadedRoot: Object3D, preferredName?: string): Object3D {
+  if (!preferredName) {
+    return loadedRoot
+  }
+
+  const resolved = loadedRoot.getObjectByName(preferredName)
+  if (resolved instanceof Object3D) {
+    return resolved
+  }
+
+  console.warn('[stitch-orillusion-client] preferred model root not found, fallback to loaded root', {
+    preferredName,
+  })
+  return loadedRoot
+}
+
+function playSceneAnimation(root: Object3D, preferredClipName?: string, preferredClipIndex?: number): void {
+  const animator = root.getComponentsInChild(AnimatorComponent)[0]
+  if (!animator || !animator.clips || animator.clips.length === 0) {
+    return
+  }
+
+  const preferredByName = preferredClipName
+    ? animator.clips.find((clip) => normalizeClipName(clip.clipName) === normalizeClipName(preferredClipName))
+    : undefined
+  const preferredByIndex =
+    Number.isInteger(preferredClipIndex) &&
+      (preferredClipIndex as number) >= 0 &&
+      (preferredClipIndex as number) < animator.clips.length
+      ? animator.clips[preferredClipIndex as number]
+      : undefined
+  const clip = preferredByName ?? preferredByIndex ?? animator.clips[0]
+  if (!clip) {
+    return
+  }
+
+  try {
+    animator.playAnim(clip.clipName)
+  } catch (error) {
+    console.warn('[stitch-orillusion-client] failed to play scene animation clip', {
+      clipName: clip.clipName,
+      error,
+    })
+  }
+}
+
+function normalizeClipName(value: string): string {
+  return value.trim().toLowerCase()
 }
 
 function destroyDirectChildren(object: Object3D): void {

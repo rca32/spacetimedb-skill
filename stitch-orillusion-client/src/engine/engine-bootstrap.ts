@@ -99,20 +99,28 @@ export async function bootstrapEngine(
 }
 
 function applyEngineSettings(config: AppConfig): void {
-  Engine3D.setting.light.maxLight = 256
-  Engine3D.setting.render.useLogDepth = true
+  Engine3D.setting.light.maxLight = 4096
+  Engine3D.setting.render.useLogDepth = false
   Engine3D.setting.pick.enable = true
   Engine3D.setting.pick.mode = 'bound'
 
-  // Windows WebGPU + current Orillusion build can fail pipeline validation on Lit+Shadow path.
-  // Keep shadows off by default so scene remains renderable.
-  Engine3D.setting.shadow.enable = false
-  Engine3D.setting.shadow.shadowBound = config.postFxProfile === 'high' ? 90 : 60
-  Engine3D.setting.shadow.shadowSize = config.postFxProfile === 'high' ? 2048 : 1024
-  Engine3D.setting.shadow.shadowBias = 0.03
-  Engine3D.setting.shadow.pointShadowBias = 0.002
+  Engine3D.setting.shadow.enable = true
+  Engine3D.setting.shadow.type = 'HARD'
+  Engine3D.setting.shadow.pointShadowBias = 0.0005
+  Engine3D.setting.shadow.shadowSize = 2048
+  Engine3D.setting.shadow.pointShadowSize = 1024
+  Engine3D.setting.shadow.shadowSoft = 0.005
+  Engine3D.setting.shadow.shadowBound = 100
+  Engine3D.setting.shadow.shadowBias = 0.05
+  Engine3D.setting.shadow.needUpdate = true
+  Engine3D.setting.shadow.autoUpdate = true
+  Engine3D.setting.shadow.updateFrameRate = 2
+  Engine3D.setting.shadow.csmMargin = 0.1
+  Engine3D.setting.shadow.csmScatteringExp = 0.7
+  Engine3D.setting.shadow.csmAreaScale = 0.4
+  Engine3D.setting.shadow.debug = false
 
-  Engine3D.setting.loader.numConcurrent = config.postFxProfile === 'low' ? 4 : 8
+  Engine3D.setting.loader.numConcurrent = 20
 
   const post = Engine3D.setting.render.postProcessing
   if (post.bloom) {
@@ -127,4 +135,6 @@ function applyEngineSettings(config: AppConfig): void {
   if (post.ssr) {
     post.ssr.enable = false
   }
+
+  void config
 }

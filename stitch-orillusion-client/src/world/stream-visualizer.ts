@@ -1,4 +1,5 @@
 import {
+  AnimatorComponent,
   BoxGeometry,
   Color,
   Engine3D,
@@ -6,6 +7,8 @@ import {
   MeshRenderer,
   Object3D,
   Scene3D,
+  SkinnedMeshRenderer,
+  SkinnedMeshRenderer2,
   SphereGeometry,
   UnLitMaterial,
   VertexAttributeName,
@@ -57,6 +60,11 @@ interface MarkerModelProfile {
   readonly offsetY?: number
   readonly rotationY?: number
   readonly modelColor: readonly [number, number, number]
+  readonly preserveMaterials?: boolean
+  readonly shadowSafePbr?: boolean
+  readonly rootObjectName?: string
+  readonly defaultAnimation?: string
+  readonly defaultAnimationIndex?: number
   readonly fallback:
     | {
       readonly kind: 'box'
@@ -253,11 +261,15 @@ const PROJECT_SITE_MARKER_MODEL: MarkerModelProfile = {
 
 const PLAYER_LOCAL_MARKER_MODEL: MarkerModelProfile = {
   key: 'player-local',
-  url: '/blocky-character-a.gltf',
-  scale: 0.2,
-  offsetY: -0.7,
+  url: '/Soldier_draco.glb',
+  scale: 0.3,
+  offsetY: -0.9,
   rotationY: 180,
   modelColor: [0.08, 0.95, 0.9],
+  preserveMaterials: true,
+  shadowSafePbr: true,
+  rootObjectName: 'Character',
+  defaultAnimationIndex: 1,
   fallback: {
     kind: 'box',
     width: 0.7,
@@ -269,11 +281,15 @@ const PLAYER_LOCAL_MARKER_MODEL: MarkerModelProfile = {
 
 const PLAYER_REMOTE_MARKER_MODEL: MarkerModelProfile = {
   key: 'player-remote',
-  url: '/blocky-character-b.gltf',
-  scale: 0.2,
-  offsetY: -0.7,
+  url: '/Soldier_draco.glb',
+  scale: 0.3,
+  offsetY: -0.9,
   rotationY: 180,
   modelColor: [0.52, 0.74, 0.98],
+  preserveMaterials: true,
+  shadowSafePbr: true,
+  rootObjectName: 'Character',
+  defaultAnimationIndex: 1,
   fallback: {
     kind: 'box',
     width: 0.7,
@@ -943,8 +959,12 @@ export class WorldStreamVisualizer {
         instance.scaleX *= profile.scale
         instance.scaleY *= profile.scale
         instance.scaleZ *= profile.scale
+        if (profile.shadowSafePbr) {
+          this.applyPbrShadowSafety(instance)
+        }
         destroyDirectChildren(root)
         root.addChild(instance)
+        this.playMarkerAnimation(instance, profile.defaultAnimation, profile.defaultAnimationIndex)
         this.markerVisualStates.set(root, modelState)
         this.logBuildingDebug('attached marker model', {
           key: profile.key,
@@ -976,12 +996,12 @@ export class WorldStreamVisualizer {
   private async loadMarkerPrefab(profile: MarkerModelProfile): Promise<void> {
     try {
       const loadedPrefab = await Engine3D.res.loadGltf(profile.url)
-      const sanitized = this.buildSanitizedMarkerPrefab(loadedPrefab, profile.modelColor)
-      this.markerPrefabByKey.set(profile.key, sanitized)
+      const prefab = this.buildMarkerPrefab(loadedPrefab, profile)
+      this.markerPrefabByKey.set(profile.key, prefab)
       this.logBuildingDebug('loaded marker prefab', {
         key: profile.key,
         url: profile.url,
-        meshCount: countMeshNodes(sanitized),
+        meshCount: countMeshNodes(prefab),
       })
     } catch (error) {
       this.markerPrefabFailedKeys.add(profile.key)
@@ -995,11 +1015,18 @@ export class WorldStreamVisualizer {
     return this.cloneNodeAsUnlit(sourceRoot, [0.76, 0.64, 0.44])
   }
 
-  private buildSanitizedMarkerPrefab(
+  private buildMarkerPrefab(
     sourceRoot: Object3D,
-    color: readonly [number, number, number],
+    profile: MarkerModelProfile,
   ): Object3D {
-    return this.cloneNodeAsUnlit(sourceRoot, color)
+    const resolvedRoot = this.resolveModelRoot(sourceRoot, profile.rootObjectName)
+    if (profile.preserveMaterials) {
+      if (profile.shadowSafePbr) {
+        this.applyPbrShadowSafety(resolvedRoot)
+      }
+      return resolvedRoot
+    }
+    return this.cloneNodeAsUnlit(resolvedRoot, profile.modelColor)
   }
 
   private logBuildingDebug(message: string, fields?: Record<string, unknown>): void {
@@ -1061,6 +1088,114 @@ export class WorldStreamVisualizer {
     }
 
     return clone
+  }
+
+  private resolveModelRoot(loadedRoot: Object3D, preferredName?: string): Object3D {
+    if (!preferredName) {
+      return loadedRoot
+    }
+
+    const resolved = loadedRoot.getObjectByName(preferredName)
+    if (resolved instanceof Object3D) {
+      return resolved
+    }
+
+    this.logBuildingWarn(`preferred model root not found: ${preferredName}`, loadedRoot.name)
+    return loadedRoot
+  }
+
+  private playMarkerAnimation(root: Object3D, preferredClipName?: string, preferredClipIndex?: number): void {
+    const animator = root.getComponentsInChild(AnimatorComponent)[0]
+    if (!animator || !animator.clips || animator.clips.length === 0) {
+      return
+    }
+
+    const preferredByName = preferredClipName
+      ? animator.clips.find((clip) => normalizeClipName(clip.clipName) === normalizeClipName(preferredClipName))
+      : undefined
+    const preferredByIndex =
+      Number.isInteger(preferredClipIndex) &&
+        (preferredClipIndex as number) >= 0 &&
+        (preferredClipIndex as number) < animator.clips.length
+        ? animator.clips[preferredClipIndex as number]
+        : undefined
+    const clip = preferredByName ?? preferredByIndex ?? animator.clips[0]
+    if (!clip) {
+      return
+    }
+
+    try {
+      animator.playAnim(clip.clipName)
+    } catch (error) {
+      this.logBuildingWarn(`failed to play marker animation ${clip.clipName}`, error)
+    }
+  }
+
+  private applyPbrShadowSafety(root: Object3D): void {
+    for (const mesh of this.collectMeshRenderers(root)) {
+      mesh.castGI = false
+      mesh.castShadow = false
+      mesh.receiveShadow = false
+
+      const materials = this.getMeshMaterialsSafe(mesh)
+      if (materials.length === 0) {
+        continue
+      }
+      for (const material of materials) {
+        this.applyShadowSafeMaterial(material)
+      }
+    }
+  }
+
+  private collectMeshRenderers(root: Object3D): Array<MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2> {
+    const out: Array<MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2> = []
+    const visited = new Set<MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2>()
+
+    for (const renderer of root.getComponentsInChild(MeshRenderer)) {
+      if (!visited.has(renderer)) {
+        visited.add(renderer)
+        out.push(renderer)
+      }
+    }
+    for (const renderer of root.getComponentsInChild(SkinnedMeshRenderer)) {
+      if (!visited.has(renderer)) {
+        visited.add(renderer)
+        out.push(renderer)
+      }
+    }
+    for (const renderer of root.getComponentsInChild(SkinnedMeshRenderer2)) {
+      if (!visited.has(renderer)) {
+        visited.add(renderer)
+        out.push(renderer)
+      }
+    }
+
+    return out
+  }
+
+  private getMeshMaterialsSafe(mesh: MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2): Material[] {
+    try {
+      const materials = mesh.materials
+      if (Array.isArray(materials) && materials.length > 0) {
+        return materials
+      }
+
+      const single = mesh.material
+      return single ? [single] : []
+    } catch (error) {
+      this.logBuildingWarn('failed to read marker material', error)
+      return []
+    }
+  }
+
+  private applyShadowSafeMaterial(material: Material): void {
+    material.acceptShadow = false
+    material.castShadow = false
+    try {
+      material.setDefine('USE_SHADOWMAPING', false)
+    } catch {
+      // Ignore materials that do not expose the shadow define.
+    }
   }
 
   private syncProjectSites(db: Record<string, unknown>): void {
@@ -1176,95 +1311,17 @@ export class WorldStreamVisualizer {
   }
 
   private syncPlayers(db: Record<string, unknown>, localIdentityHex: string | null): void {
-    const table = getTableRows(db, 'transformState')
-    if (!table) {
-      this.prune(this.playerObjects, new Set())
-      return
-    }
-
-    const seen = new Set<string>()
-    for (const row of table) {
-      const identityHex = toIdentityHex(row.entityId)
-      if (!identityHex) {
-        continue
-      }
-      seen.add(identityHex)
-
-      const position = row.position
-      if (!Array.isArray(position) || position.length < 3) {
-        continue
-      }
-
-      let object = this.playerObjects.get(identityHex)
-      if (!object) {
-        object = new Object3D()
-        this.root.addChild(object)
-        this.playerObjects.set(identityHex, object)
-      }
-
-      this.ensureMarkerVisual(
-        object,
-        identityHex === localIdentityHex ? PLAYER_LOCAL_MARKER_MODEL : PLAYER_REMOTE_MARKER_MODEL,
-      )
-
-      object.x = toNumber(position[0])
-      const x = toNumber(position[0])
-      const z = toNumber(position[2])
-      const groundY = this.sampleTerrainHeight(x, z)
-      object.y = (groundY ?? toNumber(position[1])) + 0.9
-      object.z = toNumber(position[2])
-      object.scaleX = 1
-      object.scaleY = 1
-      object.scaleZ = 1
-    }
-
-    this.prune(this.playerObjects, seen)
+    void db
+    void localIdentityHex
+    // Local player is rendered by world-scene. Stream player markers are disabled
+    // to avoid duplicate visuals until marker/player model unification is complete.
+    this.prune(this.playerObjects, new Set())
   }
 
   private syncV2Streams(db: Record<string, unknown>): void {
-    const table = getTableRows(db, 'aoiStreamV2')
-    if (!table) {
-      this.prune(this.v2Objects, new Set())
-      return
-    }
-
-    const seen = new Set<string>()
-    for (const row of table) {
-      const key = String(row.streamKey ?? '')
-      if (!key) {
-        continue
-      }
-      seen.add(key)
-
-      const entityType = toNumber(row.entityType)
-      const position = row.position
-      if (!Array.isArray(position) || position.length < 3) {
-        continue
-      }
-
-      let object = this.v2Objects.get(key)
-      if (!object) {
-        object = new Object3D()
-        const mesh = object.addComponent(MeshRenderer)
-        mesh.geometry = new BoxGeometry(1, 1, 1)
-        const [r, g, b] = v2ColorByEntityType(entityType)
-        if (!setMaterialSafe(mesh, createUnlitMaterial(r, g, b))) {
-          object.destroy()
-          continue
-        }
-        this.root.addChild(object)
-        this.v2Objects.set(key, object)
-      }
-
-      object.x = toNumber(position[0])
-      object.y = toNumber(position[1]) + 0.25
-      object.z = toNumber(position[2])
-      object.scaleX = 0.5
-      object.scaleY = 0.5
-      object.scaleZ = 0.5
-    }
-
-    this.prune(this.v2Objects, seen)
+    void db
+    // Disable AOI v2 debug cubes in normal gameplay view.
+    this.prune(this.v2Objects, new Set())
   }
 
   private prune(objects: Map<string, Object3D>, seen: Set<string>): void {
@@ -1321,6 +1378,10 @@ function createUnlitMaterial(r: number, g: number, b: number): UnLitMaterial {
   const material = new UnLitMaterial()
   material.baseColor = new Color(r, g, b, 1)
   return material
+}
+
+function normalizeClipName(value: string): string {
+  return value.trim().toLowerCase()
 }
 
 function createTerrainMaterial(biomeId: number): UnLitMaterial {
@@ -1920,12 +1981,19 @@ function toIdentityHex(value: unknown): string | null {
   if (typeof value === 'object' && value !== null && 'toHexString' in value) {
     const candidate = value as { toHexString?: () => string }
     const converted = candidate.toHexString?.()
-    return converted ? converted.replace(/^0x/, '') : null
+    return converted ? normalizeIdentityHex(converted) : null
   }
 
   if (typeof value === 'string') {
-    return value.replace(/^0x/, '')
+    return normalizeIdentityHex(value)
   }
 
   return null
+}
+
+function normalizeIdentityHex(value: string | null | undefined): string | null {
+  if (!value) {
+    return null
+  }
+  return value.replace(/^0x/i, '').toLowerCase()
 }

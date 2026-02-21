@@ -3,7 +3,7 @@
   "generatedAt": "2026-02-17",
   "models": {
     "characters": {
-      "localPlayer": "/assets/animations/mixamo/y_bot_with_skin.glb",
+      "localPlayer": "/assets/models/characters/player_placeholder.glb",
       "remotePlayer": "/assets/models/characters/character_gamer.glb",
       "npc": "/assets/models/characters/character_gamer.glb"
     },
@@ -89,37 +89,7 @@
   },
   "animations": {
     "characters": {
-      "localPlayer": {
-        "idle": "idle",
-        "idle_external": "/assets/animations/mixamo/loco_idle.glb",
-        "walk_forward": "walk",
-        "walk_forward_external": "/assets/animations/mixamo/loco_walk_forward.glb",
-        "walk_backward": "walk",
-        "walk_backward_external": "/assets/animations/mixamo/loco_walk_forward.glb",
-        "walk_left": "walk",
-        "walk_left_external": "/assets/animations/mixamo/loco_walk_left.glb",
-        "walk_right": "walk",
-        "walk_right_external": "/assets/animations/mixamo/loco_walk_right.glb",
-        "run_forward": "sprint",
-        "run_forward_external": "/assets/animations/mixamo/loco_run_forward.glb",
-        "run_backward": "sprint",
-        "run_backward_external": "/assets/animations/mixamo/loco_run_forward.glb",
-        "run_left": "sprint",
-        "run_left_external": "/assets/animations/mixamo/loco_run_left.glb",
-        "run_right": "sprint",
-        "run_right_external": "/assets/animations/mixamo/loco_run_right.glb",
-        "jump_external": "/assets/animations/mixamo/loco_jump.glb",
-        "hit_reaction_external": "/assets/animations/mixamo/hit_reaction_with_skin.glb",
-        "death_external": "/assets/animations/mixamo/death_from_idle_with_skin.glb",
-        "emote_wave_external": "/assets/animations/mixamo/wave_both_hands_with_skin.fbx?v=20260218a",
-        "attack_primary_external": "/assets/animations/mixamo/sword_shield_cross_slash_with_skin.fbx?v=20260218a",
-        "turn_left": "wheelchair-look-left",
-        "turn_right": "wheelchair-look-right",
-        "turn_back": "wheelchair-move-back",
-        "turn_left_external": "/assets/animations/mixamo/loco_turn_left_90.glb",
-        "turn_right_external": "/assets/animations/mixamo/loco_turn_right_90.glb",
-        "turn_back_external": "/assets/animations/mixamo/loco_turn_left.glb"
-      },
+      "localPlayer": {},
       "remotePlayer": {
         "idle": "idle",
         "idle_external": "/assets/animations/mixamo/loco_idle.glb",
@@ -186,7 +156,8 @@
   },
   "preloadPriority": {
     "critical": [
-      "/assets/animations/mixamo/y_bot_with_skin.glb",
+      "/assets/animations/mixamo/loco_idle.glb",
+      "/assets/models/characters/player_placeholder.glb",
       "/assets/models/characters/character_gamer.glb"
     ],
     "high": [
