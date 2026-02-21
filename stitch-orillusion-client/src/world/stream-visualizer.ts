@@ -1000,6 +1000,8 @@ export class WorldStreamVisualizer {
       try {
         grass.setGrassTexture(textures.blade);
         grass.setWindNoiseTexture(textures.windNoise);
+        // Re-apply after async texture binding in case shader uniforms were reset.
+        grass.grassMaterial.grassHeight = shaderGrassHeight;
       } catch {
         // Chunk may already be destroyed before async texture assignment.
       }
