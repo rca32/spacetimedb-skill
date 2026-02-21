@@ -29,6 +29,7 @@ import {
 
 const DEFAULT_CHUNK_WORLD_SIZE = 32
 const TERRAIN_PAYLOAD_VERSION_V1 = 1
+const TERRAIN_PAYLOAD_VERSION_V2 = 2
 const TERRAIN_WATER_FLAG = 1
 const TERRAIN_HEIGHT_SCALE = 0.2
 const TERRAIN_SEA_LEVEL_BASE = 12
@@ -1677,6 +1678,10 @@ interface TerrainCellSample {
   readonly elevation: number
   readonly waterLevel: number
   readonly flags: number
+  readonly waterBodyType?: number
+  readonly distanceToWater?: number
+  readonly distanceToSea?: number
+  readonly riverFlowPermille?: number
 }
 
 interface DecodedTerrainCells {
@@ -1741,7 +1746,7 @@ function decodeTerrainPayload(payloadRow: Record<string, unknown> | null): Decod
   }
 
   const version = toNumber(payloadRow.cellPayloadVersion)
-  if (version !== TERRAIN_PAYLOAD_VERSION_V1) {
+  if (version !== TERRAIN_PAYLOAD_VERSION_V1 && version !== TERRAIN_PAYLOAD_VERSION_V2) {
     return null
   }
 
@@ -1755,15 +1760,24 @@ function decodeTerrainPayload(payloadRow: Record<string, unknown> | null): Decod
     return null
   }
 
+  const stride = terrainPayloadStrideBytes(version)
+  if (stride <= 0) {
+    return null
+  }
+
   const read = (x: number, z: number): TerrainCellSample | null => {
-    const byteIndex = (z * chunkSize + x) * 8
-    if (byteIndex + 7 >= bytes.length) {
+    const byteIndex = (z * chunkSize + x) * stride
+    if (byteIndex + stride - 1 >= bytes.length) {
       return null
     }
     return {
       elevation: readI16LE(bytes, byteIndex),
       waterLevel: readI16LE(bytes, byteIndex + 2),
       flags: readU16LE(bytes, byteIndex + 6),
+      waterBodyType: version === TERRAIN_PAYLOAD_VERSION_V2 ? readI16LE(bytes, byteIndex + 8) : 0,
+      distanceToWater: version === TERRAIN_PAYLOAD_VERSION_V2 ? readI16LE(bytes, byteIndex + 10) : 0,
+      distanceToSea: version === TERRAIN_PAYLOAD_VERSION_V2 ? readI16LE(bytes, byteIndex + 12) : 0,
+      riverFlowPermille: version === TERRAIN_PAYLOAD_VERSION_V2 ? readI16LE(bytes, byteIndex + 14) : 0,
     }
   }
 
@@ -1780,14 +1794,25 @@ function toTerrainChunkSize(payloadRow: Record<string, unknown>, byteLengthHint 
   }
 
   const bytesLength = byteLengthHint > 0 ? byteLengthHint : toByteArray(payloadRow.cellPayloadBytes)?.length ?? 0
-  if (bytesLength >= 8) {
-    const count = Math.floor(bytesLength / 8)
+  const version = toNumber(payloadRow.cellPayloadVersion)
+  const stride = terrainPayloadStrideBytes(version)
+  if (stride > 0 && bytesLength >= stride) {
+    const count = Math.floor(bytesLength / stride)
     const side = Math.floor(Math.sqrt(count))
     if (side > 0) {
       return side
     }
   }
+  return 0
+}
 
+function terrainPayloadStrideBytes(version: number): number {
+  if (version === TERRAIN_PAYLOAD_VERSION_V1) {
+    return 8
+  }
+  if (version === TERRAIN_PAYLOAD_VERSION_V2) {
+    return 16
+  }
   return 0
 }
 

@@ -133,3 +133,23 @@
 ### 재검증
 - `bun run typecheck` 통과
 - `bun run build` 통과
+
+## 추가 반영 (2026-02-21)
+
+### 1) 월드 생성 진행 업데이트
+- 대상: `IMPLEMENTDOC/15~20` 월드 생성 계획 기반 P1/P2/P3/P4 진척
+- 반영: `cell_payload_version=2` 경로 정합성 보강, P2 reducer 정리, 성능 게이트 payload 산정 조정
+- 상세 로그:
+  - `IMPLEMENTDOC/22-worldgen-implementation-progress-2026-02-21.md`
+
+### 2) 반영 파일
+- `stitch-server/crates/game_server/src/worldgen/mod.rs`
+- `stitch-server/crates/game_server/src/services/nav.rs`
+- `stitch-server/crates/game_server/src/reducers/worldgen/mod.rs`
+- `stitch-orillusion-client/src/world/stream-visualizer.ts`
+- `stitch-server/scripts/worldgen_perf_benchmark.sh`
+- `stitch-server/scripts/worldgen_perf_thresholds.env`
+
+### 3) 재확인
+- `cargo check -p game_server`: 통과
+- `bun run typecheck` (`stitch-orillusion-client`): 통과

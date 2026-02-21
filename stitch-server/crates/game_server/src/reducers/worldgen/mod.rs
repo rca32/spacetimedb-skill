@@ -1,7 +1,9 @@
-use spacetimedb::ReducerContext;
+use spacetimedb::{ReducerContext, Table};
 
 use crate::services::hex_coords::DEFAULT_WORLD_DIMENSION_ID;
-use crate::tables::{ResourceGenDef, WorldGenParams};
+use crate::tables::world_gen::{resource_gen_def, ResourceGenDef};
+use crate::tables::world_state::{resource_node, terrain_chunk_payload};
+use crate::tables::WorldGenParams;
 use spacetimedb::TimeDuration;
 
 const RESOURCE_REQUEST_MAX: u32 = 1_000;
@@ -175,12 +177,14 @@ pub fn harvest_resource(
     ctx: &ReducerContext,
     entity_id: u64,
     requested_amount: u32,
-) -> Result<u32, String> {
+) -> Result<(), String> {
     if requested_amount == 0 {
         return Err("requested_amount must be greater than 0".to_string());
     }
     if requested_amount > RESOURCE_REQUEST_MAX {
-        return Err(format!("requested_amount must be <= {RESOURCE_REQUEST_MAX}"));
+        return Err(format!(
+            "requested_amount must be <= {RESOURCE_REQUEST_MAX}"
+        ));
     }
 
     let mut node = ctx
@@ -189,47 +193,63 @@ pub fn harvest_resource(
         .entity_id()
         .find(entity_id)
         .ok_or_else(|| format!("resource not found: entity_id={entity_id}"))?;
+    let def = find_resource_gen_def(ctx, node.resource_def_id).ok_or_else(|| {
+        format!(
+            "resource definition not found: resource_def_id={}",
+            node.resource_def_id
+        )
+    })?;
 
-    if node.is_depleted && node.amount == 0 && ctx.timestamp.duration_since(node.respawn_at).is_none() {
-        return Err(format!(
-            "resource depleted: entity_id={entity_id}"
-        ));
-    }
-
-    if node.amount == 0 {
-        if let Some(def) = find_resource_gen_def(ctx, node.resource_def_id) {
-            node.is_depleted = false;
-            node.respawn_at = ctx.timestamp;
-            node.amount = def.max_amount.min(node.max_amount.max(1));
-            node.max_amount = def.max_amount;
-            ctx.db.resource_node().entity_id().update(node);
+    if node.is_depleted && node.amount == 0 {
+        if ctx.timestamp.duration_since(node.respawn_at).is_none() {
+            return Err(format!("resource depleted: entity_id={entity_id}"));
         }
+        let max_amount = node.max_amount.max(1);
+        node.is_depleted = false;
+        node.amount = max_amount;
+        node.respawn_at = ctx.timestamp;
     }
 
     if node.amount == 0 {
-        return Ok(0);
+        node.is_depleted = false;
+        node.respawn_at = ctx.timestamp;
+        node.max_amount = def.max_amount.max(1);
+        node.amount = node.max_amount;
+    }
+
+    if node.amount == 0 {
+        return Err(format!("resource depleted: entity_id={entity_id}"));
     }
 
     let mined = node.amount.min(requested_amount);
+    if mined == 0 {
+        return Err(format!("resource depleted: entity_id={entity_id}"));
+    }
     node.amount = node.amount.saturating_sub(mined);
 
     if node.amount == 0 {
-        let respawn_seconds = find_resource_gen_def(ctx, node.resource_def_id)
-            .map(|def| def.respawn_seconds)
-            .unwrap_or(0);
         node.is_depleted = true;
+        let respawn_seconds = def.respawn_seconds;
         node.respawn_at = if respawn_seconds == 0 {
             ctx.timestamp
         } else {
-            ctx.timestamp + TimeDuration::from_duration(std::time::Duration::from_secs(respawn_seconds as u64))
+            ctx.timestamp
+                + TimeDuration::from_duration(std::time::Duration::from_secs(
+                    respawn_seconds as u64,
+                ))
         };
     } else {
         node.is_depleted = false;
     }
 
+    let remaining_amount = node.amount;
     ctx.db.resource_node().entity_id().update(node);
 
-    Ok(mined)
+    log::info!(
+        "harvest_resource: entity_id={entity_id} mined={mined} remaining={remaining_amount}"
+    );
+
+    Ok(())
 }
 
 #[spacetimedb::reducer]
@@ -244,7 +264,8 @@ pub fn get_chunk_payload(
         return Err("dimension_id must be > 0".to_string());
     }
 
-    ctx.db
+    let payload = ctx
+        .db
         .terrain_chunk_payload()
         .iter()
         .find(|row| {
@@ -258,6 +279,11 @@ pub fn get_chunk_payload(
                 "chunk payload not found: region_id={region_id}, dimension_id={dimension_id}, chunk_x={chunk_x}, chunk_y={chunk_y}"
             )
         })?;
+
+    log::info!(
+        "get_chunk_payload: region_id={region_id} dimension_id={dimension_id} chunk_x={chunk_x} chunk_y={chunk_y} version={}",
+        payload.cell_payload_version
+    );
 
     Ok(())
 }

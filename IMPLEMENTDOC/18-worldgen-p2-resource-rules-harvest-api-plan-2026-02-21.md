@@ -20,6 +20,12 @@
 - AOI/구독 모델과 충돌 없이 chunk payload 조회 API를 보강한다.
   - P2 기본 선택: `get_chunk_payload`
 
+### 1.1 진행 상태 (2026-02-21)
+- [x] `harvest_resource` 기본 상태 전이(감산/고갈/리스폰예약) 반영
+- [x] `get_chunk_payload` 조회 reducer 반영
+- [ ] clump 회전/footprint/perimeter 규칙 강화는 후속 단계에서 진행
+- [ ] 반환값 포맷(`Result<u32, String>`) 정합은 추후 조율 필요
+
 ## 2. 범위
 ### In Scope
 - `build_chunk_resources` 규칙 상향

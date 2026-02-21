@@ -15,6 +15,11 @@
 - `terrain_chunk_stream`(요약)과 `terrain_chunk_payload`(상세)의 전송 정책을 명확히 분리한다.
 - AOI 이동 시 전송량/지연시간을 통제할 수 있는 운영 절차를 만든다.
 
+### 1.1 진행 상태 (2026-02-21)
+- [ ] P3 단계는 아직 미구현 상태로 계획 단계 유지
+- [ ] lazy generation 큐/드레인 로직 미도입
+- [ ] AOI 증분 생성 스트리밍 정책은 기존 stream/payload 구조 사용 중
+
 ## 2. 범위
 ### In Scope
 - 지연 생성 엔트리/큐 설계 및 reducer 연계

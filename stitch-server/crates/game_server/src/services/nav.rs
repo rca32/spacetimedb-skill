@@ -16,6 +16,7 @@ pub const TERRAIN_REASON_MISSING: &str = "terrain_missing";
 pub const TERRAIN_REASON_INVALID_INPUT: &str = "invalid_position";
 
 pub const TERRAIN_PAYLOAD_VERSION_V1: u16 = 1;
+pub const TERRAIN_PAYLOAD_VERSION_V2: u16 = 2;
 pub const TERRAIN_WATER_FLAG: u16 = 0b0000_0000_0000_0001;
 pub const TERRAIN_HEIGHT_SCALE: f32 = 0.2;
 pub const TERRAIN_SEA_LEVEL_BASE: i16 = 12;
@@ -256,13 +257,21 @@ impl NavGrid {
         let row = self
             .cells_by_chunk
             .get(&(coord.dimension, chunk_x, chunk_y))?;
-        if row.cell_payload_version != TERRAIN_PAYLOAD_VERSION_V1 {
+        let stride = terrain_payload_stride_bytes(row.cell_payload_version)?;
+        let fields_len = stride / 2;
+        if fields_len < 4 {
             return None;
         }
 
         let chunk_size = self.chunk_size as usize;
-        let byte_index = (local_y * chunk_size + local_x) * 8;
-        if byte_index + 7 >= row.cell_payload_bytes.len() {
+        let cell_index = local_y * chunk_size + local_x;
+        let byte_index = cell_index * stride;
+        if byte_index + 3 >= row.cell_payload_bytes.len() {
+            return None;
+        }
+
+        let flags_offset = stride / 2 - 1;
+        if byte_index + (flags_offset * 2) + 1 >= row.cell_payload_bytes.len() {
             return None;
         }
 
@@ -270,7 +279,7 @@ impl NavGrid {
             elevation: read_i16_le(&row.cell_payload_bytes, byte_index),
             water_level: read_i16_le(&row.cell_payload_bytes, byte_index + 2),
             biome_id: read_i16_le(&row.cell_payload_bytes, byte_index + 4),
-            flags: read_u16_le(&row.cell_payload_bytes, byte_index + 6),
+            flags: read_u16_le(&row.cell_payload_bytes, byte_index + flags_offset * 2),
         })
     }
 
@@ -332,6 +341,14 @@ fn read_i16_le(bytes: &[u8], index: usize) -> i16 {
 
 fn read_u16_le(bytes: &[u8], index: usize) -> u16 {
     u16::from_le_bytes([bytes[index], bytes[index + 1]])
+}
+
+fn terrain_payload_stride_bytes(version: u16) -> Option<usize> {
+    match version {
+        TERRAIN_PAYLOAD_VERSION_V1 => Some(8),
+        TERRAIN_PAYLOAD_VERSION_V2 => Some(16),
+        _ => None,
+    }
 }
 
 fn lerp(a: f32, b: f32, t: f32) -> f32 {

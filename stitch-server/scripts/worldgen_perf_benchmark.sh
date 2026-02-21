@@ -218,9 +218,23 @@ for ((i=1; i<=ITERATIONS; i++)); do
     chunk_count="$(scalar_sql "SELECT COUNT(*) AS count FROM terrain_chunk WHERE region_id = ${REGION_ID}")"
     resource_count="$(scalar_sql "SELECT COUNT(*) AS count FROM resource_node WHERE region_id = ${REGION_ID}")"
     payload_chunk_count="$(scalar_sql "SELECT COUNT(*) AS count FROM terrain_chunk_payload WHERE region_id = ${REGION_ID}")"
-    payload_cell_rows="$(canon_sql "SELECT cell_count FROM terrain_chunk_payload WHERE region_id = ${REGION_ID}")"
-    payload_cell_count="$(sum_first_column "$payload_cell_rows")"
-    payload_bytes_estimate=$((payload_cell_count * 8))
+    payload_rows="$(canon_sql "SELECT cell_count, cell_payload_version FROM terrain_chunk_payload WHERE region_id = ${REGION_ID}")"
+    payload_bytes_estimate="$(awk -F'|' '
+      {
+        gsub(/"/, "", $1)
+        gsub(/"/, "", $2)
+        cells = $1 + 0
+        version = $2 + 0
+        if (version == 2) {
+          bytes_per_cell = 16
+        } else {
+          bytes_per_cell = 8
+        }
+        total += cells * bytes_per_cell
+      }
+      END { print total + 0 }
+    ' <<< "$payload_rows")"
+    payload_cell_count="$(sum_first_column "$(printf "%s\n" "$payload_rows" | cut -d'|' -f1)")"
   fi
 
   echo "${i},${generate_ms},${chunk_count},${resource_count},${payload_chunk_count},${payload_cell_count},${payload_bytes_estimate}" >> "$OUT_CSV"
