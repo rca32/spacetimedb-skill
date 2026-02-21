@@ -8,7 +8,12 @@
 대상 구현:
 - `stitch-server/crates/game_server/src/worldgen/mod.rs`
 - `stitch-server/crates/game_server/src/reducers/worldgen/mod.rs`
+- `stitch-server/crates/game_server/src/agents/mod.rs`
+- `stitch-server/crates/game_server/src/tables/world_gen.rs`
+- `stitch-server/crates/game_server/src/tables/world_state.rs`
+- `stitch-server/crates/game_server/src/tables/agent_timers.rs`
 - `stitch-server/crates/game_server/src/subscriptions/world_stream.rs`
+- `stitch-orillusion-client/src/app/runtime.ts`
 
 ## 1. 목표
 - 플레이 진입 시 월드 전체 선생성을 제거하고, 요청 기반 지연 생성(Lazy Generation)으로 전환한다.
@@ -16,9 +21,16 @@
 - AOI 이동 시 전송량/지연시간을 통제할 수 있는 운영 절차를 만든다.
 
 ### 1.1 진행 상태 (2026-02-21)
-- [ ] P3 단계는 아직 미구현 상태로 계획 단계 유지
-- [ ] lazy generation 큐/드레인 로직 미도입
-- [ ] AOI 증분 생성 스트리밍 정책은 기존 stream/payload 구조 사용 중
+- [x] `WorldGenParams`에 lazy 관련 운영 파라미터 추가
+  - `lazy_generation_enabled`
+  - `lazy_seed_radius_chunks`
+  - `lazy_chunks_per_tick`
+  - `lazy_prefetch_ring`
+- [x] 월드 생성 큐 테이블(`worldgen_chunk_generation_queue`) 및 dedupe/priority 로직 반영
+- [x] AOI 요청 reducer(`request_chunks_for_aoi`) + 즉시 드레인 reducer(`drain_chunk_generation_queue_now`) 반영
+- [x] 스케줄드 루프(`worldgen_lazy_agent_loop`) + 타이머(`worldgen_lazy_loop_timer`) 반영
+- [x] 클라이언트 AOI 갱신 시 `request_chunks_for_aoi` 호출 반영
+- [ ] 실측 성능 지표(비 dry-run) 재수집은 운영 환경에서 추가 검증 필요
 
 ## 2. 범위
 ### In Scope
@@ -44,11 +56,16 @@
 
 ### 3.2 신규 내부 엔트리(비공개 함수)
 권장 함수:
-- `ensure_chunk_generated_on_demand(...)`
 - `enqueue_chunk_generation(...)`
-- `drain_chunk_generation_queue(...)`
+- `drain_chunk_generation_queue_with_limit(...)`
+- `generate_chunk_set_from_params(...)`
+- `build_region_hydro_cache(...)`
 
-### 3.3 조회/구독 우선순위
+### 3.3 신규 공개 reducer (P3 반영)
+- `request_chunks_for_aoi(...)`
+- `drain_chunk_generation_queue_now(...)`
+
+### 3.4 조회/구독 우선순위
 1. 1차: `terrain_chunk_stream_query`
 2. 2차: 필요 시 `terrain_chunk_payload_stream_query`
 3. 3차: 결측 chunk 감지 시 지연 생성 트리거

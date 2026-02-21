@@ -12,6 +12,8 @@
 - `stitch-server/scripts/worldgen_perf_gate.sh`
 - `stitch-server/scripts/worldgen_perf_benchmark.sh`
 - `stitch-server/scripts/worldgen_perf_thresholds.env`
+- `stitch-server/scripts/worldgen_functional_gate.sh`
+- `stitch-server/scripts/worldgen_ops_gate.sh`
 
 ## 1. 목표
 - 월드 생성 품질 회귀를 PR/운영 단계에서 조기에 차단한다.
@@ -21,7 +23,8 @@
 ### 1.1 진행 상태 (2026-02-21)
 - [x] 성능 게이트에서 `terrain_chunk_payload` 버전별 payload 크기 산정 반영
 - [x] `WORLDGEN_PERF_MAX_PAYLOAD_BYTES` 임계치 동시 조정
-- [ ] 결정론/기능 번들 게이트 자동 실행은 미구성
+- [x] 기능 회귀 게이트 스크립트(`worldgen_functional_gate.sh`) 반영
+- [x] 운영 통합 게이트 번들(`worldgen_ops_gate.sh`) 반영
 - [ ] CI 자동 차단 단계는 다음 반복 작업에서 연동
 
 ## 2. 범위
@@ -65,11 +68,28 @@ stitch-server/scripts/worldgen_perf_benchmark.sh --server 127.0.0.1:3000 --db st
 - `stitch-server/scripts/worldgen_perf_thresholds.env`
 
 ### 3.3 Functional Regression Bundle
+기본 명령:
+```bash
+stitch-server/scripts/worldgen_functional_gate.sh --server 127.0.0.1:3000 --db stitch-server
+```
+
 검증 항목:
 1. P1: 강/호수/거리 proxy payload 버전/식별 가능
 2. P2: `harvest_resource` 상태 전이(채집->고갈->재생)
 3. P3: lazy generation 큐 동작 및 AOI 증분 생성
 4. 공통: `resource_node` ID 충돌 없음
+
+### 3.4 통합 Operations Gate
+기본 명령:
+```bash
+stitch-server/scripts/worldgen_ops_gate.sh --server 127.0.0.1:3000 --db stitch-server
+```
+
+구성:
+1. determinism snapshot 2회 캡처
+2. determinism compare
+3. performance gate
+4. functional regression gate
 
 ## 4. CI 연결 스펙
 
@@ -104,6 +124,8 @@ spacetime call --server 127.0.0.1:3000 stitch-server start_world_agents
 cd /home/rca32/workspaces/spacetimedb-skill
 stitch-server/scripts/worldgen_determinism_snapshot.sh --server 127.0.0.1:3000 --db stitch-server
 stitch-server/scripts/worldgen_perf_gate.sh --server 127.0.0.1:3000 --db stitch-server
+stitch-server/scripts/worldgen_functional_gate.sh --server 127.0.0.1:3000 --db stitch-server
+stitch-server/scripts/worldgen_ops_gate.sh --server 127.0.0.1:3000 --db stitch-server
 ```
 
 ## 6. 임계치 변경 관리 규칙
