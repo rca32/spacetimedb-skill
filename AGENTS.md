@@ -43,6 +43,9 @@ spacetime call stitch-server import_csv_data
 spacetime call stitch-server start_world_agents
 ```
 - 4차 확인: 클라이언트 dev 서버 재시작 + 브라우저 hard reload 후, 제외했던 구독을 순차 복원한다.
+- `server_correction_v2` 운영 규칙:
+  - 스키마는 `server_x/server_y/server_z`, `velocity_x/velocity_y/velocity_z`처럼 **고정 스칼라 컬럼**을 사용한다 (`Vec<f32>` 지양).
+  - 구독은 `session-self`에서만 유지하고, AOI 쿼리에는 중복 추가하지 않는다.
 
 ## WSL 브라우저 자동화 규칙
 - WSL에서 OAuth/CAPTCHA/2FA/다운로드 제한으로 자동화가 막히면 기본 스킬로 `.agents/skills/wsl-human-cdp-download/SKILL.md`를 사용한다.

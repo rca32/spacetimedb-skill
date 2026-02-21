@@ -30,8 +30,11 @@ export function buildAoiQueries(input: AoiQueryInput): string[] {
 
   const queries = [
     'SELECT * FROM world_gen_params',
+    `SELECT * FROM aoi_stream_v2 WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${minChunkX} AND chunk_x <= ${maxChunkX} AND chunk_y >= ${minChunkY} AND chunk_y <= ${maxChunkY}`,
+    `SELECT * FROM physics_state_v2 WHERE region_id = ${region} AND dimension_id = ${dimension}`,
     `SELECT * FROM combat_hit_v2 WHERE region_id = ${region} AND dimension_id = ${dimension}`,
     `SELECT * FROM terrain_chunk_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${minChunkX} AND chunk_x <= ${maxChunkX} AND chunk_y >= ${minChunkY} AND chunk_y <= ${maxChunkY}`,
+    `SELECT * FROM terrain_chunk_payload WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${minChunkX} AND chunk_x <= ${maxChunkX} AND chunk_y >= ${minChunkY} AND chunk_y <= ${maxChunkY}`,
     `SELECT * FROM resource_node WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
     `SELECT * FROM building_state WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
     `SELECT * FROM project_site_state WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
@@ -45,6 +48,7 @@ export function buildAoiQueries(input: AoiQueryInput): string[] {
     )
   }
 
+  // server_correction_v2 is handled via SESSION_SUBSCRIPTION_KEY to avoid duplicate streams.
   void input.identityHex
 
   return queries

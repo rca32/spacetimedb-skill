@@ -526,6 +526,7 @@ export class OrillusionClientRuntime {
     this.net.setSubscription(
       SESSION_SUBSCRIPTION_KEY,
       [
+        `SELECT * FROM physics_state_v2 WHERE entity_id = 0x${identityHex}`,
         `SELECT * FROM server_correction_v2 WHERE identity = 0x${identityHex} AND region_id = ${this.activeRegionId.toString()} AND dimension_id = ${this.activeDimensionId}`,
         `SELECT * FROM player_session_view WHERE identity = 0x${identityHex}`,
         `SELECT * FROM building_preview_feedback_view WHERE identity = 0x${identityHex}`,
@@ -703,8 +704,12 @@ export class OrillusionClientRuntime {
       }
       this.seenCorrectionIds.add(correctionId)
 
-      const position = row.authoritativePosition as number[] | undefined
-      if (position && this.player && position.length >= 3) {
+      const position = [
+        toF32Number(row.serverX),
+        toF32Number(row.serverY),
+        toF32Number(row.serverZ),
+      ]
+      if (this.player && Number.isFinite(position[0]) && Number.isFinite(position[1]) && Number.isFinite(position[2])) {
         if (!isLocallyMoving) {
           this.applyAuthoritativeXZ(position)
         }
@@ -965,6 +970,24 @@ function toI32Number(value: unknown): number {
   }
   if (typeof value === 'object' && value !== null && 'toString' in value) {
     const parsed = Number.parseInt(String(value), 10)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+function toF32Number(value: unknown): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0
+  }
+  if (typeof value === 'bigint') {
+    return Number(value)
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  if (typeof value === 'object' && value !== null && 'toString' in value) {
+    const parsed = Number.parseFloat(String(value))
     return Number.isFinite(parsed) ? parsed : 0
   }
   return 0
