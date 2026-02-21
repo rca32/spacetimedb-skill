@@ -3,6 +3,7 @@ import {
   BoxGeometry,
   Color,
   Engine3D,
+  InstanceDrawComponent,
   LitMaterial,
   Material,
   MeshRenderer,
@@ -52,6 +53,7 @@ const WATER_SURFACE_OFFSET = 0.06
 const WATER_SURFACE_HIDDEN_DEPTH = 0.04
 const WATER_WAVE_TIME_SCALE = 0.0018
 const WATER_DEPTH_MAX_WORLD = 2.4
+const RESOURCE_SYNC_INTERVAL_MS = 120
 
 interface BuildingModelVariant {
   readonly key: string
@@ -344,6 +346,7 @@ export interface WorldStreamVisualizerOptions {
   readonly debugBuildingModels?: boolean
   readonly postFxProfile?: WaterRenderProfile
   readonly waterQuality?: WaterQualityLevel
+  readonly resourceInstancingEnabled?: boolean
 }
 
 interface WaterSurfaceChunkResources {
@@ -351,11 +354,15 @@ interface WaterSurfaceChunkResources {
   readonly depthTexture: Float16ArrayTexture
 }
 
+type ResourceRenderMode = 'instanced' | 'legacy'
+
 export class WorldStreamVisualizer {
   private readonly root = new Object3D()
+  private readonly resourceInstanceRoot = new Object3D()
   private readonly debugBuildingModels: boolean
   private readonly waterProfile: WaterRenderProfile
   private readonly waterQuality: WaterQualityLevel
+  private readonly resourceInstancingEnabled: boolean
 
   private readonly terrainObjects = new Map<string, Object3D>()
   private readonly terrainStamps = new Map<string, string>()
@@ -390,6 +397,8 @@ export class WorldStreamVisualizer {
   private terrainChunkSizeHint = DEFAULT_CHUNK_WORLD_SIZE
   private showFootprintOverlay = false
   private projectLabels: string[] = []
+  private resourceRenderMode: ResourceRenderMode = 'legacy'
+  private lastResourceSyncAtMs = 0
 
   private chunkWorldSize = DEFAULT_CHUNK_WORLD_SIZE
 
@@ -410,7 +419,14 @@ export class WorldStreamVisualizer {
     this.debugBuildingModels = options.debugBuildingModels === true
     this.waterProfile = options.postFxProfile ?? 'low'
     this.waterQuality = options.waterQuality ?? 'balanced'
+    this.resourceInstancingEnabled = options.resourceInstancingEnabled !== false
     scene.addChild(this.root)
+    this.root.addChild(this.resourceInstanceRoot)
+    this.resourceRenderMode = this.resourceInstancingEnabled
+      ? this.ensureResourceInstancingReady()
+        ? 'instanced'
+        : 'legacy'
+      : 'legacy'
   }
 
   dispose(): void {
@@ -427,6 +443,10 @@ export class WorldStreamVisualizer {
 
   getStats(): VisualizerStats {
     return this.stats
+  }
+
+  getResourceRenderMode(): ResourceRenderMode {
+    return this.resourceRenderMode
   }
 
   setShowFootprintOverlay(enabled: boolean): void {
@@ -473,7 +493,7 @@ export class WorldStreamVisualizer {
 
     this.syncTerrain(db)
     this.syncNpcs(db)
-    this.syncResources(db)
+    this.syncResources(db, Date.now())
     this.syncBuildingDefs(db)
     this.syncProjectSites(db)
     this.syncBuildings(db)
@@ -801,7 +821,19 @@ export class WorldStreamVisualizer {
     }
   }
 
-  private syncResources(db: Record<string, unknown>): void {
+  private syncResources(db: Record<string, unknown>, nowMs: number): void {
+    if (
+      this.resourceObjects.size > 0 &&
+      nowMs - this.lastResourceSyncAtMs < RESOURCE_SYNC_INTERVAL_MS
+    ) {
+      return
+    }
+    this.lastResourceSyncAtMs = nowMs
+
+    if (this.resourceRenderMode === 'instanced' && !this.ensureResourceInstancingReady()) {
+      this.switchResourceRenderMode('legacy', 'instancing init failed')
+    }
+
     const table = getTableRows(db, 'resourceNode')
     if (!table) {
       this.prune(this.resourceObjects, new Set())
@@ -824,9 +856,10 @@ export class WorldStreamVisualizer {
       let object = this.resourceObjects.get(id)
       if (!object) {
         object = new Object3D()
-        this.root.addChild(object)
+        this.attachResourceObject(object)
         this.resourceObjects.set(id, object)
       }
+      this.attachResourceObject(object)
 
       this.ensureMarkerVisual(object, RESOURCE_MARKER_MODEL)
 
@@ -843,6 +876,43 @@ export class WorldStreamVisualizer {
     }
 
     this.prune(this.resourceObjects, seen)
+  }
+
+  private ensureResourceInstancingReady(): boolean {
+    try {
+      if (!this.resourceInstanceRoot.hasComponent(InstanceDrawComponent)) {
+        this.resourceInstanceRoot.addComponent(InstanceDrawComponent)
+      }
+      return true
+    } catch (error) {
+      console.warn('[stitch-orillusion-client] failed to enable resource instancing, fallback to legacy', error)
+      return false
+    }
+  }
+
+  private attachResourceObject(object: Object3D): void {
+    const parent = this.resourceRenderMode === 'instanced' ? this.resourceInstanceRoot : this.root
+    if (parent.hasChild(object)) {
+      return
+    }
+
+    if (this.root.hasChild(object)) {
+      this.root.removeChild(object)
+    }
+    if (this.resourceInstanceRoot.hasChild(object)) {
+      this.resourceInstanceRoot.removeChild(object)
+    }
+    parent.addChild(object)
+  }
+
+  private switchResourceRenderMode(nextMode: ResourceRenderMode, reason: string): void {
+    if (this.resourceRenderMode === nextMode) {
+      return
+    }
+    this.resourceRenderMode = nextMode
+    this.prune(this.resourceObjects, new Set())
+    console.warn('[stitch-orillusion-client] resource render mode switched', { mode: nextMode, reason })
+    this.logBuildingWarn(`resource render mode switched to ${nextMode}: ${reason}`, reason)
   }
 
   private syncBuildingDefs(db: Record<string, unknown>): void {
@@ -1515,6 +1585,7 @@ export class WorldStreamVisualizer {
     this.prune(this.npcObjects, new Set())
     this.npcStateSnapshots.clear()
     this.prune(this.resourceObjects, new Set())
+    destroyDirectChildren(this.resourceInstanceRoot)
     this.prune(this.buildingObjects, new Set())
     this.buildingVisualVersions.clear()
     this.buildingModelAppliedVersions.clear()
@@ -1529,6 +1600,7 @@ export class WorldStreamVisualizer {
     this.terrainHeightIndex.clear()
     this.terrainFallbackHeightByChunkCoord.clear()
     this.waterResourcesByChunkKey.clear()
+    this.lastResourceSyncAtMs = 0
 
     this.stats = {
       terrain: 0,

@@ -234,6 +234,7 @@ export class OrillusionClientRuntime {
       debugBuildingModels: this.config.debugBuildingModels,
       postFxProfile: this.config.postFxProfile,
       waterQuality: this.config.postFxProfile === 'high' ? 'high' : 'balanced',
+      resourceInstancingEnabled: this.config.resourceInstancingEnabled,
     })
     this.streamVisualizer.setChunkWorldSize(this.activeChunkSize)
     this.streamVisualizer.setShowFootprintOverlay(this.buildModeEnabled)
@@ -939,6 +940,8 @@ export class OrillusionClientRuntime {
       `<div>region/dimension: ${this.activeRegionId.toString()}/${this.activeDimensionId}</div>`,
       `<div>chunk-size: ${this.activeChunkSize}</div>`,
       `<div>terrain/npc/res/bld/prj/fpt/player/v2: ${streamStats ? `${streamStats.terrain}/${streamStats.npc}/${streamStats.resource}/${streamStats.building}/${streamStats.project}/${streamStats.footprint}/${streamStats.players}/${streamStats.v2}` : '-'}</div>`,
+      `<div>resource render mode: ${this.streamVisualizer?.getResourceRenderMode() ?? '-'}</div>`,
+      `<div>resource sync interval: 120ms</div>`,
       `<div>project labels: ${projectLabels.length > 0 ? projectLabels.join(' | ') : '-'}</div>`,
       `<div>terrain detail/fallback: ${streamStats ? `${streamStats.terrainDetailed}/${streamStats.terrainFallback}` : '-'}</div>`,
       `<div>build mode: ${this.buildModeEnabled ? 'on' : 'off'} (B toggle)</div>`,

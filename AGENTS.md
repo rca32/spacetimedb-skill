@@ -110,6 +110,7 @@ bun run build
   - `VITE_POSTFX_PROFILE` (`low|medium|high`)
   - `VITE_DEVICE_PIXEL_RATIO` (기본: `1`)
   - `VITE_DEBUG_BUILDING_MODELS` (`1`일 때 빌딩 모델/부착 디버그 로그 출력)
+  - `VITE_RESOURCE_INSTANCING` (기본: `1`, `0`일 때 resource 트리 인스턴싱 비활성화)
 
 ## orillusion samples asset 규칙
 - `orillusion/samples`에서 사용하는 기본 에셋은 `orillusion-assets/`를 기준으로 한다.

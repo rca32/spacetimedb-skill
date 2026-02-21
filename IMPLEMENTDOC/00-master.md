@@ -54,6 +54,7 @@
 - 월드 생성 P2 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/18-worldgen-p2-resource-rules-harvest-api-plan-2026-02-21.md`
 - 월드 생성 P3 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/19-worldgen-p3-generation-streaming-architecture-plan-2026-02-21.md`
 - 월드 생성 P4 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/20-worldgen-p4-test-ops-gate-plan-2026-02-21.md`
+- resource(나무) 렌더 최적화 기록 (2026-02-21): `IMPLEMENTDOC/23-resource-render-instancing-optimization-2026-02-21.md`
 - 핵심 반영:
   - 잔상 원인 분석 및 런타임 중복 제거
   - 지형 관통 대응을 위한 클라/서버 동시 보강

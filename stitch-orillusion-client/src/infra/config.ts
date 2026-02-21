@@ -10,6 +10,7 @@ export interface AppConfig {
   readonly postFxProfile: PostFxProfile
   readonly debugPhysics: boolean
   readonly debugBuildingModels: boolean
+  readonly resourceInstancingEnabled: boolean
   readonly enableStatsPanel: boolean
   readonly tokenStorageKey: string
 }
@@ -27,6 +28,7 @@ export function loadConfig(): AppConfig {
     postFxProfile: (import.meta.env.VITE_POSTFX_PROFILE ?? 'low') as PostFxProfile,
     debugPhysics: (import.meta.env.VITE_DEBUG_PHYSICS ?? '0') === '1',
     debugBuildingModels: (import.meta.env.VITE_DEBUG_BUILDING_MODELS ?? '0') === '1',
+    resourceInstancingEnabled: (import.meta.env.VITE_RESOURCE_INSTANCING ?? '1') !== '0',
     enableStatsPanel: (import.meta.env.VITE_ENABLE_STATS ?? '1') === '1',
     tokenStorageKey: import.meta.env.VITE_TOKEN_STORAGE_KEY ?? 'stitch-orillusion-token',
   }
