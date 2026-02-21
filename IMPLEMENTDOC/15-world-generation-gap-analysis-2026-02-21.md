@@ -144,3 +144,10 @@
 - `terrain_chunk_payload`를 유지한 채 필드 확장 시, 클라이언트 디코딩 계약 버전 관리가 필수
 - 강/호수 계산을 한 번에 크게 도입하면 생성 시간 급증 위험이 있으므로, chunk 범위 단위 실험 플래그가 필요
 - 설계 문서의 BitCraft 참고 항목은 구현 근거가 아니라 아이디어 레벨로만 유지해야 함
+
+## 7. 후속 상세 실행계획 문서
+- P0 상세 실행계획: `IMPLEMENTDOC/16-worldgen-p0-baseline-freeze-plan-2026-02-21.md`
+- P1 상세 실행계획: `IMPLEMENTDOC/17-worldgen-p1-hydrology-biome-gap-closure-plan-2026-02-21.md`
+- P2 상세 실행계획: `IMPLEMENTDOC/18-worldgen-p2-resource-rules-harvest-api-plan-2026-02-21.md`
+- P3 상세 실행계획: `IMPLEMENTDOC/19-worldgen-p3-generation-streaming-architecture-plan-2026-02-21.md`
+- P4 상세 실행계획: `IMPLEMENTDOC/20-worldgen-p4-test-ops-gate-plan-2026-02-21.md`

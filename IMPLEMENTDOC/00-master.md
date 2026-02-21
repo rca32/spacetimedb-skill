@@ -49,6 +49,11 @@
 - 상세 기록 (2026-02-21): `CLIENTDESIGN/13-implementation-log-2026-02-21.md`
 - NPC 클라이언트 실행 가이드 (2026-02-21): `CLIENTDESIGN/14-npc-client-execution-guide-2026-02-21.md`
 - 월드 생성 설계-구현 갭 분석 및 개발 계획 (2026-02-21): `IMPLEMENTDOC/15-world-generation-gap-analysis-2026-02-21.md`
+- 월드 생성 P0 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/16-worldgen-p0-baseline-freeze-plan-2026-02-21.md`
+- 월드 생성 P1 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/17-worldgen-p1-hydrology-biome-gap-closure-plan-2026-02-21.md`
+- 월드 생성 P2 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/18-worldgen-p2-resource-rules-harvest-api-plan-2026-02-21.md`
+- 월드 생성 P3 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/19-worldgen-p3-generation-streaming-architecture-plan-2026-02-21.md`
+- 월드 생성 P4 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/20-worldgen-p4-test-ops-gate-plan-2026-02-21.md`
 - 핵심 반영:
   - 잔상 원인 분석 및 런타임 중복 제거
   - 지형 관통 대응을 위한 클라/서버 동시 보강
@@ -59,3 +64,4 @@
 2. 서버 측 수직 물리(점프/낙하) 모델 정교화와 클라 solver 합의 강화
 3. correction reason 코드 체계화 및 운영용 메트릭 대시보드 추가
 4. 도메인별 UI/HUD 패널 및 입력 액션 확장
+5. 월드 생성 P2~P4 상세 실행계획 기준으로 서버 구현/게이트를 순차 반영
