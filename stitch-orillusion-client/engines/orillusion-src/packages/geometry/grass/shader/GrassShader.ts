@@ -85,8 +85,6 @@ export let GrassShader = /* wgsl */`
         var uv = vertex.uv ;
         let weight = ( 1.0 - uv.y )  ;
         let limitAngle = 90.0 / 8.0 * DEGREES_TO_RADIANS + PI * 0.35 ;
-        // Guard against oversized bend when uniform updates are delayed or stale.
-        let safeGrassHeight = clamp(materialUniform.grassHeight, 0.01, 0.35);
         // if(uv.y < 1.0 ){
             for (var index:i32 = 1; index <= 5 ; index+=1) {
                 let bios = f32(index) / 5.0 ;
@@ -94,7 +92,7 @@ export let GrassShader = /* wgsl */`
                     let rx = weights.x * weights.w + clamp(speed.y * windPower * pow(weight,materialUniform.curvature),-1.0,1.0)  ;
                     let rz = weights.z * weights.w + clamp(-speed.x * windPower * pow(weight,materialUniform.curvature),-1.0,1.0) ;
 
-                    var rot = buildRotateXYZMat4(rx,0.0,rz,0.0,safeGrassHeight*bios*0.1,0.0);
+                    var rot = buildRotateXYZMat4(rx,0.0,rz,0.0,materialUniform.grassHeight*bios,0.0);
                     finalMatrix *= rot ;
                 }
             }
@@ -128,7 +126,11 @@ export let GrassShader = /* wgsl */`
         }
         normal = normalize(normal);
 
-        useShadow();
+        var shadowVisibility = 1.0;
+        #if USE_SHADOWMAPING
+            useShadow();
+            shadowVisibility = directShadowVisibility[0];
+        #endif
          
         var uv = ORI_VertexVarying.fragUV0 ; 
 
@@ -153,16 +155,22 @@ export let GrassShader = /* wgsl */`
         let NoV = max(dot(normal,viewDir),0.0);
 
         var mainLightColor:vec3<f32> = sunLight.intensity / LUMEN * sunLight.lightColor.rgb ;
-        let att = clamp(dot(-sunDir,normal) * 0.5 + 0.5 ,0.0,1.0) ;// + materialUniform.translucent ;
+        let att = clamp(dot(-sunDir,normal) * 0.5 + 0.5 ,0.0,1.0) ;
+        let lightTint = max(mainLightColor, vec3<f32>(0.8, 0.8, 0.8));
+        let litFactor = clamp(0.35 + att * 0.65, 0.35, 1.0);
 
-        let grassColor = mix(materialUniform.grassBottomColor,materialUniform.grassTopColor * att * vec4<f32>(mainLightColor,1.0) , 1.0 - uv.y );
+        let grassColor = mix(
+            materialUniform.grassBottomColor,
+            materialUniform.grassTopColor * litFactor * vec4<f32>(lightTint, 1.0),
+            1.0 - uv.y
+        );
 
         var roughness = materialUniform.roughness ;
         let MAX_REFLECTION_LOD  = f32(textureNumLevels(prefilterMap)) ;
         var irradiance = LinearToGammaSpace(globalUniform.skyExposure * textureSampleLevel(prefilterMap, prefilterMapSampler, fragData.N.xyz, 0.8 * (MAX_REFLECTION_LOD) ).rgb);
         let specular = vec3<f32>( pow(max(dot(viewDir, reflectDir), 0.0), (1.0 - roughness + 0.001) * 200.0 ) ) * mainLightColor * materialUniform.specular;
 
-        var diffuse = color.rgb / PI * grassColor.rgb * directShadowVisibility[0] ;
+        var diffuse = color.rgb / PI * grassColor.rgb * shadowVisibility ;
         var finalColor = diffuse + specular + irradiance * grassColor.rgb * sunLight.quadratic;//+ backColor;
 
         ORI_ShadingInput.BaseColor = vec4<f32>(finalColor.rgb,1.0) ;

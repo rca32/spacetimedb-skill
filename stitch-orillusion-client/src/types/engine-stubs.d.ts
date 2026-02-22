@@ -90,6 +90,8 @@ declare module '@engine/core' {
 }
 
 declare module '@engine/geometry' {
+  export const GrassComponent: any
+  export type GrassComponent = any
   export const GrassGeometry: any
   export type GrassGeometry = any
   export const GrassMaterial: any
@@ -124,4 +126,3 @@ declare module '@engine/stats' {
   export const Stats: any
   export type Stats = any
 }
-

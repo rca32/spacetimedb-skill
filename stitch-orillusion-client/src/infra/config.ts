@@ -1,4 +1,5 @@
 export type PostFxProfile = 'low' | 'medium' | 'high'
+export type ResourceVisualProfile = 'legacy' | 'enhanced'
 
 export interface AppConfig {
   readonly spacetimeUri: string
@@ -11,6 +12,7 @@ export interface AppConfig {
   readonly debugPhysics: boolean
   readonly debugBuildingModels: boolean
   readonly resourceInstancingEnabled: boolean
+  readonly resourceVisualProfile: ResourceVisualProfile
   readonly grassEnabled: boolean
   readonly grassBiomeIds: readonly number[]
   readonly enableStatsPanel: boolean
@@ -32,6 +34,7 @@ export function loadConfig(): AppConfig {
     debugPhysics: (import.meta.env.VITE_DEBUG_PHYSICS ?? '0') === '1',
     debugBuildingModels: (import.meta.env.VITE_DEBUG_BUILDING_MODELS ?? '0') === '1',
     resourceInstancingEnabled: (import.meta.env.VITE_RESOURCE_INSTANCING ?? '1') !== '0',
+    resourceVisualProfile: parseResourceVisualProfile(import.meta.env.VITE_RESOURCE_VISUAL_PROFILE),
     grassEnabled: (import.meta.env.VITE_GRASS_ENABLED ?? '1') !== '0',
     grassBiomeIds,
     enableStatsPanel: (import.meta.env.VITE_ENABLE_STATS ?? '1') === '1',
@@ -64,4 +67,8 @@ function parseBiomeIds(rawValue: string | undefined, fallback: readonly number[]
   }
 
   return parsed.length > 0 ? parsed : fallback
+}
+
+function parseResourceVisualProfile(rawValue: string | undefined): ResourceVisualProfile {
+  return rawValue === 'legacy' ? 'legacy' : 'enhanced'
 }

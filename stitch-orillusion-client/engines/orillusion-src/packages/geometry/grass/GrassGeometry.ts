@@ -49,8 +49,8 @@ export class GrassGeometry extends GeometryBase {
                     let weight = yi / this.segmentH;
                     let x = this.width * (xi / this.segmentW);
                     position_arr[indexP++] = (x - this.width * 0.5) * (1.0 - weight);
-                    // Build blade body in local Y. Wind bend is applied in shader.
-                    position_arr[indexP++] = this.height * weight;
+                    // Upstream grass sample builds blades from bent strips (Y starts at 0).
+                    position_arr[indexP++] = 0;
                     position_arr[indexP++] = 0;
 
                     normal_arr[indexN++] = 0;

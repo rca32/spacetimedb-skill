@@ -19,11 +19,10 @@ import {
   Vector3,
   VertexAttributeName,
 } from "@engine/core";
-import { TerrainGeometry } from "@engine/geometry";
+import { GrassComponent, TerrainGeometry } from "@engine/geometry";
 import { hexToWorldXZ } from "../core/hex/hex-coords";
 import type { DbConnection } from "../module_bindings";
 import { TerrainHeightfieldIndex } from "../physics/terrain-heightfield-index";
-import { LocalGrassComponent } from "./local-grass-component";
 import {
   createWaterSurfaceMaterial,
   WaterSurfaceMaterial,
@@ -52,25 +51,34 @@ type TerrainBaseMap = NonNullable<LitMaterial["baseMap"]>;
 let terrainSampleBaseMap: TerrainBaseMap | null = null;
 let terrainSampleBaseMapPromise: Promise<TerrainBaseMap | null> | null = null;
 const TERRAIN_GRASS_BLADE_TEXTURE_URL = "/terrain/grass/GrassThick.png";
+const TERRAIN_GRASS_WIND_NOISE_TEXTURE_URL = "/terrain/grass/displ_noise_curl_1.png";
 const TERRAIN_GRASS_OBJECT_NAME = "__terrain-grass__";
 // Debug kill switch: force-disable terrain grass generation to verify live bundle path.
 const TERRAIN_GRASS_FORCE_DISABLE = false;
 const TERRAIN_GRASS_DEFAULT_BIOME_IDS: ReadonlyArray<number> = [0, 1];
 const TERRAIN_GRASS_HEIGHT_OFFSET = 0.04;
 const TERRAIN_GRASS_CELL_JITTER = 0.34;
-const TERRAIN_GRASS_SEGMENTS = 1;
+const TERRAIN_GRASS_SEGMENTS = 4;
 const TERRAIN_GRASS_DENSITY = 1;
-const TERRAIN_GRASS_MIN_SCALE = 0.45;
-const TERRAIN_GRASS_MAX_SCALE = 0.9;
-const TERRAIN_GRASS_Y_SCALE_RATIO = 3.2;
-const TERRAIN_GRASS_SHADER_HEIGHT_RATIO = 1.0;
+const TERRAIN_GRASS_MIN_SCALE = 0.32;
+const TERRAIN_GRASS_MAX_SCALE = 0.56;
+const TERRAIN_GRASS_Y_SCALE_RATIO = 0.9;
+const TERRAIN_GRASS_SHADER_HEIGHT_RATIO = 0.58;
 const TERRAIN_GRASS_BEND_HEIGHT_RATIO = 0.05;
-const TERRAIN_GRASS_DISTRIBUTION_SCALE = 0.07;
-const TERRAIN_GRASS_CLUSTER_EDGE_MIN = 0.48;
-const TERRAIN_GRASS_CLUSTER_EDGE_MAX = 0.72;
-const TERRAIN_GRASS_DENSITY_GLOBAL_MULTIPLIER = 0.72;
-const TERRAIN_GRASS_EXTRA_CLUSTER_MULTIPLIER = 0.65;
-const TERRAIN_GRASS_CLUSTER_EMPTY_CUTOFF = 0.08;
+const TERRAIN_GRASS_SAMPLE_BEND_HEIGHT = 0.24;
+const TERRAIN_GRASS_DISTRIBUTION_SCALE = 0.058;
+const TERRAIN_GRASS_MACRO_DISTRIBUTION_SCALE = 0.045;
+const TERRAIN_GRASS_CLUSTER_EDGE_MIN = 0.54;
+const TERRAIN_GRASS_CLUSTER_EDGE_MAX = 0.82;
+const TERRAIN_GRASS_MACRO_CLUSTER_EDGE_MIN = 0.64;
+const TERRAIN_GRASS_MACRO_CLUSTER_EDGE_MAX = 0.9;
+const TERRAIN_GRASS_DENSITY_GLOBAL_MULTIPLIER = 1.6;
+const TERRAIN_GRASS_EXTRA_CLUSTER_MULTIPLIER = 1.45;
+const TERRAIN_GRASS_CLUSTER_EMPTY_CUTOFF = 0.44;
+const TERRAIN_GRASS_MAX_DENSE_PER_CELL = 72;
+const TERRAIN_GRASS_DENSE_SCALE = 36;
+const TERRAIN_GRASS_DENSE_EXTRA_BONUS = 6;
+const TERRAIN_GRASS_CELL_INSET = 0.01;
 const WATER_SURFACE_OBJECT_NAME = "__terrain-water-surface__";
 const WATER_SURFACE_OFFSET = 0.06;
 const WATER_SURFACE_HIDDEN_DEPTH = 0.04;
@@ -133,6 +141,33 @@ interface MarkerModelProfile {
         readonly segments?: number;
         readonly color: readonly [number, number, number];
       };
+}
+
+type ResourceVisualProfileMode = "legacy" | "enhanced";
+
+interface ResourceVisualSpec {
+  readonly models: ReadonlyArray<MarkerModelProfile>;
+  readonly depletedModels?: ReadonlyArray<MarkerModelProfile>;
+  readonly scaleMin: number;
+  readonly scaleMax: number;
+  readonly scaleYRatio: number;
+  readonly scaleYJitter: number;
+  readonly depletedScaleMultiplier: number;
+  readonly worldYOffset: number;
+  readonly worldYOffsetJitter: number;
+  readonly fallbackLiftHealthy: number;
+  readonly fallbackLiftDepleted: number;
+  readonly randomYaw: boolean;
+}
+
+interface ResolvedResourceVisual {
+  readonly marker: MarkerModelProfile;
+  readonly scaleX: number;
+  readonly scaleY: number;
+  readonly scaleZ: number;
+  readonly worldYOffset: number;
+  readonly fallbackLift: number;
+  readonly rotationY: number;
 }
 
 const BUILDING_PIECE_FLOOR: BuildingModelPiece = {
@@ -291,8 +326,8 @@ const NPC_MARKER_MODEL: MarkerModelProfile = {
   },
 };
 
-const RESOURCE_MARKER_MODEL: MarkerModelProfile = {
-  key: "resource",
+const RESOURCE_MARKER_MODEL_LEGACY: MarkerModelProfile = {
+  key: "resource-legacy",
   url: "/castle-tree-small.gltf",
   scale: 0.95,
   offsetY: 0,
@@ -305,6 +340,223 @@ const RESOURCE_MARKER_MODEL: MarkerModelProfile = {
     color: [0.2, 0.88, 0.42],
   },
 };
+
+const RESOURCE_MARKER_MODEL_TREE_PINE_A: MarkerModelProfile = {
+  key: "resource-tree-pine-a",
+  url: "/props/resources/tree_pineTallA_detailed.glb",
+  scale: 1,
+  offsetY: 0,
+  modelColor: [0.22, 0.78, 0.34],
+  preserveMaterials: true,
+  shadowSafePbr: true,
+  fallback: {
+    kind: "box",
+    width: 1.1,
+    height: 2.1,
+    depth: 1.1,
+    color: [0.22, 0.78, 0.34],
+  },
+};
+
+const RESOURCE_MARKER_MODEL_TREE_PINE_C: MarkerModelProfile = {
+  key: "resource-tree-pine-c",
+  url: "/props/resources/tree_pineTallC_detailed.glb",
+  scale: 1,
+  offsetY: 0,
+  modelColor: [0.2, 0.74, 0.3],
+  preserveMaterials: true,
+  shadowSafePbr: true,
+  fallback: {
+    kind: "box",
+    width: 1.05,
+    height: 2,
+    depth: 1.05,
+    color: [0.2, 0.74, 0.3],
+  },
+};
+
+const RESOURCE_MARKER_MODEL_TREE_OAK: MarkerModelProfile = {
+  key: "resource-tree-oak",
+  url: "/props/resources/tree_oak.glb",
+  scale: 1,
+  offsetY: 0,
+  modelColor: [0.26, 0.7, 0.28],
+  preserveMaterials: true,
+  shadowSafePbr: true,
+  fallback: {
+    kind: "sphere",
+    radius: 0.9,
+    segments: 12,
+    color: [0.26, 0.7, 0.28],
+  },
+};
+
+const RESOURCE_MARKER_MODEL_TREE_STUMP: MarkerModelProfile = {
+  key: "resource-tree-stump",
+  url: "/props/resources/stump_roundDetailed.glb",
+  scale: 1,
+  offsetY: 0,
+  modelColor: [0.54, 0.38, 0.24],
+  preserveMaterials: true,
+  shadowSafePbr: true,
+  fallback: {
+    kind: "box",
+    width: 0.72,
+    height: 0.42,
+    depth: 0.72,
+    color: [0.54, 0.38, 0.24],
+  },
+};
+
+const RESOURCE_MARKER_MODEL_ROCK_LARGE: MarkerModelProfile = {
+  key: "resource-rock-large",
+  url: "/props/resources/rock_largeA.glb",
+  scale: 1,
+  offsetY: 0,
+  modelColor: [0.62, 0.62, 0.62],
+  preserveMaterials: true,
+  shadowSafePbr: true,
+  fallback: {
+    kind: "box",
+    width: 1,
+    height: 0.75,
+    depth: 1,
+    color: [0.62, 0.62, 0.62],
+  },
+};
+
+const RESOURCE_MARKER_MODEL_ROCK_TALL: MarkerModelProfile = {
+  key: "resource-rock-tall",
+  url: "/props/resources/rock_tallC.glb",
+  scale: 1,
+  offsetY: 0,
+  modelColor: [0.55, 0.56, 0.58],
+  preserveMaterials: true,
+  shadowSafePbr: true,
+  fallback: {
+    kind: "box",
+    width: 0.85,
+    height: 1.05,
+    depth: 0.85,
+    color: [0.55, 0.56, 0.58],
+  },
+};
+
+const RESOURCE_MARKER_MODEL_WATER_LILY_LARGE: MarkerModelProfile = {
+  key: "resource-water-lily-large",
+  url: "/props/resources/lily_large.glb",
+  scale: 1,
+  offsetY: 0,
+  modelColor: [0.24, 0.72, 0.34],
+  preserveMaterials: true,
+  shadowSafePbr: true,
+  fallback: {
+    kind: "sphere",
+    radius: 0.52,
+    segments: 10,
+    color: [0.24, 0.72, 0.34],
+  },
+};
+
+const RESOURCE_MARKER_MODEL_WATER_LILY_SMALL: MarkerModelProfile = {
+  key: "resource-water-lily-small",
+  url: "/props/resources/lily_small.glb",
+  scale: 1,
+  offsetY: 0,
+  modelColor: [0.2, 0.66, 0.3],
+  preserveMaterials: true,
+  shadowSafePbr: true,
+  fallback: {
+    kind: "sphere",
+    radius: 0.42,
+    segments: 10,
+    color: [0.2, 0.66, 0.3],
+  },
+};
+
+const RESOURCE_MARKER_MODEL_WATER_GRASS: MarkerModelProfile = {
+  key: "resource-water-grass",
+  url: "/props/resources/grass_leafsLarge.glb",
+  scale: 1,
+  offsetY: 0,
+  modelColor: [0.26, 0.76, 0.4],
+  preserveMaterials: true,
+  shadowSafePbr: true,
+  fallback: {
+    kind: "box",
+    width: 0.72,
+    height: 0.65,
+    depth: 0.72,
+    color: [0.26, 0.76, 0.4],
+  },
+};
+
+const LEGACY_RESOURCE_VISUAL_SPEC: ResourceVisualSpec = {
+  models: [RESOURCE_MARKER_MODEL_LEGACY],
+  scaleMin: 0.55,
+  scaleMax: 0.55,
+  scaleYRatio: 0.8 / 0.55,
+  scaleYJitter: 0,
+  depletedScaleMultiplier: 0.18 / 0.8,
+  worldYOffset: 0,
+  worldYOffsetJitter: 0,
+  fallbackLiftHealthy: 0.4,
+  fallbackLiftDepleted: 0.09,
+  randomYaw: false,
+};
+
+const ENHANCED_RESOURCE_VISUAL_SPECS: Readonly<Record<number, ResourceVisualSpec>> =
+  {
+    1: {
+      models: [
+        RESOURCE_MARKER_MODEL_TREE_PINE_A,
+        RESOURCE_MARKER_MODEL_TREE_PINE_C,
+        RESOURCE_MARKER_MODEL_TREE_OAK,
+      ],
+      depletedModels: [RESOURCE_MARKER_MODEL_TREE_STUMP],
+      scaleMin: 1.15,
+      scaleMax: 1.65,
+      scaleYRatio: 1.45,
+      scaleYJitter: 0.12,
+      depletedScaleMultiplier: 0.46,
+      worldYOffset: 0,
+      worldYOffsetJitter: 0.03,
+      fallbackLiftHealthy: 0.7,
+      fallbackLiftDepleted: 0.18,
+      randomYaw: true,
+    },
+    2: {
+      models: [RESOURCE_MARKER_MODEL_ROCK_LARGE, RESOURCE_MARKER_MODEL_ROCK_TALL],
+      depletedModels: [RESOURCE_MARKER_MODEL_ROCK_LARGE],
+      scaleMin: 0.95,
+      scaleMax: 1.45,
+      scaleYRatio: 0.98,
+      scaleYJitter: 0.15,
+      depletedScaleMultiplier: 0.65,
+      worldYOffset: 0.04,
+      worldYOffsetJitter: 0.02,
+      fallbackLiftHealthy: 0.42,
+      fallbackLiftDepleted: 0.18,
+      randomYaw: true,
+    },
+    3: {
+      models: [RESOURCE_MARKER_MODEL_WATER_LILY_LARGE, RESOURCE_MARKER_MODEL_WATER_GRASS],
+      depletedModels: [RESOURCE_MARKER_MODEL_WATER_LILY_SMALL],
+      scaleMin: 0.78,
+      scaleMax: 1.22,
+      scaleYRatio: 0.7,
+      scaleYJitter: 0.2,
+      depletedScaleMultiplier: 0.72,
+      worldYOffset: 0.02,
+      worldYOffsetJitter: 0.01,
+      fallbackLiftHealthy: 0.22,
+      fallbackLiftDepleted: 0.1,
+      randomYaw: true,
+    },
+  };
+
+const ENHANCED_RESOURCE_VISUAL_DEFAULT: ResourceVisualSpec =
+  ENHANCED_RESOURCE_VISUAL_SPECS[1];
 
 const PROJECT_SITE_MARKER_MODEL: MarkerModelProfile = {
   key: "project-site",
@@ -389,6 +641,7 @@ export interface WorldStreamVisualizerOptions {
   readonly postFxProfile?: WaterRenderProfile;
   readonly waterQuality?: WaterQualityLevel;
   readonly resourceInstancingEnabled?: boolean;
+  readonly resourceVisualProfile?: ResourceVisualProfileMode;
   readonly grassEnabled?: boolean;
   readonly grassBiomeIds?: readonly number[];
 }
@@ -412,6 +665,7 @@ export class WorldStreamVisualizer {
   private readonly waterProfile: WaterRenderProfile;
   private readonly waterQuality: WaterQualityLevel;
   private readonly resourceInstancingEnabled: boolean;
+  private readonly resourceVisualProfile: ResourceVisualProfileMode;
   private readonly grassEnabled: boolean;
   private readonly grassBiomeIds: Set<number>;
 
@@ -481,6 +735,9 @@ export class WorldStreamVisualizer {
     this.waterQuality = options.waterQuality ?? "balanced";
     this.resourceInstancingEnabled =
       options.resourceInstancingEnabled !== false;
+    this.resourceVisualProfile = normalizeResourceVisualProfile(
+      options.resourceVisualProfile,
+    );
     this.grassEnabled = options.grassEnabled !== false;
     this.grassBiomeIds = normalizeBiomeIdSet(
       options.grassBiomeIds,
@@ -920,7 +1177,7 @@ export class WorldStreamVisualizer {
     const normalizedBiomeId = Math.trunc(biomeId);
     const enabled = this.grassBiomeIds.has(normalizedBiomeId) ? 1 : 0;
     const profile = grassProfileByBiome(normalizedBiomeId);
-    return `grass:${enabled}:${normalizedBiomeId}:${profile.width}:${profile.height}:${profile.spawnChance}:${profile.extraSpawnChance}:${profile.scaleBoost}:${TERRAIN_GRASS_MIN_SCALE}:${TERRAIN_GRASS_MAX_SCALE}:${TERRAIN_GRASS_Y_SCALE_RATIO}:${TERRAIN_GRASS_SHADER_HEIGHT_RATIO}:${TERRAIN_GRASS_BEND_HEIGHT_RATIO}:${TERRAIN_GRASS_DISTRIBUTION_SCALE}:${TERRAIN_GRASS_CLUSTER_EDGE_MIN}:${TERRAIN_GRASS_CLUSTER_EDGE_MAX}:${TERRAIN_GRASS_DENSITY_GLOBAL_MULTIPLIER}:${TERRAIN_GRASS_EXTRA_CLUSTER_MULTIPLIER}:${TERRAIN_GRASS_CLUSTER_EMPTY_CUTOFF}:${TERRAIN_GRASS_HEIGHT_OFFSET}`;
+    return `grass:${enabled}:${normalizedBiomeId}:${profile.width}:${profile.height}:${profile.spawnChance}:${profile.extraSpawnChance}:${profile.scaleBoost}:${TERRAIN_GRASS_MIN_SCALE}:${TERRAIN_GRASS_MAX_SCALE}:${TERRAIN_GRASS_Y_SCALE_RATIO}:${TERRAIN_GRASS_SHADER_HEIGHT_RATIO}:${TERRAIN_GRASS_BEND_HEIGHT_RATIO}:${TERRAIN_GRASS_SAMPLE_BEND_HEIGHT}:${TERRAIN_GRASS_DISTRIBUTION_SCALE}:${TERRAIN_GRASS_MACRO_DISTRIBUTION_SCALE}:${TERRAIN_GRASS_CLUSTER_EDGE_MIN}:${TERRAIN_GRASS_CLUSTER_EDGE_MAX}:${TERRAIN_GRASS_MACRO_CLUSTER_EDGE_MIN}:${TERRAIN_GRASS_MACRO_CLUSTER_EDGE_MAX}:${TERRAIN_GRASS_DENSITY_GLOBAL_MULTIPLIER}:${TERRAIN_GRASS_EXTRA_CLUSTER_MULTIPLIER}:${TERRAIN_GRASS_CLUSTER_EMPTY_CUTOFF}:${TERRAIN_GRASS_MAX_DENSE_PER_CELL}:${TERRAIN_GRASS_DENSE_SCALE}:${TERRAIN_GRASS_DENSE_EXTRA_BONUS}:${TERRAIN_GRASS_CELL_INSET}:${TERRAIN_GRASS_HEIGHT_OFFSET}`;
   }
 
   private attachGrassToChunk(
@@ -951,13 +1208,10 @@ export class WorldStreamVisualizer {
       0.001,
       profile.height * TERRAIN_GRASS_SHADER_HEIGHT_RATIO,
     );
-    const shaderBendHeight = Math.max(
-      0.001,
-      geometryGrassHeight * TERRAIN_GRASS_BEND_HEIGHT_RATIO,
-    );
+    const shaderBendHeight = Math.max(0.001, TERRAIN_GRASS_SAMPLE_BEND_HEIGHT);
     const grassObject = new Object3D();
     grassObject.name = TERRAIN_GRASS_OBJECT_NAME;
-    const grass = grassObject.addComponent(LocalGrassComponent);
+    const grass = grassObject.addComponent(GrassComponent);
     grass.castShadow = false;
     grass.receiveShadow = false;
     grass.grassMaterial.acceptShadow = false;
@@ -976,8 +1230,13 @@ export class WorldStreamVisualizer {
       TERRAIN_GRASS_DENSITY,
       placements.length,
     );
+    grass.grassMaterial.grassBaseColor = new Color(0.08, 0.28, 0.08, 1.0);
+    grass.grassMaterial.grassTopColor = new Color(0.24, 0.75, 0.36, 1.0);
+    grass.grassMaterial.windPower = 0.22;
+    grass.grassMaterial.windSpeed = 0.8;
+    grass.grassMaterial.curvature = 0.22;
     grass.grassMaterial.grassHeight = shaderBendHeight;
-    (grass as LocalGrassComponent & { __targetGrassHeight?: number }).__targetGrassHeight =
+    (grass as GrassComponent & { __targetGrassHeight?: number }).__targetGrassHeight =
       shaderBendHeight;
     grass.setMinMax(
       new Vector3(0, -8, 0),
@@ -1030,12 +1289,12 @@ export class WorldStreamVisualizer {
       if (!(grassObject instanceof Object3D)) {
         continue;
       }
-      const grass = grassObject.getComponent(LocalGrassComponent);
+      const grass = grassObject.getComponent(GrassComponent);
       if (!grass) {
         continue;
       }
       const targetHeight = (
-        grass as LocalGrassComponent & { __targetGrassHeight?: number }
+        grass as GrassComponent & { __targetGrassHeight?: number }
       ).__targetGrassHeight;
       if (!Number.isFinite(targetHeight)) {
         continue;
@@ -1144,6 +1403,12 @@ export class WorldStreamVisualizer {
         dimension: Math.max(1, toNumber(row.dimensionId)),
       });
       const depleted = Boolean(row.isDepleted);
+      const resourceType = Math.max(0, Math.trunc(toNumber(row.resourceType)));
+      const resolvedVisual = this.resolveResourceVisual(
+        id,
+        resourceType,
+        depleted,
+      );
 
       let object = this.resourceObjects.get(id);
       if (!object) {
@@ -1153,21 +1418,84 @@ export class WorldStreamVisualizer {
       }
       this.attachResourceObject(object);
 
-      this.ensureMarkerVisual(object, RESOURCE_MARKER_MODEL);
+      this.ensureMarkerVisual(object, resolvedVisual.marker);
 
       object.x = world.x;
-      const halfHeight = depleted ? 0.09 : 0.4;
       const groundY = this.sampleTerrainHeight(world.x, world.z);
       const visualState = this.markerVisualStates.get(object);
-      const modelState = `model:${RESOURCE_MARKER_MODEL.key}`;
-      object.y = (groundY ?? 0) + (visualState === modelState ? 0 : halfHeight);
+      const modelState = `model:${resolvedVisual.marker.key}`;
+      const fallbackLift =
+        visualState === modelState ? 0 : resolvedVisual.fallbackLift;
+      object.y = (groundY ?? 0) + resolvedVisual.worldYOffset + fallbackLift;
       object.z = world.z;
-      object.scaleX = 0.55;
-      object.scaleY = depleted ? 0.18 : 0.8;
-      object.scaleZ = 0.55;
+      object.rotationY = resolvedVisual.rotationY;
+      object.scaleX = resolvedVisual.scaleX;
+      object.scaleY = resolvedVisual.scaleY;
+      object.scaleZ = resolvedVisual.scaleZ;
     }
 
     this.prune(this.resourceObjects, seen);
+  }
+
+  private resolveResourceVisual(
+    resourceId: string,
+    resourceType: number,
+    depleted: boolean,
+  ): ResolvedResourceVisual {
+    const spec = this.resolveResourceVisualSpec(resourceType);
+    const candidates =
+      depleted && spec.depletedModels && spec.depletedModels.length > 0
+        ? spec.depletedModels
+        : spec.models;
+    const marker =
+      candidates[
+        stableIndex(
+          `${resourceId}:rtype:${resourceType}:${depleted ? "depleted" : "alive"}:model`,
+          candidates.length,
+        )
+      ];
+
+    const scaleSeed = stableHash32(`${resourceId}:rtype:${resourceType}:scale`);
+    const baseScale = lerp(spec.scaleMin, spec.scaleMax, hashToUnitFloat(scaleSeed));
+    const depletedScale = depleted ? spec.depletedScaleMultiplier : 1;
+    const xzScale = Math.max(0.05, baseScale * depletedScale);
+    const yJitter =
+      1 + hashToSignedUnitFloat(scaleSeed ^ 0x9e3779b9) * spec.scaleYJitter;
+    const yScale = Math.max(0.05, xzScale * spec.scaleYRatio * yJitter);
+
+    const yOffsetSeed = stableHash32(
+      `${resourceId}:rtype:${resourceType}:world-offset`,
+    );
+    const worldYOffset =
+      spec.worldYOffset +
+      hashToSignedUnitFloat(yOffsetSeed ^ 0x85ebca6b) * spec.worldYOffsetJitter;
+    const fallbackLift = depleted
+      ? spec.fallbackLiftDepleted
+      : spec.fallbackLiftHealthy;
+    const rotationY = spec.randomYaw
+      ? hashToUnitFloat(stableHash32(`${resourceId}:rtype:${resourceType}:rot`)) *
+        360
+      : 0;
+
+    return {
+      marker,
+      scaleX: xzScale,
+      scaleY: yScale,
+      scaleZ: xzScale,
+      worldYOffset,
+      fallbackLift,
+      rotationY,
+    };
+  }
+
+  private resolveResourceVisualSpec(resourceType: number): ResourceVisualSpec {
+    if (this.resourceVisualProfile === "legacy") {
+      return LEGACY_RESOURCE_VISUAL_SPEC;
+    }
+    return (
+      ENHANCED_RESOURCE_VISUAL_SPECS[resourceType] ??
+      ENHANCED_RESOURCE_VISUAL_DEFAULT
+    );
   }
 
   private ensureResourceInstancingReady(): boolean {
@@ -2138,30 +2466,23 @@ function ensureTerrainGrassTextures(): Promise<GrassTextureBundle | null> {
     return Promise.resolve(terrainGrassTextures);
   }
   if (!terrainGrassTexturesPromise) {
-    terrainGrassTexturesPromise = verifyImageAssetUrl(
-      TERRAIN_GRASS_BLADE_TEXTURE_URL,
-      "grass blade texture",
-    )
-      .then((ok) => {
-        if (!ok) {
-          return null;
-        }
-        return Engine3D.res.loadTexture(TERRAIN_GRASS_BLADE_TEXTURE_URL);
-      })
-      .then((blade) => {
-        if (!blade) {
-          return null;
-        }
-        terrainGrassTextures = {
-          blade,
-          windNoise: Engine3D.res.whiteTexture,
-        };
+    terrainGrassTexturesPromise = Promise.allSettled([
+      Engine3D.res.loadTexture(TERRAIN_GRASS_WIND_NOISE_TEXTURE_URL),
+    ])
+      .then(([windResult]) => {
+        const blade = Engine3D.res.whiteTexture;
+        const windNoise =
+          windResult.status === "fulfilled" && windResult.value
+            ? windResult.value
+            : Engine3D.res.whiteTexture;
+        terrainGrassTextures = { blade, windNoise };
         return terrainGrassTextures;
       })
       .catch((error) => {
         console.warn(
           "[stitch-orillusion-client] failed to load grass textures",
           TERRAIN_GRASS_BLADE_TEXTURE_URL,
+          TERRAIN_GRASS_WIND_NOISE_TEXTURE_URL,
           error,
         );
         return null;
@@ -2319,20 +2640,20 @@ interface GrassPlacement {
 function grassProfileByBiome(biomeId: number): GrassBiomeProfile {
   if (Math.trunc(biomeId) === 1) {
     return {
-      width: 0.12,
-      height: 0.22,
-      spawnChance: 0.76,
-      extraSpawnChance: 0.24,
-      scaleBoost: 1,
+      width: 0.1,
+      height: 0.09,
+      spawnChance: 0.94,
+      extraSpawnChance: 0.88,
+      scaleBoost: 0.9,
     };
   }
 
   return {
-    width: 0.1,
-    height: 0.18,
-    spawnChance: 0.58,
-    extraSpawnChance: 0.1,
-    scaleBoost: 0.95,
+    width: 0.085,
+    height: 0.08,
+    spawnChance: 0.86,
+    extraSpawnChance: 0.74,
+    scaleBoost: 0.85,
   };
 }
 
@@ -2348,7 +2669,10 @@ function buildGrassPlacements(
   const chunkOriginX = chunkX * chunkSize;
   const chunkOriginZ = chunkY * chunkSize;
   const placements: GrassPlacement[] = [];
-  const maxPlacements = chunkSize * chunkSize * 2;
+  const maxPlacements = Math.min(
+    chunkSize * chunkSize * TERRAIN_GRASS_MAX_DENSE_PER_CELL,
+    12000,
+  );
 
   for (let localCellZ = 0; localCellZ < chunkSize; localCellZ += 1) {
     for (let localCellX = 0; localCellX < chunkSize; localCellX += 1) {
@@ -2370,11 +2694,23 @@ function buildGrassPlacements(
         worldCellZ * TERRAIN_GRASS_DISTRIBUTION_SCALE,
         Math.trunc(biomeId) ^ 0x9e3779b9,
       );
-      const clusterMask = smoothstep(
+      const clusterMaskRaw = smoothstep(
         TERRAIN_GRASS_CLUSTER_EDGE_MIN,
         TERRAIN_GRASS_CLUSTER_EDGE_MAX,
         coverage,
       );
+      const macroCoverage = valueNoise2(
+        worldCellX * TERRAIN_GRASS_MACRO_DISTRIBUTION_SCALE,
+        worldCellZ * TERRAIN_GRASS_MACRO_DISTRIBUTION_SCALE,
+        Math.trunc(biomeId) ^ 0x85ebca6b,
+      );
+      const macroMask = smoothstep(
+        TERRAIN_GRASS_MACRO_CLUSTER_EDGE_MIN,
+        TERRAIN_GRASS_MACRO_CLUSTER_EDGE_MAX,
+        macroCoverage,
+      );
+      const clusterMask =
+        Math.pow(clusterMaskRaw, 1.8) * Math.pow(macroMask, 1.2);
       if (clusterMask < TERRAIN_GRASS_CLUSTER_EMPTY_CUTOFF) {
         continue;
       }
@@ -2382,20 +2718,25 @@ function buildGrassPlacements(
       const cellSeed = stableHash32(
         `${chunkX}:${chunkY}:${localCellX}:${localCellZ}`,
       );
-      const spawnProb =
-        profile.spawnChance *
-        clusterMask *
-        TERRAIN_GRASS_DENSITY_GLOBAL_MULTIPLIER;
+      const spawnProb = Math.min(
+        0.99,
+        0.3 +
+          profile.spawnChance *
+            clusterMask *
+            TERRAIN_GRASS_DENSITY_GLOBAL_MULTIPLIER,
+      );
       if (hashToUnitFloat(cellSeed) > spawnProb) {
         continue;
       }
 
-      const extraSpawn =
-        hashToUnitFloat(cellSeed ^ 0x9e3779b9) <
-        profile.extraSpawnChance *
-          clusterMask *
-          TERRAIN_GRASS_EXTRA_CLUSTER_MULTIPLIER;
-      const spawnCount = extraSpawn ? 2 : 1;
+      const denseBoost = Math.floor(clusterMask * TERRAIN_GRASS_DENSE_SCALE);
+      const spawnCount = Math.max(
+        12,
+        Math.min(
+          TERRAIN_GRASS_MAX_DENSE_PER_CELL,
+          20 + denseBoost + Math.floor(profile.extraSpawnChance * 14),
+        ),
+      );
       for (let spawnIndex = 0; spawnIndex < spawnCount; spawnIndex += 1) {
         if (placements.length >= maxPlacements) {
           return placements;
@@ -2404,18 +2745,25 @@ function buildGrassPlacements(
         const spawnSeed = stableHash32(
           `${chunkX}:${chunkY}:${localCellX}:${localCellZ}:${spawnIndex}`,
         );
+        const unitX = hashToUnitFloat(spawnSeed);
+        const unitZ = hashToUnitFloat(spawnSeed ^ 0x85ebca6b);
         const jitterX =
-          hashToSignedUnitFloat(spawnSeed) * TERRAIN_GRASS_CELL_JITTER;
+          hashToSignedUnitFloat(spawnSeed ^ 0xc2b2ae35) *
+          TERRAIN_GRASS_CELL_JITTER *
+          0.18;
         const jitterZ =
-          hashToSignedUnitFloat(spawnSeed ^ 0x85ebca6b) *
-          TERRAIN_GRASS_CELL_JITTER;
+          hashToSignedUnitFloat(spawnSeed ^ 0x27d4eb2d) *
+          TERRAIN_GRASS_CELL_JITTER *
+          0.18;
+        const cellOffsetX = TERRAIN_GRASS_CELL_INSET + unitX * (1 - TERRAIN_GRASS_CELL_INSET * 2);
+        const cellOffsetZ = TERRAIN_GRASS_CELL_INSET + unitZ * (1 - TERRAIN_GRASS_CELL_INSET * 2);
         const localX = Math.max(
           0.02,
-          Math.min(chunkSize - 0.02, localCellX + 0.5 + jitterX),
+          Math.min(chunkSize - 0.02, localCellX + cellOffsetX + jitterX),
         );
         const localZ = Math.max(
           0.02,
-          Math.min(chunkSize - 0.02, localCellZ + 0.5 + jitterZ),
+          Math.min(chunkSize - 0.02, localCellZ + cellOffsetZ + jitterZ),
         );
         const worldX = chunkOriginX + localX;
         const worldZ = chunkOriginZ + localZ;
@@ -3399,6 +3747,12 @@ function normalizeBiomeIdSet(
     }
   }
   return normalized;
+}
+
+function normalizeResourceVisualProfile(
+  value: ResourceVisualProfileMode | undefined,
+): ResourceVisualProfileMode {
+  return value === "legacy" ? "legacy" : "enhanced";
 }
 
 function sumMapValues(values: Map<string, number>): number {

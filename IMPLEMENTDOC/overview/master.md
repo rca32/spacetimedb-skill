@@ -58,6 +58,8 @@
 - Orillusion 인앱 벤더링 전환 로그 (2026-02-22): `IMPLEMENTDOC/logs/client/2026-02-22-orillusion-inapp-vendor-migration-log.md`
 - Orillusion 내부 엔진 소스 편입 계획 (2026-02-22): `IMPLEMENTDOC/plans/client/2026-02-22-internal-engine-source-integration-plan.md`
 - Orillusion 내부 엔진 소스 편입 로그 (2026-02-22): `IMPLEMENTDOC/logs/client/2026-02-22-internal-engine-source-integration-log.md`
+- 리소스 비주얼 업그레이드 계획 (2026-02-22): `IMPLEMENTDOC/plans/client/2026-02-22-resource-visual-upgrade-plan.md`
+- 리소스 비주얼 업그레이드 로그 (2026-02-22): `IMPLEMENTDOC/logs/client/2026-02-22-resource-visual-upgrade-log.md`
 - SpacetimeDB RangeError 대응: `IMPLEMENTDOC/guides/spacetimedb-rangeerror-troubleshooting.md`
 - 월드 생성 설계-구현 갭 분석 및 개발 계획 (2026-02-21): `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`
 - 월드 생성 P0 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p0-baseline-freeze-plan.md`

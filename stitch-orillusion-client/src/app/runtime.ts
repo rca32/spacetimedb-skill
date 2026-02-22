@@ -235,6 +235,7 @@ export class OrillusionClientRuntime {
       postFxProfile: this.config.postFxProfile,
       waterQuality: this.config.postFxProfile === 'high' ? 'high' : 'balanced',
       resourceInstancingEnabled: this.config.resourceInstancingEnabled,
+      resourceVisualProfile: this.config.resourceVisualProfile,
       grassEnabled: this.config.grassEnabled,
       grassBiomeIds: this.config.grassBiomeIds,
     })
@@ -943,6 +944,7 @@ export class OrillusionClientRuntime {
       `<div>chunk-size: ${this.activeChunkSize}</div>`,
       `<div>terrain/npc/res/bld/prj/fpt/player/v2: ${streamStats ? `${streamStats.terrain}/${streamStats.npc}/${streamStats.resource}/${streamStats.building}/${streamStats.project}/${streamStats.footprint}/${streamStats.players}/${streamStats.v2}` : '-'}</div>`,
       `<div>resource render mode: ${this.streamVisualizer?.getResourceRenderMode() ?? '-'}</div>`,
+      `<div>resource visual profile: ${this.config.resourceVisualProfile}</div>`,
       `<div>resource sync interval: 120ms</div>`,
       `<div>project labels: ${projectLabels.length > 0 ? projectLabels.join(' | ') : '-'}</div>`,
       `<div>terrain detail/fallback: ${streamStats ? `${streamStats.terrainDetailed}/${streamStats.terrainFallback}` : '-'}</div>`,

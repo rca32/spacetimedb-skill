@@ -23,6 +23,7 @@ bun run build
 - `VITE_DEVICE_PIXEL_RATIO` (default: `1`)
 - `VITE_DEBUG_BUILDING_MODELS` (`1`일 때 빌딩 모델 로드/부착 디버그 로그 출력)
 - `VITE_RESOURCE_INSTANCING` (default: `1`, `0`이면 resource 인스턴싱 비활성화)
+- `VITE_RESOURCE_VISUAL_PROFILE` (default: `enhanced`, `legacy|enhanced`)
 - `VITE_GRASS_ENABLED` (default: `1`, `0`이면 terrain grass 비활성화)
 - `VITE_GRASS_BIOMES` (default: `0,1`, grass를 표시할 biome id CSV)
 - `VITE_ENABLE_STATS` (default: `1`)
