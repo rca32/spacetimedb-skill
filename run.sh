@@ -1,2 +1,2 @@
 npm i -g @openai/codex@latest
-codex  --search --full-auto
+codex  --search --dangerously-bypass-approvals-and-sandbox

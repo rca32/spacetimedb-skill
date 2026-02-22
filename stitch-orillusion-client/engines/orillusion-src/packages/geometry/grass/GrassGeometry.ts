@@ -49,6 +49,7 @@ export class GrassGeometry extends GeometryBase {
                     let weight = yi / this.segmentH;
                     let x = this.width * (xi / this.segmentW);
                     position_arr[indexP++] = (x - this.width * 0.5) * (1.0 - weight);
+                    // Grass blade vertical shaping is handled in shader transform logic.
                     position_arr[indexP++] = 0;
                     position_arr[indexP++] = 0;
 

@@ -53,6 +53,7 @@
 - 클라이언트 개발 가이드: `IMPLEMENTDOC/guides/stitch-orillusion-client-development-guide.md`
 - terrain grass 비주얼 계획 (2026-02-21): `IMPLEMENTDOC/plans/client/2026-02-21-terrain-grass-visual-plan.md`
 - terrain grass 구현 로그 (2026-02-21): `IMPLEMENTDOC/logs/client/2026-02-21-terrain-grass-implementation.md`
+- terrain grass 높이 보정 로그 (2026-02-22): `IMPLEMENTDOC/logs/client/2026-02-22-terrain-grass-height-fix-log.md`
 - Orillusion 인앱 벤더링 전환 계획 (2026-02-22): `IMPLEMENTDOC/plans/client/2026-02-22-orillusion-inapp-vendor-migration-plan.md`
 - Orillusion 인앱 벤더링 전환 로그 (2026-02-22): `IMPLEMENTDOC/logs/client/2026-02-22-orillusion-inapp-vendor-migration-log.md`
 - Orillusion 내부 엔진 소스 편입 계획 (2026-02-22): `IMPLEMENTDOC/plans/client/2026-02-22-internal-engine-source-integration-plan.md`

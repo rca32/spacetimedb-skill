@@ -85,6 +85,8 @@ export let GrassShader = /* wgsl */`
         var uv = vertex.uv ;
         let weight = ( 1.0 - uv.y )  ;
         let limitAngle = 90.0 / 8.0 * DEGREES_TO_RADIANS + PI * 0.35 ;
+        // Guard against oversized bend when uniform updates are delayed or stale.
+        let safeGrassHeight = clamp(materialUniform.grassHeight, 0.01, 0.35);
         // if(uv.y < 1.0 ){
             for (var index:i32 = 1; index <= 5 ; index+=1) {
                 let bios = f32(index) / 5.0 ;
@@ -92,7 +94,7 @@ export let GrassShader = /* wgsl */`
                     let rx = weights.x * weights.w + clamp(speed.y * windPower * pow(weight,materialUniform.curvature),-1.0,1.0)  ;
                     let rz = weights.z * weights.w + clamp(-speed.x * windPower * pow(weight,materialUniform.curvature),-1.0,1.0) ;
 
-                    var rot = buildRotateXYZMat4(rx,0.0,rz,0.0,materialUniform.grassHeight*bios*0.1,0.0);
+                    var rot = buildRotateXYZMat4(rx,0.0,rz,0.0,safeGrassHeight*bios*0.1,0.0);
                     finalMatrix *= rot ;
                 }
             }

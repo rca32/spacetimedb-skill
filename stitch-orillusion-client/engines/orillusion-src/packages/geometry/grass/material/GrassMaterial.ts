@@ -46,7 +46,7 @@ export class GrassMaterial extends Material {
         colorPass.setUniformFloat("translucent", 0.35);
         colorPass.setUniformFloat("roughness", 0.35);
         colorPass.setUniformFloat("curvature", 0.4068);
-        colorPass.setUniformFloat("grassHeight", 10);
+        colorPass.setUniformFloat("grassHeight", 0.2);
         colorPass.setUniformFloat("soft", 5);
         colorPass.setUniformFloat("specular", 0.15);
 
@@ -61,7 +61,7 @@ export class GrassMaterial extends Material {
         shadowPass.setUniformFloat("translucent", 0.35);
         shadowPass.setUniformFloat("roughness", 0.35);
         shadowPass.setUniformFloat("curvature", 0.4068);
-        shadowPass.setUniformFloat("grassHeight", 10);
+        shadowPass.setUniformFloat("grassHeight", 0.2);
         shadowPass.setUniformFloat("soft", 5);
         shadowPass.setUniformFloat("specular", 0.15);
 

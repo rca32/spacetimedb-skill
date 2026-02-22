@@ -53,6 +53,8 @@ let terrainSampleBaseMap: TerrainBaseMap | null = null;
 let terrainSampleBaseMapPromise: Promise<TerrainBaseMap | null> | null = null;
 const TERRAIN_GRASS_BLADE_TEXTURE_URL = "/terrain/grass/GrassThick.png";
 const TERRAIN_GRASS_OBJECT_NAME = "__terrain-grass__";
+// Debug kill switch: force-disable terrain grass generation to verify live bundle path.
+const TERRAIN_GRASS_FORCE_DISABLE = false;
 const TERRAIN_GRASS_DEFAULT_BIOME_IDS: ReadonlyArray<number> = [0, 1];
 const TERRAIN_GRASS_HEIGHT_OFFSET = 0.04;
 const TERRAIN_GRASS_CELL_JITTER = 0.34;
@@ -60,9 +62,9 @@ const TERRAIN_GRASS_SEGMENTS = 4;
 const TERRAIN_GRASS_DENSITY = 1;
 const TERRAIN_GRASS_MIN_SCALE = 0.45;
 const TERRAIN_GRASS_MAX_SCALE = 0.9;
-const TERRAIN_GRASS_Y_SCALE_RATIO = 0.005;
-const TERRAIN_GRASS_SHADER_HEIGHT_RATIO = 0.1;
-const TERRAIN_GRASS_BASE_HEIGHT_REFERENCE = 0.2;
+const TERRAIN_GRASS_Y_SCALE_RATIO = 0.45;
+const TERRAIN_GRASS_SHADER_HEIGHT_RATIO = 1.0;
+const TERRAIN_GRASS_BEND_HEIGHT_RATIO = 0.35;
 const WATER_SURFACE_OBJECT_NAME = "__terrain-water-surface__";
 const WATER_SURFACE_OFFSET = 0.06;
 const WATER_SURFACE_HIDDEN_DEPTH = 0.04;
@@ -912,7 +914,7 @@ export class WorldStreamVisualizer {
     const normalizedBiomeId = Math.trunc(biomeId);
     const enabled = this.grassBiomeIds.has(normalizedBiomeId) ? 1 : 0;
     const profile = grassProfileByBiome(normalizedBiomeId);
-    return `grass:${enabled}:${normalizedBiomeId}:${profile.width}:${profile.height}:${profile.spawnChance}:${profile.extraSpawnChance}:${profile.scaleBoost}:${TERRAIN_GRASS_MIN_SCALE}:${TERRAIN_GRASS_MAX_SCALE}:${TERRAIN_GRASS_Y_SCALE_RATIO}:${TERRAIN_GRASS_SHADER_HEIGHT_RATIO}:${TERRAIN_GRASS_HEIGHT_OFFSET}`;
+    return `grass:${enabled}:${normalizedBiomeId}:${profile.width}:${profile.height}:${profile.spawnChance}:${profile.extraSpawnChance}:${profile.scaleBoost}:${TERRAIN_GRASS_MIN_SCALE}:${TERRAIN_GRASS_MAX_SCALE}:${TERRAIN_GRASS_Y_SCALE_RATIO}:${TERRAIN_GRASS_SHADER_HEIGHT_RATIO}:${TERRAIN_GRASS_BEND_HEIGHT_RATIO}:${TERRAIN_GRASS_HEIGHT_OFFSET}`;
   }
 
   private attachGrassToChunk(
@@ -923,6 +925,10 @@ export class WorldStreamVisualizer {
     cells: DecodedTerrainCells,
     payloadCellsByCoord: Map<string, DecodedTerrainCells>,
   ): number {
+    if (TERRAIN_GRASS_FORCE_DISABLE) {
+      return 0;
+    }
+
     const placements = buildGrassPlacements(
       cells,
       biomeId,
@@ -935,13 +941,13 @@ export class WorldStreamVisualizer {
     }
 
     const profile = grassProfileByBiome(biomeId);
-    const shaderGrassHeight = Math.max(
+    const geometryGrassHeight = Math.max(
       0.001,
       profile.height * TERRAIN_GRASS_SHADER_HEIGHT_RATIO,
     );
-    const heightScaleFactor = Math.max(
-      0.15,
-      shaderGrassHeight / TERRAIN_GRASS_BASE_HEIGHT_REFERENCE,
+    const shaderBendHeight = Math.max(
+      0.001,
+      geometryGrassHeight * TERRAIN_GRASS_BEND_HEIGHT_RATIO,
     );
     const grassObject = new Object3D();
     grassObject.name = TERRAIN_GRASS_OBJECT_NAME;
@@ -959,14 +965,14 @@ export class WorldStreamVisualizer {
     grass.setWindNoiseTexture(Engine3D.res.whiteTexture);
     grass.setGrass(
       profile.width,
-      shaderGrassHeight,
+      geometryGrassHeight,
       TERRAIN_GRASS_SEGMENTS,
       TERRAIN_GRASS_DENSITY,
       placements.length,
     );
-    grass.grassMaterial.grassHeight = shaderGrassHeight;
+    grass.grassMaterial.grassHeight = shaderBendHeight;
     (grass as LocalGrassComponent & { __targetGrassHeight?: number }).__targetGrassHeight =
-      shaderGrassHeight;
+      shaderBendHeight;
     grass.setMinMax(
       new Vector3(0, -8, 0),
       new Vector3(cells.chunkSize, 16, cells.chunkSize),
@@ -985,11 +991,10 @@ export class WorldStreamVisualizer {
       node.z = placement.localZ;
       node.rotationY = placement.rotationY;
       node.scaleX = placement.scale;
-      // Keep blade width visible while compressing vertical exaggeration.
-      // Tie vertical scale to profile.height so height tuning has visible effect.
+      // Keep vertical scale bounded by placement scale to avoid runaway tall strands.
       node.scaleY = Math.max(
         0.004,
-        placement.scale * TERRAIN_GRASS_Y_SCALE_RATIO * heightScaleFactor,
+        placement.scale * TERRAIN_GRASS_Y_SCALE_RATIO,
       );
       node.scaleZ = placement.scale;
       node.updateWorldMatrix(true);
@@ -1004,7 +1009,7 @@ export class WorldStreamVisualizer {
         grass.setGrassTexture(textures.blade);
         grass.setWindNoiseTexture(textures.windNoise);
         // Re-apply after async texture binding in case shader uniforms were reset.
-        grass.grassMaterial.grassHeight = shaderGrassHeight;
+        grass.grassMaterial.grassHeight = shaderBendHeight;
       } catch {
         // Chunk may already be destroyed before async texture assignment.
       }
