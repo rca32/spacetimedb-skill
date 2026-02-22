@@ -1,0 +1,32 @@
+/// <reference types="@webgpu/types" />
+import { CEventDispatcher } from '../../../event/CEventDispatcher';
+import { CanvasConfig } from './CanvasConfig';
+/**
+ * @internal
+ */
+export declare class Context3D extends CEventDispatcher {
+    adapter: GPUAdapter;
+    device: GPUDevice;
+    context: GPUCanvasContext;
+    aspect: number;
+    presentationSize: number[];
+    presentationFormat: GPUTextureFormat;
+    canvas: HTMLCanvasElement;
+    windowWidth: number;
+    windowHeight: number;
+    canvasConfig: CanvasConfig;
+    private _pixelRatio;
+    private _resizeEvent;
+    get pixelRatio(): number;
+    /**
+     * Configure canvas by CanvasConfig
+     * @param canvasConfig
+     * @returns
+     */
+    init(canvasConfig?: CanvasConfig): Promise<boolean>;
+    updateSize(): void;
+}
+/**
+ * @internal
+ */
+export declare let webGPUContext: Context3D;

@@ -1,0 +1,4 @@
+/**
+ * @internal
+ */
+export declare let MultiBouncePass_cs: string;

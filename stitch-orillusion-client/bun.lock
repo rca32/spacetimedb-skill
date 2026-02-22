@@ -5,11 +5,6 @@
     "": {
       "name": "stitch-orillusion-client",
       "dependencies": {
-        "@orillusion/core": "0.8.4",
-        "@orillusion/geometry": "0.2.7",
-        "@orillusion/particle": "0.1.6",
-        "@orillusion/physics": "0.3.4",
-        "@orillusion/stats": "0.2.6",
         "spacetimedb": "1.11.3",
       },
       "devDependencies": {
@@ -70,18 +65,6 @@
     "@esbuild/win32-ia32": ["@esbuild/win32-ia32@0.25.12", "", { "os": "win32", "cpu": "ia32" }, "sha512-HkqnmmBoCbCwxUKKNPBixiWDGCpQGVsrQfJoVGYLPT41XWF8lHuE5N6WhVia2n4o5QK5M4tYr21827fNhi4byQ=="],
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.25.12", "", { "os": "win32", "cpu": "x64" }, "sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA=="],
-
-    "@orillusion/ammo": ["@orillusion/ammo@0.2.1", "", {}, "sha512-E/L+73rlF/eENDahX/iKUXiQMeWwmjeppDLMBwx446uBJNpbjMIew4dl0DlpB0K0VCWXrAU+Kl4tV5urjLLwOA=="],
-
-    "@orillusion/core": ["@orillusion/core@0.8.4", "", {}, "sha512-Ql0Eh8iX0dgwpeuipAOZOOLEfEDuwVhvUhIJjF3khRpQ8075tehi1vImqvxLYFQsqXA1Vxw1VK5qe+/IzD4AMw=="],
-
-    "@orillusion/geometry": ["@orillusion/geometry@0.2.7", "", { "peerDependencies": { "@orillusion/core": ">=0.8.0" } }, "sha512-SHckn8hxZiuiJNwMWhfyTNM1OYNFFki8j3xFmfP/LK3WRs/G+vgwdQmmsx74hyWIg01DjURpHuVDBS4GRiDW8A=="],
-
-    "@orillusion/particle": ["@orillusion/particle@0.1.6", "", { "peerDependencies": { "@orillusion/core": ">=0.8.0" } }, "sha512-F+NTOdCnUE7w/4IjRkDeak9ISxEf0enykFjiwnPb/DXZW3DJF+dTlio4QRAwG4/+2rVJeqox59smpb9687onVg=="],
-
-    "@orillusion/physics": ["@orillusion/physics@0.3.4", "", { "dependencies": { "@orillusion/ammo": ">=0.2.1" }, "peerDependencies": { "@orillusion/core": ">=0.8.0" } }, "sha512-4xX47HF2FoSTya8pgMWnocDecBzDRU63odUxjzb6QeQOFi/j6hulFzYvV+xLVyRXEta8ojocHfHnaFHcE4zzsQ=="],
-
-    "@orillusion/stats": ["@orillusion/stats@0.2.6", "", { "peerDependencies": { "@orillusion/core": ">=0.8.0" } }, "sha512-IhsvXbiJlzPp06vBIKRyCMrg7bxIsV4ojP/MXwzFkTx4LhxA6vrWA7qmhUc3+5g0eR1GMZdWS+HNFbKwlyC/Fw=="],
 
     "@rollup/rollup-android-arm-eabi": ["@rollup/rollup-android-arm-eabi@4.57.1", "", { "os": "android", "cpu": "arm" }, "sha512-A6ehUVSiSaaliTxai040ZpZ2zTevHYbvu/lDoeAteHI8QnaosIzm4qwtezfRg1jOYaUmnzLX1AOD6Z+UJjtifg=="],
 

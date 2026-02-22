@@ -13,7 +13,15 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "paths": {
+      "@orillusion/core": ["./src/vendor/orillusion/core"],
+      "@orillusion/geometry": ["./src/vendor/orillusion/geometry"],
+      "@orillusion/particle": ["./src/vendor/orillusion/particle"],
+      "@orillusion/physics": ["./src/vendor/orillusion/physics"],
+      "@orillusion/stats": ["./src/vendor/orillusion/stats"],
+      "@orillusion/ammo": ["./src/vendor/orillusion/ammo"]
+    }
   },
   "include": ["src"]
 }

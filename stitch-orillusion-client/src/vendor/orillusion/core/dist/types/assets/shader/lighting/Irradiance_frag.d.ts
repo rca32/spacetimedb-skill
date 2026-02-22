@@ -1,0 +1,4 @@
+/**
+ * @internal
+ */
+export declare let Irradiance_frag: string;

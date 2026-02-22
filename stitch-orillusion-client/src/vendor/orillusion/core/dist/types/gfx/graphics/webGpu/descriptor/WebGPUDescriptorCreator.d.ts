@@ -1,0 +1,29 @@
+/// <reference types="@webgpu/types" />
+import { RTFrame } from '../../../renderJob/frame/RTFrame';
+import { RendererPassState } from '../../../renderJob/passRenderer/state/RendererPassState';
+/**
+ * @internal
+ * @author sirxu
+ */
+export declare class WebGPUDescriptorCreator {
+    private static rendererPassState;
+    static createRendererPassState(rtFrame: RTFrame, loadOp?: GPULoadOp): RendererPassState;
+    /**
+     * Get RenderPass Descriptor
+     * Use AttachMentTextures , Texture Format Is Key
+     * @param attachMentTextures
+     * @param useDepth
+     * @param cleanColor
+     * @returns
+     */
+    static getRenderPassDescriptor(renderPassState: RendererPassState, loadOp?: GPULoadOp): any;
+    /**
+     * Get RenderPass Descriptor
+     * Use AttachMentTextures , Texture Format Is Key
+     * @param attachMentTextures
+     * @param useDepth
+     * @param cleanColor
+     * @returns
+     */
+    static getRenderBundleDescriptor(renderPassState: RendererPassState): GPURenderBundleEncoderDescriptor;
+}

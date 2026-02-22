@@ -1,0 +1,31 @@
+import { Color, Material, Texture, Vector2, Vector4 } from "@orillusion/core";
+export declare class GrassMaterial extends Material {
+    constructor();
+    set baseMap(texture: Texture);
+    get baseMap(): Texture;
+    set windMap(texture: Texture);
+    set windBound(v: Vector4);
+    get windBound(): Vector4;
+    set grassBaseColor(v: Color);
+    get grassBaseColor(): Color;
+    set grassTopColor(v: Color);
+    get grassTopColor(): Color;
+    set windDirection(v: Vector2);
+    get windDirection(): Vector2;
+    set windPower(v: number);
+    get windPower(): number;
+    set windSpeed(v: number);
+    get windSpeed(): number;
+    set grassHeight(v: number);
+    get grassHeight(): number;
+    set curvature(v: number);
+    get curvature(): number;
+    set roughness(v: number);
+    get roughness(): number;
+    set translucent(v: number);
+    get translucent(): number;
+    set soft(v: number);
+    get soft(): number;
+    set specular(v: number);
+    get specular(): number;
+}
