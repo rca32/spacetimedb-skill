@@ -1,4 +1,0 @@
-/**
- * @internal
- */
-export declare let DDGILighting_shader: string;

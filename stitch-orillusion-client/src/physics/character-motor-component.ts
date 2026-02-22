@@ -1,5 +1,5 @@
-import { BoxColliderShape, ColliderComponent, ComponentBase, Time, Vector3 } from '@orillusion/core'
-import { Rigidbody } from '@orillusion/physics'
+import { BoxColliderShape, ColliderComponent, ComponentBase, Time, Vector3 } from '@engine/core'
+import { Rigidbody } from '@engine/physics'
 import {
   solveKinematicTerrainStep,
   type KinematicTerrainState,

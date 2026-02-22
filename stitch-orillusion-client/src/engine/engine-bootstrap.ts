@@ -7,9 +7,9 @@ import {
   Scene3D,
   SkyRenderer,
   View3D,
-} from '@orillusion/core'
-import { Physics } from '@orillusion/physics'
-import { Stats } from '@orillusion/stats'
+} from '@engine/core'
+import { Physics } from '@engine/physics'
+import { Stats } from '@engine/stats'
 import { AppConfig } from '../infra/config'
 
 export interface EngineRuntime {

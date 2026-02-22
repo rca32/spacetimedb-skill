@@ -1,4 +1,4 @@
-import { ComponentBase, Object3D } from '@orillusion/core'
+import { ComponentBase, Object3D } from '@engine/core'
 
 export class CameraCollisionComponent extends ComponentBase {
   public target: Object3D | null = null

@@ -4,12 +4,14 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   resolve: {
     alias: {
-      '@orillusion/core': resolve(__dirname, 'src/vendor/orillusion/core'),
-      '@orillusion/geometry': resolve(__dirname, 'src/vendor/orillusion/geometry'),
-      '@orillusion/particle': resolve(__dirname, 'src/vendor/orillusion/particle'),
-      '@orillusion/physics': resolve(__dirname, 'src/vendor/orillusion/physics'),
-      '@orillusion/stats': resolve(__dirname, 'src/vendor/orillusion/stats'),
-      '@orillusion/ammo': resolve(__dirname, 'src/vendor/orillusion/ammo'),
+      '@engine/core': resolve(__dirname, 'engines/orillusion-src/core/index.ts'),
+      '@engine/geometry': resolve(__dirname, 'engines/orillusion-src/geometry/index.ts'),
+      '@engine/particle': resolve(__dirname, 'engines/orillusion-src/particle/index.ts'),
+      '@engine/physics': resolve(__dirname, 'engines/orillusion-src/physics/index.ts'),
+      '@engine/stats': resolve(__dirname, 'engines/orillusion-src/stats/index.ts'),
+      '@engine/ammo': resolve(__dirname, 'engines/orillusion-src/ammo/index.ts'),
+      '@engine/graphic': resolve(__dirname, 'engines/orillusion-src/graphic/index.ts'),
+      '@engine/wasm-matrix': resolve(__dirname, 'engines/orillusion-src/packages/wasm-matrix'),
     },
   },
   // Keep Kenney GLB + Textures directory structure so relative texture URIs in GLB resolve correctly.

@@ -18,8 +18,8 @@ import {
   UnLitMaterial,
   Vector3,
   VertexAttributeName,
-} from "@orillusion/core";
-import { TerrainGeometry } from "@orillusion/geometry";
+} from "@engine/core";
+import { TerrainGeometry } from "@engine/geometry";
 import { hexToWorldXZ } from "../core/hex/hex-coords";
 import type { DbConnection } from "../module_bindings";
 import { TerrainHeightfieldIndex } from "../physics/terrain-heightfield-index";

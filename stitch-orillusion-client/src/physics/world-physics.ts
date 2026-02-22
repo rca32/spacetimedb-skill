@@ -4,8 +4,8 @@ import {
   Object3D,
   Scene3D,
   Vector3,
-} from '@orillusion/core'
-import { Rigidbody } from '@orillusion/physics'
+} from '@engine/core'
+import { Rigidbody } from '@engine/physics'
 
 export function createPhysicsGround(scene: Scene3D): Object3D {
   const ground = new Object3D()

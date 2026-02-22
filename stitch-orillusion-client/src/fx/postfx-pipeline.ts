@@ -8,7 +8,7 @@ import {
   SSRPost,
   Scene3D,
   TAAPost,
-} from '@orillusion/core'
+} from '@engine/core'
 import type { PostFxProfile } from '../infra/config'
 
 export class PostFxPipelineController {

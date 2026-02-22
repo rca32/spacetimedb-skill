@@ -1,4 +1,0 @@
-/**
- * @internal
- */
-export declare let BxDF_frag: string;

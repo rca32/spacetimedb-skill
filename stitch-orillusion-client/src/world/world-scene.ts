@@ -10,7 +10,7 @@ import {
   SkinnedMeshRenderer2,
   SphereGeometry,
   UnLitMaterial,
-} from '@orillusion/core'
+} from '@engine/core'
 
 export interface WorldSceneObjects {
   readonly player: Object3D

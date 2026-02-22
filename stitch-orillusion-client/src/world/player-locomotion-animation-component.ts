@@ -1,4 +1,4 @@
-import { AnimatorComponent, ComponentBase } from '@orillusion/core'
+import { AnimatorComponent, ComponentBase } from '@engine/core'
 import { CharacterMotorComponent, type MotionIntentSnapshot } from '../physics/character-motor-component'
 
 const INPUT_EPSILON = 0.001

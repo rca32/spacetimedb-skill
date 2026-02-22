@@ -9,7 +9,7 @@ import {
   SkinnedMeshRenderer,
   SkinnedMeshRenderer2,
   UnLitMaterial,
-} from '@orillusion/core'
+} from '@engine/core'
 import { CameraAimComponent } from '../camera/camera-aim-component'
 import { CameraCollisionComponent } from '../camera/camera-collision-component'
 import { CameraFollowComponent } from '../camera/camera-follow-component'

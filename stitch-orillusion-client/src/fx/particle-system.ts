@@ -1,4 +1,4 @@
-import { Color, Engine3D, Object3D, PlaneGeometry, Scene3D, Vector3 } from '@orillusion/core'
+import { Color, Engine3D, Object3D, PlaneGeometry, Scene3D, Vector3 } from '@engine/core'
 import {
   EmitLocation,
   ParticleEmitterModule,
@@ -6,7 +6,7 @@ import {
   ParticleStandardSimulator,
   ParticleSystem,
   ShapeType,
-} from '@orillusion/particle'
+} from '@engine/particle'
 import { FxEvent, FxEventBus } from './fx-event-bus'
 
 export class ParticleSystemController {

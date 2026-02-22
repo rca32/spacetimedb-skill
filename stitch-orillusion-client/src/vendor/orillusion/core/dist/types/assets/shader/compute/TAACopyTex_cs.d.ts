@@ -1,4 +1,0 @@
-/**
- * @internal
- */
-export declare let TAACopyTex_cs: string;

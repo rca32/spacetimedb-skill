@@ -4,8 +4,8 @@ import {
   type Texture,
   type Transform,
   Vector3,
-} from "@orillusion/core";
-import { GrassGeometry, GrassMaterial } from "@orillusion/geometry";
+} from "@engine/core";
+import { GrassGeometry, GrassMaterial } from "@engine/geometry";
 
 export class LocalGrassComponent extends MeshRenderer {
   public readonly grassMaterial: GrassMaterial;

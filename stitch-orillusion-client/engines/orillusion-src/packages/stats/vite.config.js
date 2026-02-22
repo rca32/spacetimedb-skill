@@ -1,0 +1,26 @@
+import { defineConfig } from 'vite'
+const path = require('path')
+export default defineConfig({
+    resolve: {
+        alias: {
+            '@engine/core': path.resolve(__dirname, '../../src'),
+            '@orillusion': path.resolve(__dirname, '../')
+        }
+    },
+    build: {
+        target: 'esnext',
+        lib: {
+            entry: path.resolve('index.ts'),
+            name: 'Stats',
+            fileName: (format) => `stats.${format}.js`
+        },
+        rollupOptions: {
+            external: ['@engine/core'],
+            output: {
+                globals: {
+                    '@engine/core': 'Orillusion'
+                }
+            }
+        }
+    }
+})

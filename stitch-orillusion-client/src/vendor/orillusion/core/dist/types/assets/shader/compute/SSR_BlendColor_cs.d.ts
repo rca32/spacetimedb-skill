@@ -1,4 +1,0 @@
-/**
- * @internal
- */
-export declare let SSR_BlendColor_cs: string;

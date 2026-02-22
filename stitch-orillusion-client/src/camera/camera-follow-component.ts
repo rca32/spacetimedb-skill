@@ -1,4 +1,4 @@
-import { Camera3D, ComponentBase, Object3D, Vector3 } from '@orillusion/core'
+import { Camera3D, ComponentBase, Object3D, Vector3 } from '@engine/core'
 
 export class CameraFollowComponent extends ComponentBase {
   public target: Object3D | null = null

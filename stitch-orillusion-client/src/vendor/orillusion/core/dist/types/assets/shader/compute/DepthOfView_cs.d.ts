@@ -1,4 +1,0 @@
-/**
- * @internal
- */
-export declare let DepthOfView_cs: string;

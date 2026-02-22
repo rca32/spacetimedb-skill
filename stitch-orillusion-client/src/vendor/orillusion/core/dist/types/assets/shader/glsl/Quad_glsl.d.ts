@@ -1,8 +1,0 @@
-/**
- * @internal
- */
-export declare let QuadGlsl_vs: string;
-/**
- * @internal
- */
-export declare let QuadGlsl_fs: string;

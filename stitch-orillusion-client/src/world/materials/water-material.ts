@@ -8,7 +8,7 @@ import {
   ShaderLib,
   Texture,
   Vector4,
-} from '@orillusion/core'
+} from '@engine/core'
 
 export type WaterRenderProfile = 'low' | 'medium' | 'high'
 export type WaterQualityLevel = 'balanced' | 'high'

@@ -1,4 +1,0 @@
-/**
- * @internal
- */
-export declare let DDGIIrradiance_shader: string;

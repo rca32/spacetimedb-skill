@@ -1,4 +1,0 @@
-/**
- * @internal
- */
-export declare let BLUR_CsShader: string;
