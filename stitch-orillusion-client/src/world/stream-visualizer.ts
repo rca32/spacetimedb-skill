@@ -563,6 +563,7 @@ export class WorldStreamVisualizer {
     } else {
       this.prune(this.footprintObjects, new Set());
     }
+    this.refreshGrassMaterialHeights();
     this.syncPlayers(db, localIdentityHex);
     this.syncV2Streams(db);
     this.pruneBuildingDefEntityCache();
@@ -964,6 +965,8 @@ export class WorldStreamVisualizer {
       placements.length,
     );
     grass.grassMaterial.grassHeight = shaderGrassHeight;
+    (grass as LocalGrassComponent & { __targetGrassHeight?: number }).__targetGrassHeight =
+      shaderGrassHeight;
     grass.setMinMax(
       new Vector3(0, -8, 0),
       new Vector3(cells.chunkSize, 16, cells.chunkSize),
@@ -1008,6 +1011,26 @@ export class WorldStreamVisualizer {
     });
 
     return placements.length;
+  }
+
+  private refreshGrassMaterialHeights(): void {
+    for (const terrainObject of this.terrainObjects.values()) {
+      const grassObject = terrainObject.getObjectByName(TERRAIN_GRASS_OBJECT_NAME);
+      if (!(grassObject instanceof Object3D)) {
+        continue;
+      }
+      const grass = grassObject.getComponent(LocalGrassComponent);
+      if (!grass) {
+        continue;
+      }
+      const targetHeight = (
+        grass as LocalGrassComponent & { __targetGrassHeight?: number }
+      ).__targetGrassHeight;
+      if (!Number.isFinite(targetHeight)) {
+        continue;
+      }
+      grass.grassMaterial.grassHeight = Math.max(0.001, targetHeight as number);
+    }
   }
 
   private syncNpcs(db: Record<string, unknown>): void {
