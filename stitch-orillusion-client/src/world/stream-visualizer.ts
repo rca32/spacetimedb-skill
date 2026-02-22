@@ -920,7 +920,7 @@ export class WorldStreamVisualizer {
     const normalizedBiomeId = Math.trunc(biomeId);
     const enabled = this.grassBiomeIds.has(normalizedBiomeId) ? 1 : 0;
     const profile = grassProfileByBiome(normalizedBiomeId);
-    return `grass:${enabled}:${normalizedBiomeId}:${profile.width}:${profile.height}:${profile.spawnChance}:${profile.extraSpawnChance}:${profile.scaleBoost}:${TERRAIN_GRASS_MIN_SCALE}:${TERRAIN_GRASS_MAX_SCALE}:${TERRAIN_GRASS_Y_SCALE_RATIO}:${TERRAIN_GRASS_SHADER_HEIGHT_RATIO}:${TERRAIN_GRASS_BEND_HEIGHT_RATIO}:${TERRAIN_GRASS_HEIGHT_OFFSET}`;
+    return `grass:${enabled}:${normalizedBiomeId}:${profile.width}:${profile.height}:${profile.spawnChance}:${profile.extraSpawnChance}:${profile.scaleBoost}:${TERRAIN_GRASS_MIN_SCALE}:${TERRAIN_GRASS_MAX_SCALE}:${TERRAIN_GRASS_Y_SCALE_RATIO}:${TERRAIN_GRASS_SHADER_HEIGHT_RATIO}:${TERRAIN_GRASS_BEND_HEIGHT_RATIO}:${TERRAIN_GRASS_DISTRIBUTION_SCALE}:${TERRAIN_GRASS_CLUSTER_EDGE_MIN}:${TERRAIN_GRASS_CLUSTER_EDGE_MAX}:${TERRAIN_GRASS_DENSITY_GLOBAL_MULTIPLIER}:${TERRAIN_GRASS_EXTRA_CLUSTER_MULTIPLIER}:${TERRAIN_GRASS_CLUSTER_EMPTY_CUTOFF}:${TERRAIN_GRASS_HEIGHT_OFFSET}`;
   }
 
   private attachGrassToChunk(
