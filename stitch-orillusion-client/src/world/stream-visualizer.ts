@@ -58,13 +58,19 @@ const TERRAIN_GRASS_FORCE_DISABLE = false;
 const TERRAIN_GRASS_DEFAULT_BIOME_IDS: ReadonlyArray<number> = [0, 1];
 const TERRAIN_GRASS_HEIGHT_OFFSET = 0.04;
 const TERRAIN_GRASS_CELL_JITTER = 0.34;
-const TERRAIN_GRASS_SEGMENTS = 4;
+const TERRAIN_GRASS_SEGMENTS = 1;
 const TERRAIN_GRASS_DENSITY = 1;
 const TERRAIN_GRASS_MIN_SCALE = 0.45;
 const TERRAIN_GRASS_MAX_SCALE = 0.9;
-const TERRAIN_GRASS_Y_SCALE_RATIO = 0.45;
+const TERRAIN_GRASS_Y_SCALE_RATIO = 3.2;
 const TERRAIN_GRASS_SHADER_HEIGHT_RATIO = 1.0;
-const TERRAIN_GRASS_BEND_HEIGHT_RATIO = 0.35;
+const TERRAIN_GRASS_BEND_HEIGHT_RATIO = 0.05;
+const TERRAIN_GRASS_DISTRIBUTION_SCALE = 0.07;
+const TERRAIN_GRASS_CLUSTER_EDGE_MIN = 0.48;
+const TERRAIN_GRASS_CLUSTER_EDGE_MAX = 0.72;
+const TERRAIN_GRASS_DENSITY_GLOBAL_MULTIPLIER = 0.72;
+const TERRAIN_GRASS_EXTRA_CLUSTER_MULTIPLIER = 0.65;
+const TERRAIN_GRASS_CLUSTER_EMPTY_CUTOFF = 0.08;
 const WATER_SURFACE_OBJECT_NAME = "__terrain-water-surface__";
 const WATER_SURFACE_OFFSET = 0.06;
 const WATER_SURFACE_HIDDEN_DEPTH = 0.04;
@@ -2355,15 +2361,40 @@ function buildGrassPlacements(
         continue;
       }
 
+      const cellCenterX = localCellX + 0.5;
+      const cellCenterZ = localCellZ + 0.5;
+      const worldCellX = chunkOriginX + cellCenterX;
+      const worldCellZ = chunkOriginZ + cellCenterZ;
+      const coverage = fbm2(
+        worldCellX * TERRAIN_GRASS_DISTRIBUTION_SCALE,
+        worldCellZ * TERRAIN_GRASS_DISTRIBUTION_SCALE,
+        Math.trunc(biomeId) ^ 0x9e3779b9,
+      );
+      const clusterMask = smoothstep(
+        TERRAIN_GRASS_CLUSTER_EDGE_MIN,
+        TERRAIN_GRASS_CLUSTER_EDGE_MAX,
+        coverage,
+      );
+      if (clusterMask < TERRAIN_GRASS_CLUSTER_EMPTY_CUTOFF) {
+        continue;
+      }
+
       const cellSeed = stableHash32(
         `${chunkX}:${chunkY}:${localCellX}:${localCellZ}`,
       );
-      if (hashToUnitFloat(cellSeed) > profile.spawnChance) {
+      const spawnProb =
+        profile.spawnChance *
+        clusterMask *
+        TERRAIN_GRASS_DENSITY_GLOBAL_MULTIPLIER;
+      if (hashToUnitFloat(cellSeed) > spawnProb) {
         continue;
       }
 
       const extraSpawn =
-        hashToUnitFloat(cellSeed ^ 0x9e3779b9) < profile.extraSpawnChance;
+        hashToUnitFloat(cellSeed ^ 0x9e3779b9) <
+        profile.extraSpawnChance *
+          clusterMask *
+          TERRAIN_GRASS_EXTRA_CLUSTER_MULTIPLIER;
       const spawnCount = extraSpawn ? 2 : 1;
       for (let spawnIndex = 0; spawnIndex < spawnCount; spawnIndex += 1) {
         if (placements.length >= maxPlacements) {
@@ -3292,6 +3323,60 @@ function hashToUnitFloat(hash: number): number {
 
 function hashToSignedUnitFloat(hash: number): number {
   return hashToUnitFloat(hash) * 2 - 1;
+}
+
+function hash2DToUnitFloat(ix: number, iz: number, seed: number): number {
+  return hashToUnitFloat(
+    stableHash32(`${seed}:${Math.trunc(ix)}:${Math.trunc(iz)}`),
+  );
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  if (edge1 <= edge0) {
+    return x >= edge1 ? 1 : 0;
+  }
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+function valueNoise2(x: number, z: number, seed: number): number {
+  const x0 = Math.floor(x);
+  const z0 = Math.floor(z);
+  const tx = x - x0;
+  const tz = z - z0;
+
+  const h00 = hash2DToUnitFloat(x0, z0, seed);
+  const h10 = hash2DToUnitFloat(x0 + 1, z0, seed);
+  const h01 = hash2DToUnitFloat(x0, z0 + 1, seed);
+  const h11 = hash2DToUnitFloat(x0 + 1, z0 + 1, seed);
+
+  const sx = smoothstep(0, 1, tx);
+  const sz = smoothstep(0, 1, tz);
+  const nx0 = lerp(h00, h10, sx);
+  const nx1 = lerp(h01, h11, sx);
+  return lerp(nx0, nx1, sz);
+}
+
+function fbm2(x: number, z: number, seed: number): number {
+  let frequency = 1;
+  let amplitude = 1;
+  let sum = 0;
+  let norm = 0;
+  for (let octave = 0; octave < 2; octave += 1) {
+    const octaveSeed = seed ^ (octave * 0x85ebca6b);
+    sum += valueNoise2(x * frequency, z * frequency, octaveSeed) * amplitude;
+    norm += amplitude;
+    frequency *= 2.03;
+    amplitude *= 0.5;
+  }
+  if (norm <= 0) {
+    return 0;
+  }
+  return sum / norm;
 }
 
 function normalizeBiomeIdSet(

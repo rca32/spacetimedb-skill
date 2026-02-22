@@ -54,8 +54,10 @@ export let GrassVertexAttributeShader: string = /*wgsl*/ `
         var worldPos = (ORI_MATRIX_M * vec4<f32>(vertexPosition.xyz, 1.0));
 
         #if TRANSFORMVERTEX
-            var transformVertex = transformVertex(worldPos.xyz,vertexNormal,vertex);
-            worldPos = vec4<f32>(transformVertex.position ,worldPos.w);
+            // Grass transform computes per-blade motion in local space.
+            // Then apply object/chunk world matrix once here.
+            var transformVertex = transformVertex(vertexPosition.xyz,vertexNormal,vertex);
+            worldPos = (ORI_MATRIX_M * vec4<f32>(transformVertex.position, 1.0));
             vertexNormal = transformVertex.normal ;
         #endif
 
