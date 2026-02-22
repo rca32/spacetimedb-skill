@@ -25,6 +25,7 @@ interface SceneModelProfile {
   readonly color: readonly [number, number, number]
   readonly preserveMaterials?: boolean
   readonly shadowSafePbr?: boolean
+  readonly alwaysRender?: boolean
   readonly rootObjectName?: string
   readonly defaultAnimation?: string
   readonly defaultAnimationIndex?: number
@@ -39,6 +40,7 @@ const PLAYER_MODEL_PROFILE: SceneModelProfile = {
   color: [0.08, 0.95, 0.9],
   preserveMaterials: true,
   shadowSafePbr: true,
+  alwaysRender: true,
   rootObjectName: 'Character',
   defaultAnimation: 'Idle',
   defaultAnimationIndex: 0,
@@ -121,6 +123,9 @@ function attachSceneModelAsync(target: Object3D, profile: SceneModelProfile): vo
 
     if (profile.shadowSafePbr) {
       applyPbrShadowSafety(instance)
+    }
+    if (profile.alwaysRender) {
+      applyAlwaysRender(instance)
     }
 
     destroyDirectChildren(target)
@@ -237,6 +242,12 @@ function applyPbrShadowSafety(root: Object3D): void {
     for (const material of materials) {
       applyShadowSafeMaterial(material)
     }
+  }
+}
+
+function applyAlwaysRender(root: Object3D): void {
+  for (const mesh of collectMeshRenderers(root)) {
+    mesh.alwaysRender = true
   }
 }
 

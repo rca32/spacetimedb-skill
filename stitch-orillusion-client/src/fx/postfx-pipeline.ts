@@ -11,35 +11,47 @@ import {
 } from '@engine/core'
 import type { PostFxProfile } from '../infra/config'
 
+interface PostFxPipelineOptions {
+  readonly taaEnabled: boolean
+  readonly fxaaEnabled: boolean
+}
+
 export class PostFxPipelineController {
+  private readonly scene
   private readonly post
-  private readonly taa
+  private readonly taaEnabled
+  private readonly fxaaEnabled
+  private taa: TAAPost | null = null
   private readonly gtao
   private readonly bloom
   private readonly fog
   private readonly ssr
-  private readonly fxaa
+  private fxaa: FXAAPost | null = null
 
-  constructor(scene: Scene3D) {
+  constructor(scene: Scene3D, options: PostFxPipelineOptions) {
+    this.scene = scene
     this.post = scene.getOrAddComponent(PostProcessingComponent)
-    this.taa = this.post.addPost(TAAPost)
+    this.taaEnabled = options.taaEnabled
+    this.fxaaEnabled = options.fxaaEnabled
     this.gtao = this.post.addPost(GTAOPost)
     this.bloom = this.post.addPost(BloomPost)
     this.fog = this.post.addPost(GlobalFog)
     this.ssr = this.post.addPost(SSRPost)
-    this.fxaa = this.post.addPost(FXAAPost)
+    this.fxaa = this.post.getPost(FXAAPost) ?? this.post.addPost(FXAAPost)
+    this.setTaaActive(false)
+    this.setFxaaActive(false)
   }
 
   applyProfile(profile: PostFxProfile): void {
     const postSettings = Engine3D.setting.render.postProcessing
 
     if (profile === 'low') {
-      this.taa.enable = false
+      this.setTaaActive(false)
       this.gtao.enable = false
       this.bloom.enable = false
       this.ssr.enable = false
       this.fog.enable = true
-      this.fxaa.enable = true
+      this.setFxaaActive(true)
       this.setFogProfile({
         start: 28,
         end: 320,
@@ -54,15 +66,17 @@ export class PostFxPipelineController {
     }
 
     if (profile === 'medium') {
-      this.taa.enable = true
+      this.setTaaActive(true)
       this.gtao.enable = true
       this.bloom.enable = true
       this.ssr.enable = false
       this.fog.enable = true
-      this.fxaa.enable = false
+      this.setFxaaActive(false)
 
-      this.taa.blendFactor = 0.88
-      this.taa.sharpFactor = 0.2
+      if (this.taa) {
+        this.taa.blendFactor = 0.88
+        this.taa.sharpFactor = 0.2
+      }
       if (postSettings.gtao) {
         postSettings.gtao.maxDistance = 3.8
       }
@@ -83,15 +97,17 @@ export class PostFxPipelineController {
       return
     }
 
-    this.taa.enable = true
+    this.setTaaActive(true)
     this.gtao.enable = true
     this.bloom.enable = true
     this.ssr.enable = true
     this.fog.enable = true
-    this.fxaa.enable = false
+    this.setFxaaActive(false)
 
-    this.taa.blendFactor = 0.9
-    this.taa.sharpFactor = 0.18
+    if (this.taa) {
+      this.taa.blendFactor = 0.9
+      this.taa.sharpFactor = 0.18
+    }
     if (postSettings.gtao) {
       postSettings.gtao.maxDistance = 5.2
     }
@@ -114,6 +130,52 @@ export class PostFxPipelineController {
       falloff: 1.28,
       rayLength: 0.52,
     })
+  }
+
+  private setTaaActive(active: boolean): void {
+    const shouldEnable = this.taaEnabled && active
+    if (shouldEnable) {
+      const taa = this.post.getPost(TAAPost) ?? this.post.addPost(TAAPost)
+      this.taa = taa
+      if (this.taa) {
+        this.taa.enable = true
+      }
+      return
+    }
+
+    if (this.post.getPost(TAAPost)) {
+      this.post.removePost(TAAPost)
+    }
+    this.taa = null
+
+    // TAAPost detach가 누락된 상태를 방지하기 위한 하드 가드.
+    const views = Engine3D.views ?? []
+    for (const view of views) {
+      if (view.scene === this.scene) {
+        view.camera.enableJitterProjection(false)
+      }
+    }
+  }
+
+  private setFxaaActive(active: boolean): void {
+    const shouldEnable = this.fxaaEnabled && active
+    if (shouldEnable) {
+      const fxaa = this.post.getPost(FXAAPost) ?? this.post.addPost(FXAAPost)
+      this.fxaa = fxaa
+      if (this.fxaa) {
+        this.fxaa.enable = true
+      }
+      return
+    }
+
+    if (this.post.getPost(FXAAPost)) {
+      this.post.removePost(FXAAPost)
+    }
+    this.fxaa = null
+    const postSettings = Engine3D.setting.render.postProcessing
+    if (postSettings.fxaa) {
+      postSettings.fxaa.enable = false
+    }
   }
 
   private setFogProfile(profile: {

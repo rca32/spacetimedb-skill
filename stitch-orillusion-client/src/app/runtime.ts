@@ -226,7 +226,10 @@ export class OrillusionClientRuntime {
     cameraAim.minDistance = CAMERA_MIN_DISTANCE
     cameraAim.maxDistance = CAMERA_MAX_DISTANCE
 
-    this.postFx = new PostFxPipelineController(this.engine.scene)
+    this.postFx = new PostFxPipelineController(this.engine.scene, {
+      taaEnabled: this.config.taaEnabled,
+      fxaaEnabled: this.config.fxaaEnabled,
+    })
     this.postFx.applyProfile(this.config.postFxProfile)
 
     this.particles = new ParticleSystemController(this.engine.scene, this.bus)
@@ -242,6 +245,7 @@ export class OrillusionClientRuntime {
     this.streamVisualizer.setChunkWorldSize(this.activeChunkSize)
     this.streamVisualizer.setShowFootprintOverlay(this.buildModeEnabled)
     this.motor.setGroundOffset(PLAYER_FEET_OFFSET_Y)
+    this.motor.enablePhysicsBridge = this.config.playerPhysicsBridgeEnabled
     this.motor.setTerrainSampler({
       sampleHeight: (x, z) => this.streamVisualizer?.sampleTerrainHeight(x, z) ?? null,
       sampleTraversable: (x, z) => this.streamVisualizer?.sampleTerrainTraversable(x, z) ?? null,
@@ -311,6 +315,7 @@ export class OrillusionClientRuntime {
       return
     }
     const isLocallyMoving = this.isLocallyMoving()
+    let cameraNeedsResync = false
 
     const position = motor.readPosition()
 
@@ -344,9 +349,12 @@ export class OrillusionClientRuntime {
     }
 
     if (!isLocallyMoving) {
-      this.applyAuthoritativePhysicsIfAvailable()
+      cameraNeedsResync = this.applyAuthoritativePhysicsIfAvailable() || cameraNeedsResync
     }
-    this.applyPendingCorrections(isLocallyMoving)
+    cameraNeedsResync = this.applyPendingCorrections(isLocallyMoving) || cameraNeedsResync
+    if (cameraNeedsResync) {
+      this.cameraFollow?.syncNow()
+    }
     this.emitCombatFxIfAny()
   }
 
@@ -848,17 +856,17 @@ export class OrillusionClientRuntime {
     }
   }
 
-  private applyAuthoritativePhysicsIfAvailable(): void {
+  private applyAuthoritativePhysicsIfAvailable(): boolean {
     const connection = this.net.getConnection()
     const motor = this.motor
     const identityHex = this.net.getIdentityHex()
     if (!connection?.isActive || !motor || !identityHex) {
-      return
+      return false
     }
 
     const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>).physicsStateV2
     if (!table) {
-      return
+      return false
     }
 
     for (const row of table.iter()) {
@@ -880,24 +888,27 @@ export class OrillusionClientRuntime {
         continue
       }
 
-      this.applyAuthoritativeXZ(position)
+      const changed = this.applyAuthoritativeXZ(position)
       this.lastAppliedAuthoritativeFrameNo = serverFrameNo
-      break
+      return changed
     }
+
+    return false
   }
 
-  private applyPendingCorrections(isLocallyMoving: boolean): void {
+  private applyPendingCorrections(isLocallyMoving: boolean): boolean {
     const connection = this.net.getConnection()
     if (!connection?.isActive) {
-      return
+      return false
     }
 
     const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>)
       .serverCorrectionV2
     if (!table) {
-      return
+      return false
     }
 
+    let changed = false
     for (const row of table.iter()) {
       const correctionId = String(row.correctionId ?? '')
       if (!correctionId || row.acknowledged === true || this.seenCorrectionIds.has(correctionId)) {
@@ -912,7 +923,7 @@ export class OrillusionClientRuntime {
       ]
       if (this.player && Number.isFinite(position[0]) && Number.isFinite(position[1]) && Number.isFinite(position[2])) {
         if (!isLocallyMoving) {
-          this.applyAuthoritativeXZ(position)
+          changed = this.applyAuthoritativeXZ(position) || changed
         }
       }
 
@@ -921,6 +932,8 @@ export class OrillusionClientRuntime {
         ackedClientFrameNo: BigInt(this.frameNo),
       })
     }
+
+    return changed
   }
 
   private syncHud(): void {
@@ -939,6 +952,9 @@ export class OrillusionClientRuntime {
       `<div>connection: ${connected ? 'connected' : 'disconnected'}</div>`,
       `<div>identity: ${identity}</div>`,
       `<div>profile: ${this.config.postFxProfile}</div>`,
+      `<div>taa flag: ${this.config.taaEnabled ? 'on' : 'off'}</div>`,
+      `<div>fxaa flag: ${this.config.fxaaEnabled ? 'on' : 'off'}</div>`,
+      `<div>physics bridge: ${this.config.playerPhysicsBridgeEnabled ? 'on' : 'off'}</div>`,
       '<div>streams: v2</div>',
       `<div>region/dimension: ${this.activeRegionId.toString()}/${this.activeDimensionId}</div>`,
       `<div>chunk-size: ${this.activeChunkSize}</div>`,
@@ -1022,10 +1038,10 @@ export class OrillusionClientRuntime {
     return raw.slice(0, 64)
   }
 
-  private applyAuthoritativeXZ(position: number[]): void {
+  private applyAuthoritativeXZ(position: number[]): boolean {
     const player = this.player
     if (!player || position.length < 3) {
-      return
+      return false
     }
 
     const nextX = Number(position[0] ?? player.x)
@@ -1035,24 +1051,29 @@ export class OrillusionClientRuntime {
     const distanceXZ = Math.hypot(dx, dz)
 
     if (!Number.isFinite(distanceXZ) || distanceXZ <= SERVER_RECONCILE_IGNORE_DISTANCE_XZ) {
-      return
+      return false
     }
 
     if (distanceXZ >= SERVER_RECONCILE_SNAP_DISTANCE_XZ) {
       player.x = nextX
       player.z = nextZ
-      return
+      return true
     }
 
     const alpha = 0.35
     player.x += dx * alpha
     player.z += dz * alpha
+    return true
   }
 
   private isLocallyMoving(): boolean {
-    const intent = this.motor?.readIntentSnapshot()
-    if (!intent) {
+    const motor = this.motor
+    const intent = motor?.readIntentSnapshot()
+    if (!intent || !motor) {
       return false
+    }
+    if (intent.jump || motor.isAirborne()) {
+      return true
     }
     return Math.abs(intent.inputX) > LOCAL_MOVING_EPSILON || Math.abs(intent.inputZ) > LOCAL_MOVING_EPSILON
   }

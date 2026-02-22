@@ -16,6 +16,10 @@ export class CameraFollowComponent extends ComponentBase {
   }
 
   public onUpdate(): void {
+    this.syncNow()
+  }
+
+  public syncNow(): void {
     if (!this.camera || !this.target) {
       return
     }

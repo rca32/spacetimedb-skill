@@ -9,6 +9,9 @@ export interface AppConfig {
   readonly defaultDimensionId: number
   readonly devicePixelRatio: number
   readonly postFxProfile: PostFxProfile
+  readonly taaEnabled: boolean
+  readonly fxaaEnabled: boolean
+  readonly playerPhysicsBridgeEnabled: boolean
   readonly debugPhysics: boolean
   readonly debugBuildingModels: boolean
   readonly resourceInstancingEnabled: boolean
@@ -31,6 +34,9 @@ export function loadConfig(): AppConfig {
     defaultDimensionId: Number.parseInt(import.meta.env.VITE_DIMENSION_ID ?? '1', 10),
     devicePixelRatio: Number.isFinite(dprRaw) && dprRaw > 0 ? dprRaw : 1,
     postFxProfile: (import.meta.env.VITE_POSTFX_PROFILE ?? 'low') as PostFxProfile,
+    taaEnabled: (import.meta.env.VITE_TAA_ENABLED ?? '0') === '1',
+    fxaaEnabled: (import.meta.env.VITE_FXAA_ENABLED ?? '0') === '1',
+    playerPhysicsBridgeEnabled: (import.meta.env.VITE_PLAYER_PHYSICS_BRIDGE ?? '0') === '1',
     debugPhysics: (import.meta.env.VITE_DEBUG_PHYSICS ?? '0') === '1',
     debugBuildingModels: (import.meta.env.VITE_DEBUG_BUILDING_MODELS ?? '0') === '1',
     resourceInstancingEnabled: (import.meta.env.VITE_RESOURCE_INSTANCING ?? '1') !== '0',

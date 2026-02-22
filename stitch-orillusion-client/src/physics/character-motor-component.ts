@@ -17,6 +17,7 @@ export class CharacterMotorComponent extends ComponentBase {
   // Tuned down to better match Soldier locomotion clips and reduce foot sliding.
   public walkSpeed = 3.2
   public runSpeed = 5.2
+  public enablePhysicsBridge = false
 
   private readonly keys = new Set<string>()
   private rigidbody: Rigidbody | null = null
@@ -58,18 +59,20 @@ export class CharacterMotorComponent extends ComponentBase {
   }
 
   public start(): void {
-    const collider = this.object3D.getOrAddComponent(ColliderComponent)
-    const shape = new BoxColliderShape()
-    shape.size = new Vector3(0.7, 1.8, 0.7)
-    collider.shape = shape
+    if (this.enablePhysicsBridge) {
+      const collider = this.object3D.getOrAddComponent(ColliderComponent)
+      const shape = new BoxColliderShape()
+      shape.size = new Vector3(0.7, 1.8, 0.7)
+      collider.shape = shape
 
-    try {
-      this.rigidbody = this.object3D.getOrAddComponent(Rigidbody)
-      this.rigidbody.mass = 1
-      this.rigidbody.isKinematic = true
-    } catch (error) {
-      this.rigidbody = null
-      console.warn('[stitch-orillusion-client] character motor running without rigidbody', error)
+      try {
+        this.rigidbody = this.object3D.getOrAddComponent(Rigidbody)
+        this.rigidbody.mass = 1
+        this.rigidbody.isKinematic = true
+      } catch (error) {
+        this.rigidbody = null
+        console.warn('[stitch-orillusion-client] character motor running without rigidbody', error)
+      }
     }
 
     document.addEventListener('keydown', this.onKeyDown, true)
@@ -201,6 +204,14 @@ export class CharacterMotorComponent extends ComponentBase {
 
   public readPosition(): Vector3 {
     return this.object3D.transform.worldPosition
+  }
+
+  public isAirborne(): boolean {
+    const state = this.kinematicState
+    if (!state) {
+      return false
+    }
+    return !state.grounded
   }
 
   public snapToGround(y: number): void {

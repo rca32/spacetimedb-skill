@@ -93,6 +93,17 @@ export async function bootstrapEngine(
     view,
     stop: () => {
       Engine3D.pause()
+      try {
+        scene.destroy(true)
+      } catch (error) {
+        console.warn('[stitch-orillusion-client] scene destroy failed during engine stop', error)
+      }
+      try {
+        Engine3D.renderJobs?.clear()
+      } catch (error) {
+        console.warn('[stitch-orillusion-client] render job clear failed during engine stop', error)
+      }
+      Engine3D.views = []
       root.innerHTML = ''
     },
   }
