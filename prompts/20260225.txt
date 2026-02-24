@@ -1,0 +1,26 @@
+사용스킬[$spacetimedb-korean]
+stitch-orillusion-client 는 spacetimedb(stitch-server,stitch-orillusion-client/src/module_bindings,stitch-orillusion-client/src/net) 기반의 MMO RPG를
+orillusion(stitch-orillusion-client/engines/orillusion-src) 기반으로 구현을 한거야,
+문제는 orillusion engine의 완전한 기능을 사용하게 설계 되어 있지 않아서stitch-orillusion-clientv2 로 완전히 새롭게 설계하고 싶어,
+아래 샘플을 상세하게 살펴서 stitch-server를 위한 새로운 client에 추가 되어야 할 기능 목록을 먼저 뽑아 보자
+orillusion/samples/
+orillusion/samples/octree
+orillusion/samples/geometry
+orillusion/samples/physics
+orillusion/samples/animation
+orillusion/samples/lights
+orillusion/samples/material
+orillusion/samples/particle
+orillusion/samples/render
+orillusion/samples/sky
+orillusion/samples/geometry
+
+
+assetdirectory/pack/kenney 에서 현재 게임과 어울리는 asset pack들을 선택해서  리소스 사용 계획도 추가 해죠
+
+graphic 뿐 아니라 audio도 계획에 포함
+orillusion/samples/audio
+assetdirectory/audio/kenney_repo/Audio
+
+
+게임 관련 UI 기획도 포함 orillusion/samples/gui
