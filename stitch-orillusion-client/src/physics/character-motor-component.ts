@@ -91,7 +91,7 @@ export class CharacterMotorComponent extends ComponentBase {
     }
   }
 
-  public onUpdate(): void {
+  public onBeforeUpdate(): void {
     const dtRaw = Time.delta * 0.001
     const dtSeconds = Number.isFinite(dtRaw) && dtRaw > 0 ? Math.min(dtRaw, 0.05) : 1 / 60
     const intent = this.readWorldIntentSnapshot()

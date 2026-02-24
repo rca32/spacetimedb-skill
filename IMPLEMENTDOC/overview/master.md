@@ -64,6 +64,7 @@
 - 이동 ghost 재발 완화 로그 (2026-02-22): `IMPLEMENTDOC/logs/implementation/2026-02-22-movement-ghost-recurrence-mitigation-log.md`
 - 렌더 ghost(TAA detach) 완화 계획 (2026-02-22): `IMPLEMENTDOC/plans/client/2026-02-22-render-ghost-taa-detach-plan.md`
 - 렌더 ghost(TAA detach) 완화 로그 (2026-02-22): `IMPLEMENTDOC/logs/client/2026-02-22-render-ghost-taa-detach-log.md`
+- 렌더 ghost(TAA detach) 후속 업데이트 (shadow safety idempotent + runtime define 제거 + 카메라 프레이밍 롤백 + 전역 스캔 비활성 실험, 2026-02-22): `IMPLEMENTDOC/logs/client/2026-02-22-render-ghost-taa-detach-log.md`
 - SpacetimeDB RangeError 대응: `IMPLEMENTDOC/guides/spacetimedb-rangeerror-troubleshooting.md`
 - 월드 생성 설계-구현 갭 분석 및 개발 계획 (2026-02-21): `IMPLEMENTDOC/plans/worldgen/2026-02-21-gap-analysis.md`
 - 월드 생성 P0 상세 실행계획 (2026-02-21): `IMPLEMENTDOC/plans/worldgen/2026-02-21-p0-baseline-freeze-plan.md`

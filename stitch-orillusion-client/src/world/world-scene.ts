@@ -1,5 +1,6 @@
 import {
   AnimatorComponent,
+  BoundingBox,
   Color,
   Engine3D,
   Material,
@@ -10,6 +11,7 @@ import {
   SkinnedMeshRenderer2,
   SphereGeometry,
   UnLitMaterial,
+  Vector3,
 } from '@engine/core'
 
 export interface WorldSceneObjects {
@@ -57,6 +59,7 @@ const LANDMARK_MODEL_PROFILE: SceneModelProfile = {
 const scenePrefabByKey = new Map<string, Object3D>()
 const scenePrefabLoadByKey = new Map<string, Promise<Object3D | null>>()
 const scenePrefabFailedKeys = new Set<string>()
+const PLAYER_STABLE_BOUND_SIZE = new Vector3(8, 8, 8)
 
 export function seedWorldScene(scene: Scene3D): WorldSceneObjects {
   const player = createPlayer(scene)
@@ -248,6 +251,7 @@ function applyPbrShadowSafety(root: Object3D): void {
 function applyAlwaysRender(root: Object3D): void {
   for (const mesh of collectMeshRenderers(root)) {
     mesh.alwaysRender = true
+    mesh.object3D.bound = new BoundingBox(Vector3.ZERO.clone(), PLAYER_STABLE_BOUND_SIZE.clone())
   }
 }
 

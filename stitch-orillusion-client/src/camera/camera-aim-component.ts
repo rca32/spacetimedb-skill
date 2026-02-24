@@ -4,6 +4,8 @@ import { CameraFollowComponent } from './camera-follow-component'
 export class CameraAimComponent extends ComponentBase {
   public normalFov = 70
   public aimFov = 58
+  public nearClip = 0.03
+  public farClip = 3000
   public blendPerSecond = 8
   public lookSensitivity = 0.12
   public zoomStep = 0.7
@@ -122,7 +124,7 @@ export class CameraAimComponent extends ComponentBase {
     document.addEventListener('pointerlockchange', this.onPointerLockChange)
   }
 
-  public onUpdate(): void {
+  public onBeforeUpdate(): void {
     if (!this.camera) {
       return
     }
@@ -130,7 +132,7 @@ export class CameraAimComponent extends ComponentBase {
     const target = this.aiming ? this.aimFov : this.normalFov
     const step = this.blendPerSecond * (1 / 60)
     this.currentFov += (target - this.currentFov) * step
-    this.camera.perspective(this.currentFov, Engine3D.aspect, 0.1, 3000)
+    this.camera.perspective(this.currentFov, Engine3D.aspect, this.nearClip, this.farClip)
   }
 
   public destroy(force?: boolean): void {

@@ -76,7 +76,7 @@ export async function bootstrapEngine(
 
   const cameraObject = new Object3D()
   const camera = cameraObject.addComponent(Camera3D)
-  camera.perspective(70, Engine3D.aspect, 0.1, 3000)
+  camera.perspective(70, Engine3D.aspect, 0.03, 3000)
   scene.addChild(cameraObject)
 
   const view = new View3D()

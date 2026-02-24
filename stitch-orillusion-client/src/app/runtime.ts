@@ -47,8 +47,12 @@ const CAMERA_DEFAULT_HEIGHT_OFFSET = 1.1
 const CAMERA_DEFAULT_LOOK_AT_HEIGHT = 0.15
 const CAMERA_MIN_DISTANCE = 1.6
 const CAMERA_MAX_DISTANCE = 7
+const CAMERA_NEAR_CLIP = 0.03
+const CAMERA_MIN_HEIGHT_FROM_TARGET = 0.35
 const SERVER_RECONCILE_IGNORE_DISTANCE_XZ = 0.03
 const SERVER_RECONCILE_SNAP_DISTANCE_XZ = 0.35
+const JUMP_CORRECTION_SUPPRESS_MS = 220
+const SHADOW_SAFETY_SCAN_INTERVAL_FRAMES = 30
 const LOCAL_MOVING_EPSILON = 0.001
 const NPC_INTERACTION_RADIUS = 6
 const NPC_PANEL_MESSAGE_TTL_MS = 2500
@@ -81,10 +85,13 @@ export class OrillusionClientRuntime {
   private readonly seenCombatHitIds = new Set<string>()
   private readonly seenCorrectionIds = new Set<string>()
   private lastAppliedAuthoritativeFrameNo = 0
+  private readonly shadowSafeRenderers = new WeakSet<AnyRuntimeMeshRenderer>()
+  private readonly shadowSafeMaterials = new WeakSet<Material>()
   private shadowMaterialGuardFrame = 0
   private npcAiEnabled = true
   private panelMessage = ''
   private panelMessageExpiresAtMs = 0
+  private suppressAuthoritativeUntilMs = 0
 
   private buildModeEnabled = false
   private selectedBuildingDefId = DEFAULT_BUILDING_DEF_ID
@@ -217,12 +224,14 @@ export class OrillusionClientRuntime {
 
     const cameraCollision = this.engine.cameraObject.addComponent(CameraCollisionComponent)
     cameraCollision.target = objects.player
+    cameraCollision.minHeightFromTarget = CAMERA_MIN_HEIGHT_FROM_TARGET
     cameraCollision.maxDistance = CAMERA_MAX_DISTANCE + 1
 
     const cameraAim = this.engine.cameraObject.addComponent(CameraAimComponent)
     cameraAim.pointerLockCanvas = this.engine.canvas
     cameraAim.normalFov = 62
     cameraAim.aimFov = 50
+    cameraAim.nearClip = CAMERA_NEAR_CLIP
     cameraAim.minDistance = CAMERA_MIN_DISTANCE
     cameraAim.maxDistance = CAMERA_MAX_DISTANCE
 
@@ -274,7 +283,6 @@ export class OrillusionClientRuntime {
 
   private tick(): void {
     this.frameNo += 1
-    this.enforceSceneShadowSafety()
     this.net.poll(this.logger)
     this.ensureIdentityBootstrap()
     this.syncSelectedBuildingDef()
@@ -302,11 +310,15 @@ export class OrillusionClientRuntime {
     if (!this.engine) {
       return
     }
-    if (this.frameNo - this.shadowMaterialGuardFrame < 5) {
+    if (this.frameNo - this.shadowMaterialGuardFrame < SHADOW_SAFETY_SCAN_INTERVAL_FRAMES) {
       return
     }
     this.shadowMaterialGuardFrame = this.frameNo
-    enforceShadowSafeForScene(this.engine.scene)
+    enforceShadowSafeForScene(
+      this.engine.scene,
+      this.shadowSafeRenderers,
+      this.shadowSafeMaterials,
+    )
   }
 
   private pushNetworkFrame(): void {
@@ -314,17 +326,25 @@ export class OrillusionClientRuntime {
     if (!motor || !this.net.getIdentityHex()) {
       return
     }
+    const now = Date.now()
     const isLocallyMoving = this.isLocallyMoving()
-    let cameraNeedsResync = false
+    const isAirborne = motor.isAirborne()
 
     const position = motor.readPosition()
 
     const intent = motor.readWorldIntentSnapshot()
+    if (intent.jump) {
+      this.suppressAuthoritativeUntilMs = Math.max(
+        this.suppressAuthoritativeUntilMs,
+        now + JUMP_CORRECTION_SUPPRESS_MS,
+      )
+    }
+    const suppressAuthoritative = now < this.suppressAuthoritativeUntilMs
     this.net.dispatchReducer('sync_client_frame', {
       frameNo: BigInt(this.frameNo),
       regionId: this.activeRegionId,
       dimensionId: this.activeDimensionId,
-      clientTimeMs: BigInt(Date.now()),
+      clientTimeMs: BigInt(now),
     })
 
     const motionIntentId = this.makeShortRequestId('mi', this.frameNo)
@@ -348,13 +368,11 @@ export class OrillusionClientRuntime {
       })
     }
 
-    if (!isLocallyMoving) {
-      cameraNeedsResync = this.applyAuthoritativePhysicsIfAvailable() || cameraNeedsResync
+    const blockAuthoritative = isLocallyMoving || suppressAuthoritative || isAirborne
+    if (!blockAuthoritative) {
+      this.applyAuthoritativePhysicsIfAvailable()
     }
-    cameraNeedsResync = this.applyPendingCorrections(isLocallyMoving) || cameraNeedsResync
-    if (cameraNeedsResync) {
-      this.cameraFollow?.syncNow()
-    }
+    this.applyPendingCorrections(blockAuthoritative)
     this.emitCombatFxIfAny()
   }
 
@@ -856,17 +874,17 @@ export class OrillusionClientRuntime {
     }
   }
 
-  private applyAuthoritativePhysicsIfAvailable(): boolean {
+  private applyAuthoritativePhysicsIfAvailable(): void {
     const connection = this.net.getConnection()
     const motor = this.motor
     const identityHex = this.net.getIdentityHex()
     if (!connection?.isActive || !motor || !identityHex) {
-      return false
+      return
     }
 
     const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>).physicsStateV2
     if (!table) {
-      return false
+      return
     }
 
     for (const row of table.iter()) {
@@ -888,27 +906,24 @@ export class OrillusionClientRuntime {
         continue
       }
 
-      const changed = this.applyAuthoritativeXZ(position)
+      this.applyAuthoritativeXZ(position)
       this.lastAppliedAuthoritativeFrameNo = serverFrameNo
-      return changed
+      break
     }
-
-    return false
   }
 
-  private applyPendingCorrections(isLocallyMoving: boolean): boolean {
+  private applyPendingCorrections(isLocallyMoving: boolean): void {
     const connection = this.net.getConnection()
     if (!connection?.isActive) {
-      return false
+      return
     }
 
     const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>)
       .serverCorrectionV2
     if (!table) {
-      return false
+      return
     }
 
-    let changed = false
     for (const row of table.iter()) {
       const correctionId = String(row.correctionId ?? '')
       if (!correctionId || row.acknowledged === true || this.seenCorrectionIds.has(correctionId)) {
@@ -923,7 +938,7 @@ export class OrillusionClientRuntime {
       ]
       if (this.player && Number.isFinite(position[0]) && Number.isFinite(position[1]) && Number.isFinite(position[2])) {
         if (!isLocallyMoving) {
-          changed = this.applyAuthoritativeXZ(position) || changed
+          this.applyAuthoritativeXZ(position)
         }
       }
 
@@ -932,8 +947,6 @@ export class OrillusionClientRuntime {
         ackedClientFrameNo: BigInt(this.frameNo),
       })
     }
-
-    return changed
   }
 
   private syncHud(): void {
@@ -1038,10 +1051,10 @@ export class OrillusionClientRuntime {
     return raw.slice(0, 64)
   }
 
-  private applyAuthoritativeXZ(position: number[]): boolean {
+  private applyAuthoritativeXZ(position: number[]): void {
     const player = this.player
     if (!player || position.length < 3) {
-      return false
+      return
     }
 
     const nextX = Number(position[0] ?? player.x)
@@ -1051,29 +1064,24 @@ export class OrillusionClientRuntime {
     const distanceXZ = Math.hypot(dx, dz)
 
     if (!Number.isFinite(distanceXZ) || distanceXZ <= SERVER_RECONCILE_IGNORE_DISTANCE_XZ) {
-      return false
+      return
     }
 
     if (distanceXZ >= SERVER_RECONCILE_SNAP_DISTANCE_XZ) {
       player.x = nextX
       player.z = nextZ
-      return true
+      return
     }
 
     const alpha = 0.35
     player.x += dx * alpha
     player.z += dz * alpha
-    return true
   }
 
   private isLocallyMoving(): boolean {
-    const motor = this.motor
-    const intent = motor?.readIntentSnapshot()
-    if (!intent || !motor) {
+    const intent = this.motor?.readIntentSnapshot()
+    if (!intent) {
       return false
-    }
-    if (intent.jump || motor.isAirborne()) {
-      return true
     }
     return Math.abs(intent.inputX) > LOCAL_MOVING_EPSILON || Math.abs(intent.inputZ) > LOCAL_MOVING_EPSILON
   }
@@ -1081,7 +1089,11 @@ export class OrillusionClientRuntime {
 
 type AnyRuntimeMeshRenderer = MeshRenderer | SkinnedMeshRenderer | SkinnedMeshRenderer2
 
-function enforceShadowSafeForScene(scene: Scene3D): void {
+function enforceShadowSafeForScene(
+  scene: Scene3D,
+  rendererGuard: WeakSet<AnyRuntimeMeshRenderer>,
+  materialGuard: WeakSet<Material>,
+): void {
   const root = scene as unknown as Object3D
   const visited = new Set<AnyRuntimeMeshRenderer>()
   const renderers: AnyRuntimeMeshRenderer[] = []
@@ -1106,14 +1118,21 @@ function enforceShadowSafeForScene(scene: Scene3D): void {
   }
 
   for (const renderer of renderers) {
-    renderer.castShadow = false
-    renderer.castGI = false
-    renderer.receiveShadow = false
+    if (!rendererGuard.has(renderer)) {
+      renderer.castShadow = false
+      renderer.castGI = false
+      renderer.receiveShadow = false
+      rendererGuard.add(renderer)
+    }
     try {
       const mats = renderer.materials
       if (Array.isArray(mats)) {
         for (const mat of mats) {
+          if (materialGuard.has(mat)) {
+            continue
+          }
           applyShadowSafeMaterial(mat)
+          materialGuard.add(mat)
         }
       }
     } catch {
@@ -1125,11 +1144,7 @@ function enforceShadowSafeForScene(scene: Scene3D): void {
 function applyShadowSafeMaterial(material: Material): void {
   material.acceptShadow = false
   material.castShadow = false
-  try {
-    material.setDefine('USE_SHADOWMAPING', false)
-  } catch {
-    // Some materials do not expose this define.
-  }
+  // Runtime safety pass avoids define mutation to prevent shader-variant churn flicker.
 }
 
 function createHud(root: HTMLElement): HTMLDivElement {
