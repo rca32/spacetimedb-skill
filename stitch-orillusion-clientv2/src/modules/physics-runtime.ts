@@ -1,6 +1,7 @@
 import type { RuntimeContext, DomainRuntime } from '../core/types'
+import type { PhysicsStepPayload, WorldEntityPayload } from '../core/runtime-events'
 
-export interface PhysicsState {
+interface PhysicsState {
   posX: number
   posY: number
   posZ: number
@@ -9,18 +10,19 @@ export interface PhysicsState {
   velZ: number
 }
 
-interface BodyDesc {
-  bodyType?: 'box' | 'sphere' | 'capsule' | 'heightfield'
-  position?: Partial<PhysicsState>
-  velocity?: Partial<PhysicsState>
-}
-
 interface Body {
   id: number
   desc: BodyDesc
   state: PhysicsState
-  awake: boolean
+  grounded: boolean
   bodyType: string
+  awake: boolean
+}
+
+interface BodyDesc {
+  bodyType?: 'box' | 'sphere' | 'capsule' | 'heightfield'
+  position?: Partial<PhysicsState>
+  velocity?: Partial<PhysicsState>
 }
 
 interface ConstraintDesc {
@@ -30,95 +32,203 @@ interface ConstraintDesc {
 export class PhysicsRuntime implements DomainRuntime {
   name = 'PhysicsRuntime'
   private state: PhysicsState = { posX: 0, posY: 0, posZ: 0, velX: 0, velY: 0, velZ: 0 }
-  private grounded = true
   private bodies = new Map<number, Body>()
   private constraints = new Map<number, ConstraintDesc>()
   private nextBodyId = 1
   private nextConstraintId = 1
+  private subscriptions: Array<() => void> = []
+  private frameNo = 0
+  private scenarioMode: 'idle' | 'combat' | 'cinematic' = 'idle'
+  private grounded = true
 
   async init(ctx: RuntimeContext): Promise<void> {
     this.reset()
     this.createBody({ bodyType: 'box', position: { posX: 0, posY: 0, posZ: 0 } })
-    ctx.logger.info('[physics] initialized')
+
+    this.subscriptions.push(
+      ctx.bus.on('WORLD_SPAWN_ENTITY', (event) => {
+        const typed = this.asWorldEntity(event.payload)
+        if (!typed) {
+          return
+        }
+
+        const entityId = Math.floor(typed.entityId)
+        if (!Number.isFinite(entityId) || entityId <= 0) {
+          return
+        }
+
+        const body = this.ensureBody(entityId, {
+          bodyType: this.normalizeBodyType(typed.entityType),
+          position: {
+            posX: typed.position.x,
+            posY: typed.position.y,
+            posZ: typed.position.z,
+          },
+          velocity: typed.velocity
+            ? {
+                velX: typed.velocity.x,
+                velY: typed.velocity.y,
+                velZ: typed.velocity.z,
+              }
+            : undefined,
+        })
+        if (typed.position) {
+          body.state.posX = typed.position.x
+          body.state.posY = typed.position.y
+          body.state.posZ = typed.position.z
+        }
+        if (typed.velocity) {
+          body.state.velX = typed.velocity.x
+          body.state.velY = typed.velocity.y
+          body.state.velZ = typed.velocity.z
+        }
+        body.awake = true
+      }),
+    )
+
+    this.subscriptions.push(
+      ctx.bus.on('WORLD_DESPAWN_ENTITY', (event) => {
+        const payload = event.payload as { entityId?: unknown }
+        const entityId = Number(payload?.entityId)
+        if (!Number.isFinite(entityId) || entityId <= 0) {
+          return
+        }
+        this.removeBody(entityId)
+      }),
+    )
+
+    this.subscriptions.push(
+      ctx.bus.on('INPUT_FRAME', (event) => {
+        const payload = event.payload as { move?: { x?: unknown; z?: unknown } } | undefined
+        const player = this.getBody(1)
+        if (!player || !payload?.move) {
+          return
+        }
+        player.state.velX = Number(payload.move.x ?? 0)
+        player.state.velZ = Number(payload.move.z ?? 0)
+        player.awake = true
+      }),
+    )
+
+    this.subscriptions.push(
+      ctx.bus.on('SCENARIO_MARK', (event) => {
+        const payload = event.payload as { mode?: 'combat' | 'cinematic' | 'idle' } | undefined
+        this.scenarioMode = payload?.mode ?? this.scenarioMode
+      }),
+    )
+
+    this.subscriptions.push(
+      ctx.bus.on('WORLD_STATE_APPLIED', (event) => {
+        const payload = event.payload as { timeOfDaySec?: unknown }
+        if (Number.isFinite(Number(payload?.timeOfDaySec)) && Number(payload?.timeOfDaySec) > 43200) {
+          this.applyImpulse(1, 1)
+        }
+      }),
+    )
+
+    ctx.bus.emit({
+      ts: Date.now(),
+      level: 'debug',
+      event_code: 'WORLD_TICK',
+      payload: {
+        event: 'physics_boot',
+        body_count: this.bodies.size,
+      },
+    })
   }
 
-  update(dtMs: number, _ctx: RuntimeContext): void {
-    const dtSec = dtMs / 1000
+  update(dtMs: number, ctx: RuntimeContext): void {
+    const dtSec = this.toSafeDt(dtMs) / 1000
+    this.frameNo += 1
     const gravity = 9.81
 
-    if (!this.grounded) {
-      this.state.velY -= gravity * dtSec
-      this.state.posY += this.state.velY * dtSec
-      if (this.state.posY <= 0) {
-        this.state.posY = 0
-        this.state.velY = 0
-        this.grounded = true
-        _ctx?.bus?.emit({
-          ts: Date.now(),
-          level: 'info',
-          event_code: 'PHYS_SLEEP',
-          payload: { event: 'ground_contact', body_count: this.bodies.size },
-        })
+    for (const body of this.bodies.values()) {
+      if (!body.awake) {
+        continue
       }
-    }
 
-    if (this.state.velX !== 0 || this.state.velZ !== 0) {
-      this.state.posX += this.state.velX * dtSec
-      this.state.posZ += this.state.velZ * dtSec
-    }
+      if (!body.grounded) {
+        body.state.velY -= gravity * dtSec
+      }
 
-    if (!this.grounded && !isFinite(this.state.posY + this.state.velY)) {
-      _ctx?.bus.emit({
+      body.state.posX += body.state.velX * dtSec
+      body.state.posY += body.state.velY * dtSec
+      body.state.posZ += body.state.velZ * dtSec
+
+      if (body.state.posY <= 0) {
+        body.state.posY = 0
+        body.state.velY = 0
+        if (!body.grounded) {
+          body.grounded = true
+          ctx.bus.emit({
+            ts: Date.now(),
+            level: 'debug',
+            event_code: 'PHYSICS_COLLISION_ENTER',
+            payload: {
+              bodyId: body.id,
+              event: 'ground_contact',
+              normal: { x: 0, y: 1, z: 0 },
+            },
+          })
+        }
+      }
+
+      body.awake =
+        Math.abs(body.state.velX) > 0.001 || Math.abs(body.state.velY) > 0.001 || Math.abs(body.state.velZ) > 0.001
+
+      if (body.id === 1) {
+        this.state = body.state
+      }
+
+      ctx.bus.emit({
         ts: Date.now(),
-        level: 'error',
-        event_code: 'ASSERT_FAIL',
-        payload: { event: 'physics_nans', bodyCount: this.bodies.size },
+        level: 'debug',
+        event_code: 'PHYSICS_STEP',
+        payload: {
+          frameNo: this.frameNo,
+          bodyId: body.id,
+          position: {
+            x: body.state.posX,
+            y: body.state.posY,
+            z: body.state.posZ,
+          },
+          velocity: {
+            x: body.state.velX,
+            y: body.state.velY,
+            z: body.state.velZ,
+          },
+          grounded: body.grounded,
+        } satisfies PhysicsStepPayload,
       })
-      this.state.velX = 0
-      this.state.velY = 0
-      this.state.velZ = 0
-      this.state.posY = 0
+    }
+
+    if (dtSec > 1) {
+      this.grounded = false
     }
   }
 
-  createBody(desc: BodyDesc = {}): number {
-    const id = this.nextBodyId
-    this.nextBodyId += 1
-    const state: PhysicsState = {
-      posX: desc.position?.posX ?? 0,
-      posY: desc.position?.posY ?? 0,
-      posZ: desc.position?.posZ ?? 0,
-      velX: desc.velocity?.velX ?? 0,
-      velY: desc.velocity?.velY ?? 0,
-      velZ: desc.velocity?.velZ ?? 0,
-    }
-    this.bodies.set(id, {
-      id,
-      desc,
-      state,
-      awake: true,
-      bodyType: desc.bodyType ?? 'box',
-    })
-    return id
+  createBody(desc: BodyDesc = {}, bodyId = this.nextBodyId): number {
+    const body = this.createBodyWithId(bodyId, desc)
+    return body.id
   }
 
   removeBody(bodyId: number): void {
+    if (bodyId === 1) {
+      return
+    }
     this.bodies.delete(bodyId)
   }
 
-  applyImpulse(bodyId: number, impulse: number, point?: { x: number; y: number; z: number }): void {
+  applyImpulse(bodyId: number, impulse: number, point?: { x?: number; z?: number }): void {
     const targetBody = this.bodies.get(bodyId)
     if (!targetBody) {
       return
     }
-    targetBody.state.velY += impulse
+    targetBody.state.velY += Number(impulse)
+    targetBody.state.velX += Number(point?.x ?? 0)
+    targetBody.state.velZ += Number(point?.z ?? 0)
+    targetBody.grounded = false
     targetBody.awake = true
-    this.grounded = false
-
-    if (point) {
-      targetBody.state.velX += point.x
-      targetBody.state.velZ += point.z
-    }
   }
 
   setKinematicTarget(bodyId: number, transform: Partial<PhysicsState>): void {
@@ -134,6 +244,7 @@ export class PhysicsRuntime implements DomainRuntime {
       velY: transform.velY ?? targetBody.state.velY,
       velZ: transform.velZ ?? targetBody.state.velZ,
     }
+    targetBody.awake = true
   }
 
   createConstraint(type: ConstraintDesc['type'], _a: number, _b: number, _params?: Record<string, unknown>): number {
@@ -161,11 +272,13 @@ export class PhysicsRuntime implements DomainRuntime {
     return this.createConstraint('Fixed', 0, 0)
   }
 
-  triggerCollision(bodyId: number, _event: string): void {
-    if (!this.bodies.has(bodyId)) {
+  triggerCollision(bodyId: number, event: string): void {
+    const body = this.bodies.get(bodyId)
+    if (!body) {
       return
     }
-    this.grounded = false
+    body.awake = true
+    body.state.velY = event ? 0 : 0
   }
 
   snapshot(): PhysicsState {
@@ -173,7 +286,102 @@ export class PhysicsRuntime implements DomainRuntime {
   }
 
   async dispose(): Promise<void> {
+    this.subscriptions.forEach((unsubscribe) => unsubscribe())
+    this.subscriptions = []
     this.reset()
+  }
+
+  private getBody(bodyId: number): Body | undefined {
+    return this.bodies.get(bodyId)
+  }
+
+  private toSafeDt(dtMs: number): number {
+    return Number.isFinite(dtMs) && dtMs > 0 ? dtMs : 16
+  }
+
+  private ensureBody(entityId: number, desc: BodyDesc): Body {
+    if (!this.bodies.has(entityId)) {
+      return this.createBodyWithId(entityId, desc)
+    }
+    const existing = this.bodies.get(entityId) as Body
+    if (desc.position) {
+      existing.state = {
+        ...existing.state,
+        ...desc.position,
+      }
+    }
+    if (desc.velocity) {
+      existing.state.velX = desc.velocity.velX ?? existing.state.velX
+      existing.state.velY = desc.velocity.velY ?? existing.state.velY
+      existing.state.velZ = desc.velocity.velZ ?? existing.state.velZ
+    }
+    existing.desc = desc
+    return existing
+  }
+
+  private createBodyWithId(bodyId: number, desc: BodyDesc): Body {
+    const state: PhysicsState = {
+      posX: desc.position?.posX ?? 0,
+      posY: desc.position?.posY ?? 0,
+      posZ: desc.position?.posZ ?? 0,
+      velX: desc.velocity?.velX ?? 0,
+      velY: desc.velocity?.velY ?? 0,
+      velZ: desc.velocity?.velZ ?? 0,
+    }
+    if (bodyId >= this.nextBodyId) {
+      this.nextBodyId = bodyId + 1
+    }
+
+    const body: Body = {
+      id: bodyId,
+      desc,
+      state,
+      grounded: state.posY <= 0,
+      bodyType: desc.bodyType ?? 'box',
+      awake: true,
+    }
+    this.bodies.set(bodyId, body)
+    return body
+  }
+
+  private normalizeBodyType(entityType?: string | undefined): BodyDesc['bodyType'] {
+    if (entityType === 'sphere' || entityType === 'capsule' || entityType === 'heightfield' || entityType === 'box') {
+      return entityType
+    }
+    return 'box'
+  }
+
+  private asWorldEntity(payload: unknown): {
+    entityId: number
+    entityType?: WorldEntityPayload['entityType']
+    position: { x: number; y: number; z: number }
+    velocity?: { x: number; y: number; z: number }
+  } | null {
+    if (!payload || typeof payload !== 'object') {
+      return null
+    }
+
+    const candidate = payload as Partial<WorldEntityPayload>
+    if (typeof candidate.entityId !== 'number' || !candidate.position || typeof candidate.position !== 'object') {
+      return null
+    }
+
+    return {
+      entityId: candidate.entityId,
+      entityType: candidate.entityType,
+      position: {
+        x: Number((candidate.position as { x?: unknown }).x ?? 0),
+        y: Number((candidate.position as { y?: unknown }).y ?? 0),
+        z: Number((candidate.position as { z?: unknown }).z ?? 0),
+      },
+      velocity: candidate.velocity
+        ? {
+            x: Number((candidate.velocity as { x?: unknown }).x ?? 0),
+            y: Number((candidate.velocity as { y?: unknown }).y ?? 0),
+            z: Number((candidate.velocity as { z?: unknown }).z ?? 0),
+          }
+        : undefined,
+    }
   }
 
   private reset(): void {
@@ -181,5 +389,8 @@ export class PhysicsRuntime implements DomainRuntime {
     this.grounded = true
     this.bodies.clear()
     this.constraints.clear()
+    this.nextBodyId = 1
+    this.nextConstraintId = 1
+    this.frameNo = 0
   }
 }

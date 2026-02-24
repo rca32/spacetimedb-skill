@@ -64,7 +64,7 @@ const PROFILE_PACKS = {
     },
     {
       key: 'ui-common',
-      source: resolve(sourceRoot, 'assetdirectory/pack/kenney/UI'),
+      source: resolve(sourceRoot, 'assetdirectory/audio/normalized/sfx/ui_sounds_50_sounds'),
       target: resolve(publicRoot, 'ui/kenney/ui-common'),
       category: 'ui',
       licenseId: 'kenney-ui-license',
