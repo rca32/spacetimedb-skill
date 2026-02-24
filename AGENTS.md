@@ -1,15 +1,15 @@
 # AGENTS 가이드
 
 ## 빠른 앵커
-- [IMPLEMENTDOC 운영 원칙 (서버/클라이언트 공통)](#implementdoc-운영-원칙-서버클라이언트-공통)
-- [IMPLEMENTDOC 핵심 링크](#implementdoc-핵심-링크)
+<!--- [IMPLEMENTDOC 운영 원칙 (서버/클라이언트 공통)](#implementdoc-운영-원칙-서버클라이언트-공통)
+- [IMPLEMENTDOC 핵심 링크](#implementdoc-핵심-링크)-->
 - [BitCraftPublicDoc ↔ BitCraftPublic/BitCraftServer 관계 (참고 수준)](#bitcraftpublicdoc--bitcraftpublicbitcraftserver-관계-참고-수준)
 - [DESIGN 문서](#design-문서)
 - [SpacetimeDB 작업 규칙](#spacetimedb-작업-규칙)
 - [WSL 브라우저 자동화 규칙](#wsl-브라우저-자동화-규칙)
 - [assetdirectory 안내](#assetdirectory-안내)
 
-## IMPLEMENTDOC 운영 원칙 (서버/클라이언트 공통)
+<!--## IMPLEMENTDOC 운영 원칙 (서버/클라이언트 공통)
 - 서버/클라이언트 개발 모두 **IMPLEMENTDOC를 기준 문서 저장소**로 사용한다.
 - 기능 개발 전에는 관련 문서를 먼저 확인한다.
   - 아키텍처/정책: `IMPLEMENTDOC/architecture/`
@@ -31,7 +31,7 @@
 - 마스터 인덱스: `IMPLEMENTDOC/overview/master.md`
 - 서버 운영 가이드: `IMPLEMENTDOC/guides/stitch-server-operations-guide.md`
 - 클라이언트 개발 가이드: `IMPLEMENTDOC/guides/stitch-orillusion-client-development-guide.md`
-- SpacetimeDB RangeError 대응: `IMPLEMENTDOC/guides/spacetimedb-rangeerror-troubleshooting.md`
+- SpacetimeDB RangeError 대응: `IMPLEMENTDOC/guides/spacetimedb-rangeerror-troubleshooting.md`-->
 
 ## BitCraftPublicDoc ↔ BitCraftPublic/BitCraftServer 관계 (참고 수준)
 - 현재 프로젝트는 **그린필드 설계**이며, BitCraft 관련 자료는 **참고/영감 용도**로만 사용한다.
