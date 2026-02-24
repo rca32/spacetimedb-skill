@@ -10,12 +10,15 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:lane-a": "node scripts/run-suite-lane-a.mjs",
+    "test:lane-a-core": "node scripts/run-suite-lane-a.mjs --suite core"
   },
   "dependencies": {
     "spacetimedb": "1.11.3"
   },
   "devDependencies": {
+    "playwright": "1.53.2",
     "typescript": "^5.7.2",
     "vite": "^6.1.0"
   }

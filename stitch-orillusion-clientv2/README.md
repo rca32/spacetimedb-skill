@@ -19,6 +19,14 @@ bun run typecheck
 bun run asset-copy verify --strict
 ```
 
+Lane A 자동 실행(브라우저 harness):
+
+```bash
+bun run test:lane-a          # S01~S05 전체 runSuite + artifact 저장
+bun run test:lane-a --suite core # S01~S03만 실행
+bun run test:lane-a -- --headed # 브라우저 창 표시
+```
+
 ## 핵심 엔트리
 
 - `CoreApp.boot` / `CoreApp.shutdown`
