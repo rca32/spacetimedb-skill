@@ -25,7 +25,9 @@ type DespawnReason = 'aoi_exit' | 'world_despawn' | 'dimension_change' | 'discon
 
 interface EntityPatch {
   id: bigint
+  parentId?: bigint
   position: { x: number; y: number; z: number }
+  localOffset?: { x: number; y: number; z: number }
   quaternion?: { x: number; y: number; z: number; w: number }
   velocity?: { x: number; y: number; z: number }
   entityType?: EntityType
@@ -53,6 +55,7 @@ export class WorldRuntime implements DomainRuntime {
   private bus: RuntimeContext['bus'] | null = null
   private readonly poolableTypes = new Set<EntityType>(['projectile', 'effect', 'ui_anchor'])
   private readonly dormantTtlMs = 30_000
+  private readonly parentFixtureId = 2n
 
   async init(ctx: RuntimeContext): Promise<void> {
     this.reset()
@@ -157,6 +160,7 @@ export class WorldRuntime implements DomainRuntime {
     )
 
     this.spawnEntity(this.playerId, { x: 0, y: 0, z: 0 }, 'player', undefined, { emitWorldEvent: false })
+    this.spawnEntity(this.parentFixtureId, { x: 2, y: 0, z: 0 }, 'npc', undefined, { emitWorldEvent: true })
     ctx.bus.emit({
       ts: Date.now(),
       level: 'info',
@@ -219,6 +223,14 @@ export class WorldRuntime implements DomainRuntime {
         velocity: player.velocity,
       })
     }
+
+    if (this.frameNo === 180) {
+      this.setEntityParent(this.parentFixtureId, this.playerId, true)
+    }
+    if (this.frameNo === 480) {
+      this.setEntityParent(this.parentFixtureId, undefined, false)
+    }
+    this.applyParentTransforms()
 
     const snapshot = this.readSnapshot()
     const nextProfile = snapshot.profileId
@@ -339,6 +351,7 @@ export class WorldRuntime implements DomainRuntime {
       const entity: EntityPatch = {
         id: normalizedId,
         position: { ...snapshot },
+        localOffset: { x: 0, y: 0, z: 0 },
         velocity: { x: 0, y: 0, z: 0 },
         quaternion: undefined,
         entityType: normalizedType,
@@ -666,6 +679,8 @@ export class WorldRuntime implements DomainRuntime {
     entityId: number
     entityType?: EntityPatch['entityType']
     position: { x: number; y: number; z: number }
+    parentId?: bigint
+    localOffset?: { x: number; y: number; z: number }
     reason?: DespawnReason
     velocity?: { x: number; y: number; z: number }
   }): void {
@@ -679,9 +694,11 @@ export class WorldRuntime implements DomainRuntime {
       payload: {
         entityId: entity.entityId,
         entityType: this.normalizeWorldEntityType(entity.entityType),
+        parentId: entity.parentId ? Number(entity.parentId) : undefined,
         position: entity.position,
         reason: entity.reason,
         velocity: entity.velocity,
+        localPosition: entity.localOffset,
       } satisfies WorldEntityPayload,
     })
   }
@@ -699,6 +716,111 @@ export class WorldRuntime implements DomainRuntime {
         reason: payload?.reason,
       } as unknown as WorldEntityPayload,
     })
+  }
+
+  private setEntityParent(entityId: bigint, parentId?: bigint, keepWorldTransform = true): void {
+    const child = this.entities.get(entityId)
+    if (!child) {
+      return
+    }
+    if (!parentId) {
+      child.parentId = undefined
+      child.localOffset = { x: 0, y: 0, z: 0 }
+      this.entities.set(entityId, child)
+      this.emitEntitySnapshot({
+        event: 'ENTITY_UPDATE',
+        entityId: Number(entityId),
+        entityType: child.entityType,
+        state: child.lifecycle,
+        reason: 'parent_change',
+        profile: child.profile,
+        position: child.position,
+        velocity: child.velocity,
+        parentId: undefined,
+        localPosition: child.localOffset,
+      })
+      return
+    }
+
+    const parent = this.entities.get(parentId)
+    if (!parent) {
+      return
+    }
+    if (child.parentId === parentId) {
+      return
+    }
+    const localOffset = keepWorldTransform
+      ? {
+          x: child.position.x - parent.position.x,
+          y: child.position.y - parent.position.y,
+          z: child.position.z - parent.position.z,
+        }
+      : { x: 0, y: 0, z: 0 }
+
+    child.parentId = parentId
+    child.localOffset = localOffset
+    child.position = {
+      x: parent.position.x + localOffset.x,
+      y: parent.position.y + localOffset.y,
+      z: parent.position.z + localOffset.z,
+    }
+    this.entities.set(entityId, child)
+    this.emitEntitySnapshot({
+      event: 'ENTITY_UPDATE',
+      entityId: Number(entityId),
+      entityType: child.entityType,
+      state: child.lifecycle,
+      reason: 'parent_change',
+      profile: child.profile,
+      position: child.position,
+      velocity: child.velocity,
+      parentId: Number(parentId),
+      localPosition: localOffset,
+    })
+  }
+
+  private applyParentTransforms(): void {
+    for (const [id, entity] of this.entities) {
+      if (!entity.parentId) {
+        continue
+      }
+      const parent = this.entities.get(entity.parentId)
+      if (!parent) {
+        entity.parentId = undefined
+        entity.localOffset = { x: 0, y: 0, z: 0 }
+        this.entities.set(id, entity)
+        continue
+      }
+      const localOffset = entity.localOffset ?? { x: 0, y: 0, z: 0 }
+      const expected = {
+        x: parent.position.x + localOffset.x,
+        y: parent.position.y + localOffset.y,
+        z: parent.position.z + localOffset.z,
+      }
+      if (
+        expected.x === entity.position.x &&
+        expected.y === entity.position.y &&
+        expected.z === entity.position.z
+      ) {
+        continue
+      }
+      entity.position = expected
+      entity.lastUpdatedAt = Date.now()
+      entity.lastFrameNo = this.frameNo
+      this.entities.set(id, entity)
+      this.emitEntitySnapshot({
+        event: 'ENTITY_UPDATE',
+        entityId: Number(id),
+        entityType: entity.entityType,
+        state: entity.lifecycle,
+        reason: 'parent_update',
+        profile: entity.profile,
+        position: expected,
+        velocity: entity.velocity,
+        parentId: Number(entity.parentId),
+        localPosition: localOffset,
+      })
+    }
   }
 
   private evictDormantEntities(): void {
@@ -877,6 +999,7 @@ export class WorldRuntime implements DomainRuntime {
     return {
       entityId: candidate.entityId,
       entityType: this.normalizeWorldEntityType(candidate.entityType),
+      parentId: typeof candidate.parentId === 'number' ? candidate.parentId : undefined,
       position: {
         x: Number((candidate.position as { x?: number }).x ?? 0),
         y: Number((candidate.position as { y?: number }).y ?? 0),
@@ -884,6 +1007,9 @@ export class WorldRuntime implements DomainRuntime {
       },
       quaternion: candidate.quaternion,
       velocity: candidate.velocity,
+      localPosition: candidate.localPosition as
+        | { x: number; y: number; z: number }
+        | undefined,
       reason: candidate.reason as string | undefined,
     }
   }

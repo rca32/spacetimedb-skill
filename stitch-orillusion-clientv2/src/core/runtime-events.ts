@@ -25,8 +25,6 @@ export type BusEventCode =
   | 'PHYSICS_COLLISION_ENTER'
   | 'PHYSICS_COLLISION_EXIT'
   | 'PHYS_COLLISION'
-  | 'PHYS_COLLISION_ENTER'
-  | 'PHYS_COLLISION_EXIT'
   | 'PHYS_TRIGGER'
   | 'PHYS_SLEEP'
   | 'PHYS_WAKE'
@@ -94,7 +92,9 @@ export interface ContractReducerCallPayload extends EventPayloadRecord {
 export interface WorldEntityPayload extends EventPayloadRecord {
   entityId: number
   entityType?: 'player' | 'npc' | 'building' | 'resource' | 'projectile' | 'effect'
+  parentId?: number
   position: { x: number; y: number; z: number }
+  localPosition?: { x: number; y: number; z: number }
   quaternion?: { x: number; y: number; z: number; w: number }
   velocity?: { x: number; y: number; z: number }
   reason?: string
@@ -104,8 +104,10 @@ export interface EntitySnapshotPayload extends EventPayloadRecord {
   event?: 'ENTITY_SPAWN_BEGIN' | 'ENTITY_SPAWN_DONE' | 'ENTITY_UPDATE' | 'ENTITY_DESPAWN' | 'ENTITY_POOL_RETURN'
   entityId: number
   entityType?: 'player' | 'npc' | 'building' | 'resource' | 'projectile' | 'effect' | 'ui_anchor'
+  parentId?: number
+  localPosition?: { x: number; y: number; z: number }
   state?: 'Discovered' | 'Spawning' | 'Active' | 'Dormant' | 'Despawning' | 'Disposed'
-  reason?: 'aoi_exit' | 'world_despawn' | 'dimension_change' | 'disconnect'
+  reason?: 'aoi_exit' | 'world_despawn' | 'dimension_change' | 'disconnect' | 'parent_change' | 'parent_update'
   profile?: 'low' | 'medium' | 'high' | 'ultra'
   position?: { x: number; y: number; z: number }
   quaternion?: { x: number; y: number; z: number; w: number }
