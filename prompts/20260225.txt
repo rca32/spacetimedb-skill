@@ -24,3 +24,16 @@ assetdirectory/audio/kenney_repo/Audio
 
 
 게임 관련 UI 기획도 포함 orillusion/samples/gui
+
+
+
+IMPLEMENTDOC/plans/client/2026-02-24-stitch-orillusion-clientv2-feature-catalog-plan.md
+에서는 단계별 P0~P2 (선택 기능),신규 제안 계약 이렇게 단계별로 되어 있지만
+clientv2를 clientv1의 계승이나 호환성을 무시한 완전히 새로분 개발이라 생각하고 빅뱅 방식으로 함꺼번에 만들고
+싶어 그래서 2026-02-24-stitch-orillusion-clientv2-feature-catalog-plan.md 기반으로 CLIENTV2DESIGN 밑에
+상세한 개발용 문서를 만들어야 겠다. 먼저 필요한 문서 목록부터 기획 해보자
+
+
+stitch-orillusion-client 의 구조는 완전히 무시해도 되지만 stitch-orillusion-client/engines/orillusion-src 처럼
+orillusion 소스를 직접 내장해서 쓰는건 유지 하고 ,assetdirectory 에 에셋은 링크대신 copy해서 쓰는걸 전제로 하자.
+서버 모듈도 추가나 변경이 자유롭게 해도되고, migratin이나 호환성은 완전히 무시 해도되.
