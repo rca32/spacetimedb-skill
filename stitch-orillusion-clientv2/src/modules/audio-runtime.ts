@@ -10,6 +10,7 @@ interface AudioHandle {
   key: string
   startedAt: number
   loop: boolean
+  bus: string
 }
 
 export class AudioRuntime implements DomainRuntime {
@@ -25,15 +26,75 @@ export class AudioRuntime implements DomainRuntime {
   ])
   private active: AudioHandle[] = []
   private uiRateWindow = new Map<string, number>()
+  private subscriptions: Array<() => void> = []
+  private listenerBind: string | null = null
 
-  async init(_ctx: RuntimeContext): Promise<void> {
+  async init(ctx: RuntimeContext): Promise<void> {
     this.muted = false
     this.active = []
+    this.listenerBind = 'player-camera'
+
+    this.subscriptions.push(
+      ctx.bus.on('FX_EMIT', (event) => {
+        const payload = event.payload as { eventType?: string; source?: string; intensity?: number } | undefined
+        const cues = this.mapFxToAudio(payload)
+        cues.forEach((cue) => {
+          this.play2D(cue, { bus: 'sfx', gain: Number(payload?.intensity ?? 1) * 0.65 })
+        })
+      }),
+    )
+
+    this.subscriptions.push(
+      ctx.bus.on('WORLD_STATE_APPLIED', (event) => {
+        const payload = event.payload as { weather?: string }
+        if (payload?.weather === 'rain' || payload?.weather === 'storm') {
+          this.play2D('ambient_wind_forest_01', {
+            bus: 'ambient',
+            sample: 'loop',
+            loop: true,
+            gain: 0.15,
+          })
+        }
+      }),
+    )
+
+    this.subscriptions.push(
+      ctx.bus.on('AUDIO_PLAY', (event) => {
+        const payload = event.payload as { key?: string; bus?: string; gain?: number } | undefined
+        if (!payload?.key || !payload?.bus) {
+          return
+        }
+        this.play2D(payload.key, { bus: payload.bus, gain: payload.gain })
+      }),
+    )
+
+    this.subscriptions.push(
+      ctx.bus.on('WORLD_STATE_APPLIED', (event) => {
+        if (event.payload?.weather === 'rain') {
+          this.setBusVolume('ambient', 0.8)
+        } else {
+          this.setBusVolume('ambient', 0.4)
+        }
+      }),
+    )
   }
 
-  update(_dtMs: number, _ctx: RuntimeContext): void {
+  update(_dtMs: number, ctx: RuntimeContext): void {
     const limit = Date.now() - 2000
     this.active = this.active.filter((handle) => handle.startedAt > limit)
+
+    if (this.listenerBind) {
+      ctx.bus.emit({
+        ts: Date.now(),
+        level: 'debug',
+        event_code: 'AUDIO_PLAY',
+        payload: {
+          event: 'listener_bound',
+          listener: this.listenerBind,
+          active: this.active.length,
+        },
+      })
+    }
   }
 
   play2D(
@@ -46,11 +107,12 @@ export class AudioRuntime implements DomainRuntime {
 
     const busId = options.bus ?? 'sfx'
     const state = this.bus.get(busId) ?? { volume: 1, muted: false }
-    if (state.muted || this.getBusVolume(busId) <= 0.001) {
+    const gain = Number(options.gain ?? 1)
+    if (state.muted || this.getBusVolume(busId) <= 0.001 || gain <= 0) {
       return null
     }
 
-    if (busId.startsWith('ui') && key.startsWith('ui_')) {
+    if (busId === 'ui' && options.sample === 'ui') {
       const now = Date.now()
       const last = this.uiRateWindow.get('ui') ?? 0
       if (now - last < 120) {
@@ -64,6 +126,7 @@ export class AudioRuntime implements DomainRuntime {
       key,
       startedAt: Date.now(),
       loop: options.loop ?? false,
+      bus: busId,
     }
     this.active.push(handle)
     return handle
@@ -74,11 +137,10 @@ export class AudioRuntime implements DomainRuntime {
     worldPos: { x: number; y: number; z: number },
     options: { sample?: string; gain?: number; bus?: string; loop?: boolean; radius?: number } = {},
   ): AudioHandle | null {
-    // no true spatialization in deterministic skeleton, but keep API for design parity
     if (worldPos.x ** 2 + worldPos.y ** 2 + worldPos.z ** 2 > 45 * 45) {
       return null
     }
-    return this.play2D(key, { ...options, sample: '3d' })
+    return this.play2D(key, { ...options, sample: options.sample ?? '3d' })
   }
 
   stop(handle: AudioHandle): void {
@@ -96,28 +158,39 @@ export class AudioRuntime implements DomainRuntime {
     this.bus.set(busId, { ...state, muted })
   }
 
-  bindListenerTo(_entityIdOrCameraId: string): void {
-    // placeholder: in skeleton mode there is one global listener
+  bindListenerTo(entityIdOrCameraId: string): void {
+    this.listenerBind = entityIdOrCameraId
   }
 
   mapGameEventToAudio(eventCode: string, payload: Record<string, unknown>): string[] {
-    if (eventCode === 'combat.hit') {
+    if (eventCode === 'combat.hit' || eventCode === 'combat.crit') {
       return ['rpg_hit_blunt_01']
     }
-    if (eventCode === 'skill.cast') {
+    if (eventCode === 'skill.cast' || eventCode === 'skill.impact') {
       return ['fx_skill_cast_01']
     }
-    if (eventCode === 'ui.click' || payload?.kind === 'ui_click') {
+    if (eventCode === 'ui.alert' || eventCode === 'ui_click') {
       return ['ui_click_primary']
     }
-    if (payload && payload.ui === true) {
-      return ['ui_fallback_click']
+    if (payload?.weather === 'storm' || payload?.weather === 'rain') {
+      return ['ambient_wind_forest_01']
     }
-    return ['ambient_wind_forest_01']
+    return ['ui_fallback_click']
   }
 
   setMuted(flag: boolean): void {
     this.muted = flag
+  }
+
+  getBusState(busId: string): BusState {
+    return this.bus.get(busId) ?? { volume: 1, muted: false }
+  }
+
+  async dispose(): Promise<void> {
+    this.subscriptions.forEach((unsubscribe) => unsubscribe())
+    this.subscriptions = []
+    this.muted = true
+    this.active = []
   }
 
   private getBusVolume(busId: string): number {
@@ -128,12 +201,11 @@ export class AudioRuntime implements DomainRuntime {
     return state.muted ? 0 : state.volume
   }
 
-  getBusState(busId: string): BusState {
-    return this.bus.get(busId) ?? { volume: 1, muted: false }
-  }
-
-  async dispose(): Promise<void> {
-    this.muted = true
-    this.active = []
+  private mapFxToAudio(payload: { eventType?: string; source?: string; intensity?: number } | undefined): string[] {
+    if (!payload?.eventType) {
+      return []
+    }
+    const mapped = this.mapGameEventToAudio(payload.eventType, payload)
+    return mapped.filter(Boolean)
   }
 }

@@ -150,6 +150,7 @@ export class PhysicsRuntime implements DomainRuntime {
       if (!body.grounded) {
         body.state.velY -= gravity * dtSec
       }
+      const wasGrounded = body.grounded
 
       body.state.posX += body.state.velX * dtSec
       body.state.posY += body.state.velY * dtSec
@@ -160,21 +161,81 @@ export class PhysicsRuntime implements DomainRuntime {
         body.state.velY = 0
         if (!body.grounded) {
           body.grounded = true
+          const collisionPayload = {
+            bodyId: body.id,
+            event: 'ground_contact',
+            normal: { x: 0, y: 1, z: 0 },
+          }
           ctx.bus.emit({
             ts: Date.now(),
             level: 'debug',
             event_code: 'PHYSICS_COLLISION_ENTER',
+            payload: collisionPayload,
+          })
+          ctx.bus.emit({
+            ts: Date.now(),
+            level: 'debug',
+            event_code: 'PHYS_COLLISION',
+            payload: collisionPayload,
+          })
+          ctx.bus.emit({
+            ts: Date.now(),
+            level: 'debug',
+            event_code: 'PHYS_TRIGGER',
             payload: {
               bodyId: body.id,
-              event: 'ground_contact',
-              normal: { x: 0, y: 1, z: 0 },
+              trigger: 'ground_enter',
             },
+          })
+          ctx.bus.emit({
+            ts: Date.now(),
+            level: 'debug',
+            event_code: 'PHYS_WAKE',
+            payload: { bodyId: body.id },
           })
         }
       }
+      if (wasGrounded && body.state.posY > 0) {
+        body.grounded = false
+        const collisionPayload = {
+          bodyId: body.id,
+          event: 'ground_exit',
+          normal: { x: 0, y: 1, z: 0 },
+        }
+        ctx.bus.emit({
+          ts: Date.now(),
+          level: 'debug',
+          event_code: 'PHYS_COLLISION_EXIT',
+          payload: collisionPayload,
+        })
+        ctx.bus.emit({
+          ts: Date.now(),
+          level: 'debug',
+          event_code: 'PHYS_COLLISION',
+          payload: collisionPayload,
+        })
+      }
 
+      const wasAwake = body.awake
       body.awake =
         Math.abs(body.state.velX) > 0.001 || Math.abs(body.state.velY) > 0.001 || Math.abs(body.state.velZ) > 0.001
+
+      if (wasAwake && !body.awake) {
+        ctx.bus.emit({
+          ts: Date.now(),
+          level: 'debug',
+          event_code: 'PHYS_SLEEP',
+          payload: { bodyId: body.id },
+        })
+      }
+      if (!wasAwake && body.awake) {
+        ctx.bus.emit({
+          ts: Date.now(),
+          level: 'debug',
+          event_code: 'PHYS_WAKE',
+          payload: { bodyId: body.id },
+        })
+      }
 
       if (body.id === 1) {
         this.state = body.state

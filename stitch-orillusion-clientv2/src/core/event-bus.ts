@@ -13,6 +13,8 @@ export interface RuntimeEvent<T = Record<string, unknown>> {
     | 'ASSERT_PASS'
     | 'ASSERT_FAIL'
     | 'GATE_VERDICT'
+    | 'CONTRACT_CATALOG'
+    | 'CONTRACT_REDUCER_CALL'
     | string
   scenario_id?: string
   payload?: T

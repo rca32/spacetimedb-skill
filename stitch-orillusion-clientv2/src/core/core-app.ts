@@ -295,18 +295,18 @@ export class CoreApp {
       }
     })
 
-    sample('render', () => {
-      render.update(dtMs, this.ctx)
-    })
-
     sample('ui', () => {
       const snapshot = world.readSnapshot()
       if (snapshot) {
         ui.setWorldSnapshot(snapshot)
       }
       ui.update(dtMs, this.ctx)
+    })
+
+    sample('render', () => {
+      render.update(dtMs, this.ctx)
       render.applyProfileToContext(this.ctx)
-      render.setWorldTime(snapshot)
+      render.setWorldTime(world.readSnapshot())
     })
 
     sample('post', () => {

@@ -1,3 +1,5 @@
+import { SPACETIME_V2_CONTRACT } from './spacetimedb-contract'
+
 export interface ClientV2Config {
   contractRev: number
   spacetimeUri: string
@@ -16,7 +18,7 @@ export interface ClientV2Config {
 }
 
 const defaults: ClientV2Config = {
-  contractRev: 2,
+  contractRev: SPACETIME_V2_CONTRACT.revision,
   spacetimeUri: 'ws://127.0.0.1:3000',
   spacetimeModule: 'stitch-server',
   defaultRegionId: 1,

@@ -1,6 +1,7 @@
 import type { RuntimeContext, DomainRuntime } from '../core/types'
 import type {
   AnimationStatePayload,
+  EntitySnapshotPayload,
   InputFramePayload,
   PhysicsStepPayload,
   WorldEntityPayload,
@@ -18,13 +19,22 @@ export interface WorldSnapshot {
   profileId: 'low' | 'medium' | 'high' | 'ultra'
 }
 
+type EntityType = 'player' | 'npc' | 'building' | 'resource' | 'projectile' | 'effect' | 'ui_anchor'
+type LifecycleState = 'Discovered' | 'Spawning' | 'Active' | 'Dormant' | 'Despawning' | 'Disposed'
+type DespawnReason = 'aoi_exit' | 'world_despawn' | 'dimension_change' | 'disconnect'
+
 interface EntityPatch {
   id: bigint
   position: { x: number; y: number; z: number }
   quaternion?: { x: number; y: number; z: number; w: number }
   velocity?: { x: number; y: number; z: number }
-  entityType?: 'player' | 'npc' | 'building' | 'resource' | 'projectile' | 'effect'
+  entityType?: EntityType
   state?: string
+  lifecycle: LifecycleState
+  poolable: boolean
+  profile?: 'low' | 'medium' | 'high' | 'ultra'
+  lastUpdatedAt: number
+  lastFrameNo: number
 }
 
 export class WorldRuntime implements DomainRuntime {
@@ -40,9 +50,13 @@ export class WorldRuntime implements DomainRuntime {
   private unsubscribes: Array<() => void> = []
   private lastInput = { x: 0, y: 0, z: 0 }
   private readonly playerId = 1n
+  private bus: RuntimeContext['bus'] | null = null
+  private readonly poolableTypes = new Set<EntityType>(['projectile', 'effect', 'ui_anchor'])
+  private readonly dormantTtlMs = 30_000
 
   async init(ctx: RuntimeContext): Promise<void> {
     this.reset()
+    this.bus = ctx.bus
 
     this.unsubscribes.push(
       ctx.bus.on('INPUT_FRAME', (event) => {
@@ -84,9 +98,8 @@ export class WorldRuntime implements DomainRuntime {
           y: payload.velocity.y,
           z: payload.velocity.z,
         }
-        if (this.entities.has(bodyId)) {
-          this.entities.set(bodyId, entity)
-        }
+        entity.lifecycle = 'Active'
+        this.entities.set(bodyId, entity)
       }),
     )
 
@@ -109,24 +122,33 @@ export class WorldRuntime implements DomainRuntime {
         if (id === this.playerId) {
           return
         }
-        this.spawnEntity(id, payload.position, payload.entityType)
+        this.spawnEntity(
+          id,
+          payload.position,
+          payload.entityType,
+          this.normalizeDespawnReason(payload.reason),
+          { emitWorldEvent: false },
+        )
       }),
     )
 
     this.unsubscribes.push(
       ctx.bus.on('WORLD_DESPAWN_ENTITY', (event) => {
         const payload = this.asWorldDespawn(event.payload)
-        if (!payload || !Number.isFinite(payload.entityId)) {
+        if (!payload) {
           return
         }
-        this.despawnEntity(BigInt(payload.entityId))
+        this.despawnEntity(payload.entityId, this.normalizeDespawnReason(payload.reason), { emitWorldEvent: false })
       }),
     )
 
     this.unsubscribes.push(
       ctx.bus.on('ANIMATION_STATE', (event) => {
         const payload = this.asAnimationState(event.payload)
-        if (payload?.state === 'attack' || payload?.state === 'cast') {
+        if (!payload) {
+          return
+        }
+        if (payload.state === 'attack' || payload.state === 'cast') {
           const marker = this.readEntity(this.playerId)
           marker.state = payload.state
           this.entities.set(this.playerId, marker)
@@ -134,7 +156,7 @@ export class WorldRuntime implements DomainRuntime {
       }),
     )
 
-    this.spawnEntity(this.playerId, { x: 0, y: 0, z: 0 }, 'player')
+    this.spawnEntity(this.playerId, { x: 0, y: 0, z: 0 }, 'player', undefined, { emitWorldEvent: false })
     ctx.bus.emit({
       ts: Date.now(),
       level: 'info',
@@ -146,7 +168,6 @@ export class WorldRuntime implements DomainRuntime {
         reason: 'world_boot',
       } satisfies WorldEntityPayload,
     })
-
     ctx.logger.info('[world] boot', { active_entities: this.entities.size })
   }
 
@@ -171,6 +192,7 @@ export class WorldRuntime implements DomainRuntime {
     }
 
     this.rotateWeatherIfNeeded(ctx)
+    this.evictDormantEntities()
 
     const player = this.readEntity(this.playerId)
     if (player) {
@@ -182,13 +204,30 @@ export class WorldRuntime implements DomainRuntime {
         y: player.velocity?.y ?? 0,
         z: this.lastInput.z * moveScale,
       }
+      player.lifecycle = 'Active'
+      player.lastUpdatedAt = Date.now()
+      player.lastFrameNo = this.frameNo
       this.entities.set(this.playerId, player)
+      this.emitEntitySnapshot({
+        event: 'ENTITY_UPDATE',
+        entityId: Number(this.playerId),
+        entityType: player.entityType,
+        state: player.lifecycle,
+        reason: undefined,
+        profile: this.profileId,
+        position: player.position,
+        velocity: player.velocity,
+      })
     }
 
     const snapshot = this.readSnapshot()
     const nextProfile = snapshot.profileId
-    if (this.profileId !== nextProfile) {
+    const previousProfile = this.profileId
+    if (previousProfile !== nextProfile) {
       this.profileId = nextProfile
+      this.entities.forEach((entity) => {
+        entity.profile = this.profileId
+      })
       ctx.bus.emit({
         ts: Date.now(),
         level: 'info',
@@ -197,7 +236,7 @@ export class WorldRuntime implements DomainRuntime {
           event: 'profile_change',
           profile: nextProfile,
           frameNo: this.frameNo,
-          previousProfile: this.profileId,
+          previousProfile,
         },
       })
     }
@@ -259,8 +298,9 @@ export class WorldRuntime implements DomainRuntime {
     const previousDimension = this.dimensionId
     this.dimensionId = dimensionId
 
-    this.entities.forEach((entity) => {
-      entity.state = 'dimension_reset'
+    const idsToDespawn = [...this.entities.keys()].filter((entityId) => entityId !== this.playerId)
+    idsToDespawn.forEach((entityId) => {
+      this.despawnEntity(entityId, 'dimension_change', { emitWorldEvent: true })
     })
 
     if (ctx) {
@@ -282,31 +322,164 @@ export class WorldRuntime implements DomainRuntime {
     }
   }
 
-  spawnEntity(entityId: bigint, snapshot: { x: number; y: number; z: number }, entityType?: EntityPatch['entityType']): void {
+  spawnEntity(
+    entityId: bigint,
+    snapshot: { x: number; y: number; z: number },
+    entityType?: EntityPatch['entityType'],
+    reason?: DespawnReason,
+    options: { emitWorldEvent?: boolean } = {},
+  ): void {
+    const emitWorldEvent = options.emitWorldEvent ?? true
     const normalizedId = BigInt(entityId)
+    const normalizedType = this.normalizeEntityType(entityType)
+    const now = Date.now()
     const previous = this.entities.get(normalizedId)
-    this.entities.set(normalizedId, {
-      id: normalizedId,
-      position: previous?.position ? { ...previous.position } : { x: snapshot.x, y: snapshot.y, z: snapshot.z },
-      velocity: previous?.velocity ?? { x: 0, y: 0, z: 0 },
-      entityType: entityType ?? previous?.entityType,
-      state: previous?.state ?? 'active',
-      quaternion: previous?.quaternion,
+
+    if (!previous) {
+      const entity: EntityPatch = {
+        id: normalizedId,
+        position: { ...snapshot },
+        velocity: { x: 0, y: 0, z: 0 },
+        quaternion: undefined,
+        entityType: normalizedType,
+        state: 'spawned',
+        lifecycle: 'Spawning',
+        poolable: this.isPoolable(normalizedType),
+        profile: this.profileId,
+        lastUpdatedAt: now,
+        lastFrameNo: this.frameNo,
+      }
+      this.entities.set(normalizedId, entity)
+      this.emitEntitySnapshot({
+        event: 'ENTITY_SPAWN_BEGIN',
+        entityId: Number(normalizedId),
+        entityType: entity.entityType,
+        state: entity.lifecycle,
+        reason,
+        profile: this.profileId,
+        position: entity.position,
+        velocity: entity.velocity,
+      })
+      entity.lifecycle = 'Active'
+      entity.lastUpdatedAt = Date.now()
+      entity.lastFrameNo = this.frameNo
+      this.entities.set(normalizedId, entity)
+      this.emitEntitySnapshot({
+        event: 'ENTITY_SPAWN_DONE',
+        entityId: Number(normalizedId),
+        entityType: entity.entityType,
+        state: entity.lifecycle,
+        reason,
+        profile: this.profileId,
+        position: entity.position,
+        velocity: entity.velocity,
+      })
+      if (emitWorldEvent) {
+        this.emitWorldSpawn({
+          entityId: Number(normalizedId),
+          entityType: entity.entityType,
+          position: entity.position,
+          reason: reason,
+          velocity: entity.velocity,
+        })
+      }
+      return
+    }
+
+    if (previous.lifecycle === 'Dormant') {
+      previous.position = {
+        ...previous.position,
+        ...snapshot,
+      }
+      previous.lifecycle = 'Spawning'
+      previous.lastUpdatedAt = now
+      previous.lastFrameNo = this.frameNo
+      if (normalizedType) {
+        previous.entityType = normalizedType
+      }
+
+      this.entities.set(normalizedId, previous)
+      this.emitEntitySnapshot({
+        event: 'ENTITY_SPAWN_BEGIN',
+        entityId: Number(normalizedId),
+        entityType: previous.entityType,
+        state: previous.lifecycle,
+        reason,
+        profile: this.profileId,
+        position: previous.position,
+        velocity: previous.velocity,
+      })
+
+      previous.lifecycle = 'Active'
+      previous.lastUpdatedAt = Date.now()
+      previous.lastFrameNo = this.frameNo
+      if (normalizedType) {
+        previous.entityType = normalizedType
+      }
+      this.entities.set(normalizedId, previous)
+
+      this.emitEntitySnapshot({
+        event: 'ENTITY_SPAWN_DONE',
+        entityId: Number(normalizedId),
+        entityType: previous.entityType,
+        state: previous.lifecycle,
+        reason,
+        profile: this.profileId,
+        position: previous.position,
+        velocity: previous.velocity,
+      })
+      return
+    }
+
+    if (previous.lifecycle === 'Disposed') {
+      this.entities.delete(normalizedId)
+      this.spawnEntity(normalizedId, snapshot, normalizedType, reason, options)
+      return
+    }
+
+    previous.position = {
+      ...previous.position,
+      ...snapshot,
+    }
+    previous.lifecycle = 'Active'
+    previous.lastUpdatedAt = now
+    previous.lastFrameNo = this.frameNo
+    if (normalizedType) {
+      previous.entityType = normalizedType
+    }
+    this.entities.set(normalizedId, previous)
+    this.emitEntitySnapshot({
+      event: 'ENTITY_UPDATE',
+      entityId: Number(normalizedId),
+      entityType: previous.entityType,
+      state: previous.lifecycle,
+      reason,
+      profile: this.profileId,
+      position: previous.position,
+      velocity: previous.velocity,
     })
   }
 
-  applyDelta(delta: Partial<EntityPatch> & { id?: bigint }): void {
+  applyDelta(delta: Partial<EntityPatch> & { id?: bigint | number }): void {
     if (!delta.id) {
       return
     }
     const normalizedId = BigInt(delta.id)
     const previous = this.entities.get(normalizedId)
+    const normalizedType = this.normalizeEntityType(delta.entityType)
+    const now = Date.now()
+
     if (!previous) {
+      const fallbackPosition = delta.position ?? { x: 0, y: 0, z: 0 }
+      this.spawnEntity(normalizedId, fallbackPosition, normalizedType, undefined)
       return
     }
-    this.entities.set(normalizedId, {
+
+    const wasDormant = previous.lifecycle === 'Dormant'
+    const next: EntityPatch = {
       ...previous,
       ...delta,
+      id: normalizedId,
       position: {
         ...previous.position,
         ...(delta.position ?? {}),
@@ -315,11 +488,104 @@ export class WorldRuntime implements DomainRuntime {
         ...(previous.velocity ?? { x: 0, y: 0, z: 0 }),
         ...(delta.velocity ?? {}),
       },
+      lastUpdatedAt: now,
+      lastFrameNo: this.frameNo,
+      profile: this.profileId,
+      lifecycle: wasDormant ? 'Active' : previous.lifecycle,
+    }
+
+    if (normalizedType) {
+      next.entityType = normalizedType
+    }
+    this.entities.set(normalizedId, next)
+
+    if (wasDormant) {
+      this.emitEntitySnapshot({
+        event: 'ENTITY_SPAWN_DONE',
+        entityId: Number(normalizedId),
+        entityType: next.entityType,
+        state: next.lifecycle,
+        profile: next.profile,
+        position: next.position,
+        velocity: next.velocity,
+      })
+      return
+    }
+
+    this.emitEntitySnapshot({
+      event: 'ENTITY_UPDATE',
+      entityId: Number(normalizedId),
+      entityType: next.entityType,
+      state: next.lifecycle,
+      profile: next.profile,
+      position: next.position,
+      velocity: next.velocity,
     })
   }
 
-  despawnEntity(entityId: bigint): void {
-    this.entities.delete(BigInt(entityId))
+  despawnEntity(
+    entityId: bigint | number,
+    reason?: DespawnReason,
+    options: { emitWorldEvent?: boolean } = {},
+  ): void {
+    const normalizedId = BigInt(entityId)
+    const emitWorldEvent = options.emitWorldEvent ?? false
+    const existing = this.entities.get(normalizedId)
+    if (!existing || existing.lifecycle === 'Disposed') {
+      return
+    }
+    if (normalizedId === this.playerId) {
+      return
+    }
+
+    existing.lifecycle = reason === 'aoi_exit' ? 'Dormant' : 'Despawning'
+    existing.lastUpdatedAt = Date.now()
+    existing.lastFrameNo = this.frameNo
+    this.entities.set(normalizedId, existing)
+
+    this.emitEntitySnapshot({
+      event: 'ENTITY_DESPAWN',
+      entityId: Number(normalizedId),
+      entityType: existing.entityType,
+      state: existing.lifecycle,
+      reason,
+      profile: existing.profile,
+      position: existing.position,
+      velocity: existing.velocity,
+    })
+
+    if (reason === 'aoi_exit' && existing.poolable) {
+      this.emitEntitySnapshot({
+        event: 'ENTITY_POOL_RETURN',
+        entityId: Number(normalizedId),
+        entityType: existing.entityType,
+        state: existing.lifecycle,
+        reason,
+        profile: existing.profile,
+      })
+    }
+
+    if (!reason || reason !== 'aoi_exit' || !existing.poolable) {
+      if (existing.poolable) {
+        this.emitEntitySnapshot({
+          event: 'ENTITY_POOL_RETURN',
+          entityId: Number(normalizedId),
+          entityType: existing.entityType,
+          state: 'Disposed',
+          reason,
+          profile: existing.profile,
+        })
+      }
+      existing.lifecycle = 'Disposed'
+      this.entities.delete(normalizedId)
+    } else {
+      // Keep AOI-exited pooled entities dormant for fast re-activation.
+      this.entities.set(normalizedId, existing)
+    }
+
+    if (emitWorldEvent) {
+      this.emitWorldDespawn(Number(normalizedId), { reason })
+    }
   }
 
   queryEntity(entityId: bigint): {
@@ -334,7 +600,10 @@ export class WorldRuntime implements DomainRuntime {
     if (!entity) {
       return null
     }
-    return { ...entity }
+    return {
+      ...entity,
+      state: entity.lifecycle,
+    }
   }
 
   readSnapshot(): WorldSnapshot {
@@ -352,6 +621,7 @@ export class WorldRuntime implements DomainRuntime {
   async dispose(): Promise<void> {
     this.unsubscribes.forEach((unsubscribe) => unsubscribe())
     this.unsubscribes = []
+    this.bus = null
     this.reset()
   }
 
@@ -380,6 +650,124 @@ export class WorldRuntime implements DomainRuntime {
     }
   }
 
+  private emitEntitySnapshot(payload: EntitySnapshotPayload): void {
+    if (!this.bus) {
+      return
+    }
+    this.bus.emit({
+      ts: Date.now(),
+      level: 'info',
+      event_code: payload.event,
+      payload,
+    })
+  }
+
+  private emitWorldSpawn(entity: {
+    entityId: number
+    entityType?: EntityPatch['entityType']
+    position: { x: number; y: number; z: number }
+    reason?: DespawnReason
+    velocity?: { x: number; y: number; z: number }
+  }): void {
+    if (!this.bus) {
+      return
+    }
+    this.bus.emit({
+      ts: Date.now(),
+      level: 'debug',
+      event_code: 'WORLD_SPAWN_ENTITY',
+      payload: {
+        entityId: entity.entityId,
+        entityType: this.normalizeWorldEntityType(entity.entityType),
+        position: entity.position,
+        reason: entity.reason,
+        velocity: entity.velocity,
+      } satisfies WorldEntityPayload,
+    })
+  }
+
+  private emitWorldDespawn(entityId: number, payload?: { reason?: DespawnReason }): void {
+    if (!this.bus) {
+      return
+    }
+    this.bus.emit({
+      ts: Date.now(),
+      level: 'debug',
+      event_code: 'WORLD_DESPAWN_ENTITY',
+      payload: {
+        entityId,
+        reason: payload?.reason,
+      } as unknown as WorldEntityPayload,
+    })
+  }
+
+  private evictDormantEntities(): void {
+    const now = Date.now()
+    for (const [entityId, entity] of this.entities) {
+      if (entityId === this.playerId) {
+        continue
+      }
+      if (entity.lifecycle !== 'Dormant') {
+        continue
+      }
+      if (now - entity.lastUpdatedAt < this.dormantTtlMs) {
+        continue
+      }
+      this.despawnEntity(entityId, 'world_despawn', { emitWorldEvent: true })
+    }
+  }
+
+  private isPoolable(entityType: EntityPatch['entityType']): boolean {
+    return Boolean(entityType && this.poolableTypes.has(entityType))
+  }
+
+  private normalizeEntityType(raw?: string): EntityPatch['entityType'] | undefined {
+    if (!raw) {
+      return undefined
+    }
+    if (
+      raw === 'player' ||
+      raw === 'npc' ||
+      raw === 'building' ||
+      raw === 'resource' ||
+      raw === 'projectile' ||
+      raw === 'effect' ||
+      raw === 'ui_anchor'
+    ) {
+      return raw
+    }
+    return undefined
+  }
+
+  private normalizeWorldEntityType(raw?: string | null): WorldEntityPayload['entityType'] | undefined {
+    if (!raw) {
+      return undefined
+    }
+    if (
+      raw === 'player' ||
+      raw === 'npc' ||
+      raw === 'building' ||
+      raw === 'resource' ||
+      raw === 'projectile' ||
+      raw === 'effect'
+    ) {
+      return raw
+    }
+    return undefined
+  }
+
+  private normalizeDespawnReason(payloadReason?: unknown): DespawnReason | undefined {
+    if (
+      payloadReason === 'aoi_exit' ||
+      payloadReason === 'world_despawn' ||
+      payloadReason === 'dimension_change' ||
+      payloadReason === 'disconnect'
+    ) {
+      return payloadReason
+    }
+    return undefined
+  }
+
   private reset(): void {
     this.frameNo = 0
     this.dimensionId = 1
@@ -398,6 +786,12 @@ export class WorldRuntime implements DomainRuntime {
         id: BigInt(entityId),
         position: { x: 0, y: 0, z: 0 },
         velocity: { x: 0, y: 0, z: 0 },
+        state: 'active',
+        lifecycle: 'Discovered',
+        poolable: false,
+        profile: this.profileId,
+        lastUpdatedAt: Date.now(),
+        lastFrameNo: this.frameNo,
       }
     )
   }
@@ -482,7 +876,7 @@ export class WorldRuntime implements DomainRuntime {
     }
     return {
       entityId: candidate.entityId,
-      entityType: candidate.entityType,
+      entityType: this.normalizeWorldEntityType(candidate.entityType),
       position: {
         x: Number((candidate.position as { x?: number }).x ?? 0),
         y: Number((candidate.position as { y?: number }).y ?? 0),
@@ -490,20 +884,23 @@ export class WorldRuntime implements DomainRuntime {
       },
       quaternion: candidate.quaternion,
       velocity: candidate.velocity,
-      reason: candidate.reason,
+      reason: candidate.reason as string | undefined,
     }
   }
 
-  private asWorldDespawn(payload: unknown): { entityId: number } | null {
+  private asWorldDespawn(payload: unknown): { entityId: number; reason?: DespawnReason } | null {
     if (!payload || typeof payload !== 'object') {
       return null
     }
-    const candidate = payload as { entityId?: unknown }
+    const candidate = payload as { entityId?: unknown; reason?: unknown }
     const entityId = candidate.entityId
     if (typeof entityId !== 'number') {
       return null
     }
-    return { entityId }
+    return {
+      entityId,
+      reason: this.normalizeDespawnReason(candidate.reason),
+    }
   }
 
   private asAnimationState(payload: unknown): AnimationStatePayload | null {

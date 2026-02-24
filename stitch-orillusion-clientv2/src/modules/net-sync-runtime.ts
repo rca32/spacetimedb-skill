@@ -1,5 +1,16 @@
 import type { RuntimeContext, DomainRuntime } from '../core/types'
-import type { InputFramePayload, BusEventCode } from '../core/runtime-events'
+import type {
+  BusEventCode,
+  ContractCatalogPayload,
+  ContractReducerCallPayload,
+  InputFramePayload,
+} from '../core/runtime-events'
+import {
+  CONTRACT_CATEGORY_ERRORS,
+  CONTRACT_CATEGORY_REDUCERS,
+  CONTRACT_CATEGORY_TABLES,
+  SPACETIME_V2_CONTRACT,
+} from '../infra/spacetimedb-contract'
 
 type ChannelName = 'baseline' | 'session' | 'aoi' | 'feature'
 
@@ -81,6 +92,19 @@ export class NetSyncRuntime implements DomainRuntime {
     this.setChannelState('session', 'connected')
     this.setChannelState('aoi', 'connected')
     this.setChannelState('feature', 'connected')
+    this.emitContractCatalog(ctx)
+    this.emitContractReducerCalls(ctx, 'session', [
+      'client_hello_v2',
+      'client_heartbeat_v2',
+      'submit_input_frame_v2',
+      'submit_action_intent_v2',
+      'interact_entity_v2',
+      'start_skill_v2',
+      'cancel_skill_v2',
+      'ack_server_correction_v2',
+      'request_respawn_v2',
+      'set_ui_preference_v2',
+    ])
 
     const startedAt = Date.now()
     ;['baseline', 'session', 'aoi', 'feature'].forEach((channel) => {
@@ -108,24 +132,76 @@ export class NetSyncRuntime implements DomainRuntime {
     this.pollTicks += 1
 
     if (!this.handshakeDone) {
+      const helloArgs = {
+        event: 'client_hello_v2',
+        identity: this.identityState?.identity,
+        contractRev: ctx.config.contractRev,
+        buildHash: location?.href ?? 'local',
+        platform: ctx.config.platform,
+        deviceTier: ctx.config.deviceTier,
+      }
       ctx.bus.emit({
         ts: now,
         level: 'info',
         event_code: 'NET_SUB_OK',
         scenario_id: 'S01',
-        payload: {
-          event: 'client_hello_v2',
-          identity: this.identityState?.identity,
-          contractRev: ctx.config.contractRev,
-          buildHash: location?.href ?? 'local',
-          platform: ctx.config.platform,
-          deviceTier: ctx.config.deviceTier,
-        },
+        payload: helloArgs,
+      })
+      this.emitContractReducerCall(ctx, {
+        event: 'contract_reducer_call',
+        reducer: 'client_hello_v2',
+        channel: 'baseline',
+        args: helloArgs,
       })
       this.handshakeDone = true
     }
 
     const input = this.buildDeterministicInput(this.frameNo, now)
+    this.emitContractReducerCall(ctx, {
+      event: 'contract_reducer_call',
+      reducer: 'submit_input_frame_v2',
+      channel: 'session',
+      args: {
+        frameNo: input.frameNo,
+        move_vec: input.move,
+        look_vec: input.look,
+        actions: input.actions,
+      },
+      appliedFrameNo: input.frameNo,
+    })
+    if (input.actions.length > 0) {
+      this.emitContractReducerCall(ctx, {
+        event: 'contract_reducer_call',
+        reducer: 'submit_action_intent_v2',
+        channel: 'session',
+        args: {
+          action_id: input.actions.join(','),
+          target_entity_id: 0,
+          payload: JSON.stringify(input.actions),
+        },
+      })
+      this.emitContractReducerCall(ctx, {
+        event: 'contract_reducer_call',
+        reducer: 'ack_server_correction_v2',
+        channel: 'session',
+        args: {
+          correction_id: `auto-${this.frameNo}`,
+          applied_frame_no: input.frameNo,
+        },
+      })
+    }
+    if (this.frameNo % 120 === 0) {
+      this.emitContractReducerCall(ctx, {
+        event: 'contract_reducer_call',
+        reducer: 'client_heartbeat_v2',
+        channel: 'baseline',
+        args: {
+          server_ms: Date.now(),
+          ping_ms: 16,
+        },
+      })
+    }
+
     ctx.bus.emit({
       ts: now,
       level: 'debug',
@@ -290,6 +366,63 @@ export class NetSyncRuntime implements DomainRuntime {
         this.featureEnabled.add(key)
       })
     }
+  }
+
+  private emitContractCatalog(ctx: RuntimeContext): void {
+    const contractRev = SPACETIME_V2_CONTRACT.revision
+    const toPayload = (category: string, names: string[]): ContractCatalogPayload => ({
+      event: 'contract_catalog',
+      category: category as ContractCatalogPayload['category'],
+      contractRev,
+      names,
+    })
+
+    ctx.bus.emit({
+      ts: Date.now(),
+      level: 'info',
+      event_code: 'CONTRACT_CATALOG',
+      scenario_id: 'S01',
+      payload: toPayload(CONTRACT_CATEGORY_TABLES, SPACETIME_V2_CONTRACT.tables),
+    })
+    ctx.bus.emit({
+      ts: Date.now(),
+      level: 'info',
+      event_code: 'CONTRACT_CATALOG',
+      scenario_id: 'S01',
+      payload: toPayload(CONTRACT_CATEGORY_REDUCERS, SPACETIME_V2_CONTRACT.reducers),
+    })
+    ctx.bus.emit({
+      ts: Date.now(),
+      level: 'info',
+      event_code: 'CONTRACT_CATALOG',
+      scenario_id: 'S01',
+      payload: toPayload(CONTRACT_CATEGORY_ERRORS, SPACETIME_V2_CONTRACT.errorCodes),
+    })
+  }
+
+  private emitContractReducerCall(ctx: RuntimeContext, payload: ContractReducerCallPayload): void {
+    ctx.bus.emit({
+      ts: Date.now(),
+      level: 'info',
+      event_code: 'CONTRACT_REDUCER_CALL',
+      scenario_id: 'S01',
+      payload,
+    })
+  }
+
+  private emitContractReducerCalls(
+    ctx: RuntimeContext,
+    channel: 'baseline' | 'session' | 'aoi' | 'feature',
+    reducers: string[],
+  ): void {
+    reducers.forEach((reducer) => {
+      this.emitContractReducerCall(ctx, {
+        event: 'contract_reducer_call',
+        reducer,
+        channel,
+        args: { probe: true },
+      })
+    })
   }
 
   private emitAoiSwap(

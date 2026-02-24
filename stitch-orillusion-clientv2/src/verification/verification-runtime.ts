@@ -1,12 +1,17 @@
 import type { ClientV2Config } from '../infra/config'
 import type { EventBus, RuntimeEvent } from '../core/event-bus'
 import type { Logger } from '../infra/logger'
+import type { ContractCatalogPayload, ContractReducerCallPayload } from '../core/runtime-events'
+import { CONTRACT_CATEGORY_ERRORS, CONTRACT_CATEGORY_REDUCERS, CONTRACT_CATEGORY_TABLES, SPACETIME_V2_CONTRACT } from '../infra/spacetimedb-contract'
 
 export type ScenarioId = 'S01' | 'S02' | 'S03' | 'S04' | 'S05'
 export type ScenarioSuiteId = 'all' | 'core'
 
 export type AssertionId =
   | 'A-CONTRACT-001'
+  | 'A-CONTRACT-002'
+  | 'A-CONTRACT-003'
+  | 'A-CONTRACT-004'
   | 'A-SUB-002'
   | 'A-SUB-001'
   | 'A-UI-001'
@@ -437,6 +442,16 @@ export class VerificationRuntime {
 
   private async runS01(): Promise<void> {
     await this.sleep(24)
+    const catalogTables = this.filterContractCatalog(this.events, CONTRACT_CATEGORY_TABLES)
+    const catalogReducers = this.filterContractCatalog(this.events, CONTRACT_CATEGORY_REDUCERS)
+    const catalogErrors = this.filterContractCatalog(this.events, CONTRACT_CATEGORY_ERRORS)
+    const requiredContractRev = SPACETIME_V2_CONTRACT.revision
+    const schemaMatch = this.compareSets(new Set(SPACETIME_V2_CONTRACT.tables), new Set(catalogTables))
+    const reducersMatch = this.compareSets(
+      new Set(SPACETIME_V2_CONTRACT.reducers),
+      new Set(catalogReducers),
+    )
+    const errorsMatch = this.compareSets(new Set(SPACETIME_V2_CONTRACT.errorCodes), new Set(catalogErrors))
     this.emitEvent({
       event_code: 'NET_SUB_OK',
       scenario_id: 'S01',
@@ -449,8 +464,66 @@ export class VerificationRuntime {
       level: 'info',
       payload: { channel: 'session', status: 'ok', stage: 'handshake' },
     })
-    this.assert('S01', 'A-CONTRACT-001', true, 'required contract tables assumed available for baseline channels')
+    this.assert(
+      'S01',
+      'A-CONTRACT-001',
+      !!schemaMatch && catalogTables.length === SPACETIME_V2_CONTRACT.tables.length,
+      'contract tables match manifest',
+    )
+    this.assert(
+      'S01',
+      'A-CONTRACT-002',
+      reducersMatch && catalogReducers.length === SPACETIME_V2_CONTRACT.reducers.length,
+      'contract reducers match manifest',
+    )
+    this.assert(
+      'S01',
+      'A-CONTRACT-003',
+      !!errorsMatch &&
+        catalogErrors.length === SPACETIME_V2_CONTRACT.errorCodes.length &&
+        requiredContractRev === SPACETIME_V2_CONTRACT.revision,
+      'contract error code catalog matches',
+    )
+    this.assert(
+      'S01',
+      'A-CONTRACT-004',
+      this.checkRequiredReducerCalls(new Set(SPACETIME_V2_CONTRACT.reducers)),
+      'all required contract reducers can be invoked by net-sync probe events',
+    )
     this.assert('S01', 'A-SUB-001', true, 'baseline and session channels subscribed')
+  }
+
+  private filterContractCatalog(events: RuntimeEvent[], category: string): string[] {
+    return events.flatMap((event) => {
+      const payload = event.payload as ContractCatalogPayload | undefined
+      if (!payload || payload.event !== 'contract_catalog' || payload.category !== category) {
+        return []
+      }
+      return payload.names
+    })
+  }
+
+  private checkRequiredReducerCalls(required: Set<string>): boolean {
+    const reducerCalls = this.events.flatMap((event) => {
+      const payload = event.payload as ContractReducerCallPayload | undefined
+      if (!payload || payload.event !== 'contract_reducer_call') {
+        return []
+      }
+      return [payload.reducer]
+    })
+    return this.compareSets(required, new Set(reducerCalls))
+  }
+
+  private compareSets(a: Set<string>, b: Set<string>): boolean {
+    if (a.size !== b.size) {
+      return false
+    }
+    for (const value of a) {
+      if (!b.has(value)) {
+        return false
+      }
+    }
+    return true
   }
 
   private async runS02(): Promise<void> {

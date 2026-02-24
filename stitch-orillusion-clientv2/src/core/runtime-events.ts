@@ -13,10 +13,23 @@ export type BusEventCode =
   | 'WORLD_DELTA'
   | 'WORLD_DIMENSION_CHANGE'
   | 'WORLD_PROFILE'
+  | 'CONTRACT_CATALOG'
+  | 'CONTRACT_REDUCER_CALL'
+  | 'ENTITY_SPAWN_BEGIN'
+  | 'ENTITY_SPAWN_DONE'
+  | 'ENTITY_UPDATE'
+  | 'ENTITY_DESPAWN'
+  | 'ENTITY_POOL_RETURN'
   | 'PHYSICS_STEP'
   | 'PHYSICS_COLLISION'
   | 'PHYSICS_COLLISION_ENTER'
   | 'PHYSICS_COLLISION_EXIT'
+  | 'PHYS_COLLISION'
+  | 'PHYS_COLLISION_ENTER'
+  | 'PHYS_COLLISION_EXIT'
+  | 'PHYS_TRIGGER'
+  | 'PHYS_SLEEP'
+  | 'PHYS_WAKE'
   | 'ANIMATION_STATE'
   | 'ANIMATION_ACTION'
   | 'FX_TRIGGER'
@@ -48,6 +61,9 @@ export interface InputFramePayload extends EventPayloadRecord {
 export interface ChannelStatePayload extends EventPayloadRecord {
   channel: 'baseline' | 'session' | 'aoi' | 'feature'
   state: 'connecting' | 'connected' | 'disconnected' | 'error'
+  lastOkTs?: number | null
+  lastErr?: string | null
+  lastErrTs?: number | null
 }
 
 export interface WorldStatePayload extends EventPayloadRecord {
@@ -60,6 +76,21 @@ export interface WorldStatePayload extends EventPayloadRecord {
   source?: string
 }
 
+export interface ContractCatalogPayload extends EventPayloadRecord {
+  event: 'contract_catalog'
+  category: 'contract_catalog_tables' | 'contract_catalog_reducers' | 'contract_catalog_errors'
+  contractRev: number
+  names: string[]
+}
+
+export interface ContractReducerCallPayload extends EventPayloadRecord {
+  event: 'contract_reducer_call'
+  reducer: string
+  channel: 'baseline' | 'session' | 'aoi' | 'feature'
+  args: EventPayloadRecord
+  appliedFrameNo?: number
+}
+
 export interface WorldEntityPayload extends EventPayloadRecord {
   entityId: number
   entityType?: 'player' | 'npc' | 'building' | 'resource' | 'projectile' | 'effect'
@@ -67,6 +98,18 @@ export interface WorldEntityPayload extends EventPayloadRecord {
   quaternion?: { x: number; y: number; z: number; w: number }
   velocity?: { x: number; y: number; z: number }
   reason?: string
+}
+
+export interface EntitySnapshotPayload extends EventPayloadRecord {
+  event?: 'ENTITY_SPAWN_BEGIN' | 'ENTITY_SPAWN_DONE' | 'ENTITY_UPDATE' | 'ENTITY_DESPAWN' | 'ENTITY_POOL_RETURN'
+  entityId: number
+  entityType?: 'player' | 'npc' | 'building' | 'resource' | 'projectile' | 'effect' | 'ui_anchor'
+  state?: 'Discovered' | 'Spawning' | 'Active' | 'Dormant' | 'Despawning' | 'Disposed'
+  reason?: 'aoi_exit' | 'world_despawn' | 'dimension_change' | 'disconnect'
+  profile?: 'low' | 'medium' | 'high' | 'ultra'
+  position?: { x: number; y: number; z: number }
+  quaternion?: { x: number; y: number; z: number; w: number }
+  velocity?: { x: number; y: number; z: number }
 }
 
 export interface PhysicsStepPayload extends EventPayloadRecord {
@@ -92,9 +135,20 @@ export interface FxEventPayload extends EventPayloadRecord {
     | 'skill.impact'
     | 'ambient.loop'
     | 'ui.alert'
+    | 'hit'
+    | 'critical_hit'
+    | 'skill_cast'
+    | 'skill_impact'
+    | 'ambient_loop'
+    | 'ui_alert'
     | string
   sourceEntityId: number
   targetEntityId?: number
+  event_id?: number | string
+  event_type?: string
+  source_entity_id?: number | string
+  target_entity_id?: number | string
+  ttl_ms?: number
   position?: { x: number; y: number; z: number }
   normal?: { x: number; y: number; z: number }
   intensity?: number
