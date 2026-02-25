@@ -1,70 +1,61 @@
 # 08 Physics Constraint Softbody
 
-작성일: 2026-02-24
-범위: 물리 런타임, 제약, 소프트바디 운영 규칙
+작성일: 2026-02-26
+범위: 로컬 물리/보정/제약 처리와 서버 동기화 규칙
 
 ## 목표
-- 게임플레이 물리 안정성과 시각 보강 물리 성능을 동시에 확보한다.
+- 서버 authoritative 물리 상태를 클라이언트 예측과 안정적으로 결합한다.
+- 보정 이벤트와 ack 흐름을 2.0 호출 모델에 맞춰 명확히 분리한다.
 
 ## 범위
-- 포함: rigid body, collision/trigger, constraint, rope/cloth.
-- 제외: 서버 물리 엔진 내부 구현.
+- 포함: 입력 프레임 제출, 보정 적용, 제약/소프트바디 업데이트 정책.
+- 제외: 서버 물리 엔진 파라미터 튜닝.
 
 ## 인터페이스
-- 물리 서비스 API:
-  - `createBody(desc): BodyHandle`
-  - `removeBody(bodyId): void`
-  - `applyImpulse(bodyId, impulse, point): void`
-  - `setKinematicTarget(bodyId, transform): void`
-- 제약 API:
-  - `createConstraint(type, a, b, params): ConstraintHandle`
-  - `updateConstraint(id, params): void`
-  - `removeConstraint(id): void`
-- 소프트바디 API:
-  - `createRope(desc)`
-  - `createCloth(desc)`
+- 물리 API:
+  - `PhysicsRuntime.step(dtMs): void`
+  - `PhysicsRuntime.applyServerState(state): void`
+  - `PhysicsRuntime.applyCorrection(correction): void`
+  - `PhysicsRuntime.ackCorrection(correctionId, frameNo): Promise<CallResult>`
 
 ## 데이터/이벤트
-- shape registry:
-  - `Box`, `Sphere`, `Capsule`, `ConvexHull`, `TriangleMesh`, `Heightfield`.
-- constraint type:
-  - `Hinge`, `Slider`, `Fixed`, `PointToPoint`, `D6`.
-- 파라미터 기본값:
-  - solver iteration `8`
-  - substep `2`
-  - max depenetration velocity `3.0 m/s`
-- 이벤트:
-  - `PHYS_COLLISION_ENTER`, `PHYS_COLLISION_EXIT`, `PHYS_TRIGGER`, `PHYS_SLEEP`, `PHYS_WAKE`.
+- 상태 소스:
+  - `physics_state`, `transform_state`, `server_correction_state`
+- 호출 흐름:
+  1. `submit_input_frame` 호출
+  2. 호출 결과 성공/실패 처리
+  3. 보정 상태/이벤트 수신
+  4. 로컬 롤백+재적용
+  5. `ack_server_correction` 호출
+- 지연/보간:
+  - 보정 스냅 허용 임계치: `0.8m`
+  - 임계치 이하 보정은 `120ms` 보간
 
 ## 실패 모드
-- 고속 충돌에서 터널링.
-- 제약 파라미터 불안정으로 진동 폭주.
-- 소프트바디 업데이트 과부하.
-- 서버 보정과 물리 상태 충돌.
+- 보정 ack 누락으로 동일 보정 반복.
+- 호출 실패를 무시해 로컬/서버 상태 벌어짐.
+- 소프트바디 업데이트가 메인 스레드 장시간 점유.
 
 ## 검증
-- 시나리오:
-  - `S03` 전투 중 충돌/투사체 집중.
-  - `S05` 환경 오브젝트 동시 상호작용.
 - assertion:
-  - `A-PHYS-001` NaN/Inf 상태 0건.
-  - `A-PHYS-002` 충돌 이벤트 유실률 < `0.5%`.
-  - `A-PHYS-003` 제약 분리 오차 < `0.05m`.
-- 관측 지표:
-  - physics step ms, active body count, constraint solve ms.
+  - `A-PHYS-001` 보정 ack 누락 0건
+  - `A-PHYS-002` 위치 오차 p95 `< 0.4m`
+  - `A-PHYS-003` 보정 루프 후 발산 케이스 0건
+- 시나리오:
+  - `S01` 스폰 직후 이동
+  - `S02` 고지연 네트워크 재연
 
 ## 운영
-- 권위 상태 우선:
-  - 서버 보정 수신 시 클라 물리 상태를 보정 스냅샷으로 스냅.
-- 소프트바디는 시각 보강 전용으로 분류.
-- 저사양에서는 rope/cloth 업데이트 빈도 절반으로 자동 강등.
+- 보정 정책 변경 시 리플레이 기반 회귀 테스트를 필수 실행한다.
+- 물리 스텝 시간 초과 시 즉시 telemetry 이벤트를 남긴다.
 
 ## 수용 기준
-- 장시간 테스트에서 물리 폭주/크래시 0건.
-- 제약/소프트바디가 성능 예산 내 동작.
-- 보정 후 시각적 튐이 허용 범위 내.
+- 장시간 이동 테스트에서 보정 진동이 누적되지 않는다.
+- 보정 ack 경로가 실패/성공 모두 관측 가능하다.
+- 물리/렌더 불일치가 허용 임계치를 넘지 않는다.
 
 ## Cross-Refs
 - `03-spacetimedb-contract.md`
-- `10-fx-particle-event-bus.md`
+- `04-subscription-topology-and-aoi.md`
 - `14-performance-budget-and-profiling.md`
+- `15-test-plan-and-acceptance.md`

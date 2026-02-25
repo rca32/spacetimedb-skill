@@ -1,60 +1,57 @@
 # 19 Agent First Development Principles
 
-작성일: 2026-02-24
-범위: clientv2 설계/구현/검증/배포 전 과정의 agent-first 원칙
+작성일: 2026-02-26
+범위: clientv2 agent-first 개발 원칙과 SpacetimeDB 2.0 회귀 방지 규칙
 
 ## 목표
-- 개발 의사결정의 기준을 "자동 검증 가능성"으로 통일한다.
-- 구현보다 검증 설계를 먼저 확정하는 문화를 강제한다.
+- 설계-구현-검증 전 과정을 자동 실행 가능한 규칙으로 고정한다.
+- 1.0 패턴 회귀를 PR 단계에서 사전에 차단한다.
 
 ## 범위
-- 포함: 계획, 구현, 리뷰, 병합, 릴리스 규칙.
-- 제외: 수동 검증 중심 개발 프로세스.
+- 포함: 작업 단위, PR 규칙, 증거 기준, 금지 패턴.
+- 제외: 조직 일반 프로세스 정책.
 
 ## 인터페이스
-- 기능 정의 최소 항목:
-  - `feature_id`, `scenario_ids`, `assertion_ids`, `artifact_paths`, `perf_budget`.
-- PR 최소 항목:
-  - 자동 실행 결과 링크
-  - assertion 통과표
-  - 실패 아티팩트(있는 경우)
+- PR 체크 API:
+  - `runPreflightChecks(): Promise<CheckResult>`
+  - `runScenarioSuite(target): Promise<SuiteResult>`
+  - `publishEvidence(runId): Promise<void>`
 
 ## 데이터/이벤트
-- 핵심 원칙:
-  1. Plan Before Code
-  2. Observable By Default
-  3. Deterministic First
-  4. Agent Runnable Scenarios
-  5. Evidence Or It Did Not Happen
-  6. Human Review Is Secondary
-- 병합 금지 조건:
-  - 시나리오 미구현
-  - assertion 누락
-  - artifact 누락
-  - 수동 확인만 존재
+- 필수 원칙:
+  1. 문서 변경 없이 구현 변경 금지 (`03`,`04`,`15` 우선)
+  2. 금지 API 스캔 pass 없는 PR 금지
+  3. reducer 호출 결과와 이벤트 처리 경로 분리 증거 필수
+  4. onApplied barrier 준수 증거 필수
+  5. UNSTABLE CLI 명령 사용 시 버전/출력 로그 첨부
+- PR 최소 증거:
+  - 테스트 리포트
+  - assertion 매트릭스
+  - 시각 증거(해당 기능군)
+  - 성능 스냅샷
 
 ## 실패 모드
-- 기능은 동작하지만 관측 인터페이스가 없어 검증 불가.
-- flaky 테스트를 품질 이슈로 취급하지 않음.
-- 자동 검증 실패를 수동 판단으로 덮음.
+- 문서-코드 드리프트 발생.
+- 자동 증거 없는 주관적 pass.
+- 2.0 금지 패턴이 코드 리뷰에서 누락.
 
 ## 검증
-- 원칙 준수 assertion:
-  - `A-PRINCIPLE-001` 모든 기능에 scenario 매핑 존재.
-  - `A-PRINCIPLE-002` 모든 PR에 artifact 링크 존재.
-  - `A-PRINCIPLE-003` 수동-only pass 0건.
+- assertion:
+  - `A-AGENT-001` 문서 미동기화 PR 0건
+  - `A-AGENT-002` 증거 누락 PR 0건
+  - `A-AGENT-003` 2.0 금지 패턴 회귀 0건
 
 ## 운영
-- 주 2회 원칙 준수 리뷰(문서/코드/테스트 교차검토).
-- 원칙 위반 PR은 리뷰 단계에서 차단.
-- 테스트 인프라 작업은 기능 작업과 동일 우선순위로 스프린트 반영.
+- PR 템플릿에 2.0 체크리스트를 고정한다.
+- 회귀 발생 시 즉시 rule 업데이트 + 재발방지 테스트 추가.
 
 ## 수용 기준
-- 팀 내 구현자가 추가 합의 없이 동일 기준으로 판단 가능.
-- 릴리스 승인 로그가 자동 증거 중심으로 일관된다.
-- 원칙 위반이 자동으로 탐지/차단된다.
+- 구현자는 결정되지 않은 사항 없이 바로 작업 가능하다.
+- 리뷰어는 자동 증거만으로 승인 여부를 판단할 수 있다.
+- 2.0 회귀가 릴리스 단계까지 넘어가지 않는다.
 
 ## Cross-Refs
 - `00-development-start-gate.md`
-- `02-system-architecture.md`
+- `03-spacetimedb-contract.md`
+- `15-test-plan-and-acceptance.md`
 - `18-agent-browser-wsl-visual-proof-strategy.md`

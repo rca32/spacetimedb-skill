@@ -1,72 +1,71 @@
 # 05 Entity Lifecycle And Scene Graph
 
-작성일: 2026-02-24
-범위: 엔티티 수명주기, 씬 그래프, 풀링/해제 정책
+작성일: 2026-02-26
+범위: 상태 테이블/이벤트 테이블 기반 엔티티 수명주기 및 씬 그래프 규칙
 
 ## 목표
-- 서버 상태와 클라이언트 엔티티 생명주기를 1:1 대응시킨다.
-- 누수/중복 생성/유령 엔티티를 구조적으로 차단한다.
+- SpacetimeDB 2.0 캐시 semantics에 맞춰 엔티티 생성/갱신/삭제를 안정화한다.
+- 상태 변화와 일회성 이벤트를 분리해 씬 오염을 방지한다.
 
 ## 범위
-- 포함: spawn/update/despawn 상태머신, parent 정책, object pool.
-- 제외: 모델 아트 제작 정책.
+- 포함: 엔티티 매핑, 씬 노드 생명주기, 차원 전환 정리, 이벤트 적용 규칙.
+- 제외: 아트 리깅 세부, 이펙트 셰이더 구현.
 
 ## 인터페이스
-- 엔티티 서비스 API:
-  - `spawnEntity(snapshot: EntitySnapshot): EntityHandle`
-  - `applyDelta(delta: EntityDelta): void`
-  - `despawnEntity(entityId: bigint, reason: DespawnReason): void`
-  - `queryEntity(entityId: bigint): EntityHandle | null`
+- 엔티티 API:
+  - `EntityRuntime.upsertFromState(row): void`
+  - `EntityRuntime.removeFromState(entityKey): void`
+  - `EntityRuntime.applyEvent(event): void`
+  - `EntityRuntime.switchDimension(nextDimensionId): Promise<void>`
 - 씬 그래프 API:
-  - `attachToWorld(node, layer)`
-  - `attachToUi(node, panel)`
-  - `changeParent(node, parentId, keepWorldTransform)`
+  - `SceneGraphRuntime.attach(node, layer): void`
+  - `SceneGraphRuntime.detach(node): void`
 
 ## 데이터/이벤트
-- 상태머신:
-  1. `Discovered`
-  2. `Spawning`
-  3. `Active`
-  4. `Dormant` (AOI 밖 soft-despawn)
-  5. `Despawning`
-  6. `Disposed`
-- 엔티티 타입:
-  - `Player`, `NPC`, `ResourceNode`, `Building`, `Projectile`, `EffectProxy`, `UiAnchor`.
-- 씬 레이어:
-  - `World.Static`, `World.Dynamic`, `World.Transparent`, `World.Fx`, `UI.View`, `UI.World`.
-- 필수 이벤트:
-  - `ENTITY_SPAWN_BEGIN`, `ENTITY_SPAWN_DONE`, `ENTITY_UPDATE`, `ENTITY_DESPAWN`, `ENTITY_POOL_RETURN`.
+- 상태 테이블 기반 수명주기:
+  - `onInsert`: 엔티티 생성
+  - `onUpdate`: transform/상태 동기화
+  - `onDelete`: 엔티티 제거
+- 이벤트 테이블 기반 일회성 처리:
+  - `combat_hit_event` -> 피격 연출
+  - `fx_event` -> 파티클/데칼 스폰
+  - `audio_event` -> 3D 오디오 트리거
+  - `ui_notification_event` -> HUD 알림
+- 구분 규칙:
+  - 상태 테이블은 장기 상태의 단일 소스 오브 트루스
+  - 이벤트 테이블은 트랜잭션성 단발 이벤트
+  - 이벤트 테이블 row를 로컬 캐시에 영구 엔티티로 보관하지 않는다
+- 차원 전환:
+  1. 현재 차원 노드에 `pending-destroy` 마크
+  2. 신규 차원 `aoi` onApplied 대기
+  3. 신규 차원 노드 attach
+  4. 구차원 잔여 노드 detach
 
 ## 실패 모드
-- 동일 `entity_id` 중복 spawn.
-- parent 변경 시 transform 손실.
-- despawn 이후 참조 잔존으로 메모리 누수.
-- AOI 이탈 후 재진입 시 stale snapshot 적용.
+- 이벤트를 상태로 오인해 영구 노드가 누적됨.
+- `onApplied` 전 엔티티 생성으로 중복 노드 발생.
+- 차원 전환 중 구차원 노드 누수.
 
 ## 검증
-- 시나리오:
-  - `S02` AOI 왕복 중 엔티티 재활성화.
-  - `S03` 전투 중 projectile/effect 대량 spawn/despawn.
 - assertion:
-  - `A-ENT-001` 중복 entity_id 0건.
-  - `A-ENT-002` despawn 후 핸들 참조 0건.
-  - `A-ENT-003` parent 변경 후 world transform 오차 < `0.01`.
-- 관측 지표:
-  - 활성 엔티티 수, 풀 사용률, 프레임당 spawn/despawn 비용.
+  - `A-ENTITY-001` 엔티티 키 충돌 0건
+  - `A-ENTITY-002` 차원 전환 후 orphan 노드 0건
+  - `A-ENTITY-003` 이벤트 노드 TTL 만료 누락 0건
+- 시나리오:
+  - `S02` AOI 왕복
+  - `S03` 전투 이벤트 burst
 
 ## 운영
-- 풀링 정책:
-  - `Projectile`, `EffectProxy`, `UiAnchor`는 풀링 필수.
-  - `Player`, `NPC`, `Building`은 상태 재사용 기반 소프트풀.
-- hard-despawn은 disconnect/dimension unload에서만 허용.
-- 런타임 종료 시 `Disposed` 누락 엔티티가 있으면 fail-fast 로그 발생.
+- 엔티티 타입 추가 시 상태/이벤트 소스 분류를 `03` 문서에 먼저 등록한다.
+- 이벤트 소비 핸들러는 최대 처리 시간(`ms`)을 계측한다.
 
 ## 수용 기준
-- 30분 플레이 시 유령 엔티티/중복 엔티티 0건.
-- AOI 왕복 중 재스폰 지연이 `100ms` 이내.
-- 메모리 사용량이 장시간 선형 증가하지 않는다.
+- 엔티티 그래프가 상태 테이블과 1:1로 수렴한다.
+- 이벤트 처리 후 누수 없이 씬이 안정화된다.
+- 차원 전환 100회 반복에서 노드 수 드리프트가 0에 수렴한다.
 
 ## Cross-Refs
+- `03-spacetimedb-contract.md`
 - `04-subscription-topology-and-aoi.md`
-- `07-octree-culling-picking-streaming.md`
+- `10-fx-particle-event-bus.md`
 - `15-test-plan-and-acceptance.md`

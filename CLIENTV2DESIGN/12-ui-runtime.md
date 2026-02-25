@@ -1,70 +1,61 @@
 # 12 UI Runtime
 
-작성일: 2026-02-24
-범위: ViewPanel/WorldPanel 기반 GUI 런타임 및 데이터 바인딩
+작성일: 2026-02-26
+범위: HUD/패널/상호작용 UI의 2.0 호출 결과 및 이벤트 처리 규칙
 
 ## 목표
-- HUD/패널/월드 마커를 통합한 UI 런타임을 확정한다.
-- 입력 포커스 충돌 없이 게임 입력과 UI 입력을 공존시킨다.
+- 사용자 액션 피드백을 reducer per-call 결과로 일관되게 제공한다.
+- 타 클라이언트 유발 변화는 상태/이벤트 수신으로만 반영한다.
 
 ## 범위
-- 포함: UI 레이어 구조, 이벤트 버스, 상태머신, 대량 마커 최적화.
-- 제외: 최종 아트 테마 스타일링.
+- 포함: HUD, 인벤토리, 퀘스트, 채팅, 알림, 오류 표시 정책.
+- 제외: UI 아트 스타일 가이드.
 
 ## 인터페이스
-- UI 루트 API:
-  - `openPanel(panelId, params)`
-  - `closePanel(panelId)`
-  - `setPanelVisible(panelId, visible)`
-  - `setFocusOwner(owner)`
-- 월드 UI API:
-  - `attachWorldMarker(entityId, markerType)`
-  - `detachWorldMarker(entityId, markerType)`
-  - `updateMarkerState(entityId, state)`
-- 바인딩 API:
-  - `bindTable(tableName, mapper)`
+- UI API:
+  - `UiRuntime.dispatchAction(action): Promise<void>`
+  - `UiRuntime.applyStateSnapshot(state): void`
+  - `UiRuntime.applyNotification(event): void`
+- 오류 매핑 API:
+  - `UiErrorMapper.map(errorCode): UiMessage`
 
 ## 데이터/이벤트
-- 패널 계층:
-  - `HUD`, `Inventory`, `Quest`, `Chat`, `Map`, `Settings`, `Modal`, `Toast`.
-- panel order:
-  - HUD `100`, 일반 패널 `200`, 모달 `300`, 시스템 오버레이 `400`.
-- 포커스 상태:
-  - `GameOnly`, `UiOnly`, `Hybrid`, `ModalLock`.
-- 대량 마커:
-  - `UIImageGroup` 기반 배치 렌더.
-  - `GUIConfig.quadMaxCountForView` 기본 `20000`.
-- 데이터 바인딩 소스:
-  - `player_session_v2`, `combat_state_v2`, `quest_state_v2`, `inventory_item_v2`, `chat_message_v2`.
+- 호출 기반 피드백:
+  - 사용자가 호출한 reducer 성공/실패는 즉시 UI 응답으로 표시
+  - 실패는 `errorCode + detail`로 표준 메시지 출력
+- 수신 기반 갱신:
+  - 상태 테이블 변화 -> HUD/패널 데이터 갱신
+  - `ui_notification_event` -> 토스트/배너/경고
+- 규칙:
+  - 호출 성공을 타 클라이언트 이벤트로 추론하지 않는다.
+  - `Event::Transaction` 분기를 별도로 처리한다.
+  - onApplied 전 상태 기반 위젯 초기화 금지
 
 ## 실패 모드
-- UI 포커스 고착으로 게임 입력 불능.
-- panel order 충돌로 클릭 막힘.
-- 대량 마커에서 UI 프레임 비용 급증.
-- 서버 상태 변경이 UI에 늦게 반영.
+- 호출 실패를 일반 오류로 뭉개서 복구 가이드 상실.
+- 이벤트 알림 중복 표출.
+- 초기 로딩 시 빈 데이터 깜빡임.
 
 ## 검증
-- 시나리오:
-  - `S04` 모달 열기/닫기/포커스 전환.
-  - `S02` AOI 이동 중 월드 마커 갱신.
 - assertion:
-  - `A-UI-001` 포커스 상태 전이 불법 경로 0건.
-  - `A-UI-002` panel order 역전 0건.
-  - `A-UI-003` 마커 5000개에서 UI update p95 `< 3ms`.
-- 지표:
-  - panel count, visible widget count, ui update ms, input latency ms.
+  - `A-UI-001` 오류코드 미매핑 0건
+  - `A-UI-002` 중복 토스트율 `< 0.2%`
+  - `A-UI-003` onApplied 이전 렌더된 데이터 위젯 0건
+- 시나리오:
+  - `S01` 로그인/초기화
+  - `S04` 모달/포커스/입력 충돌
 
 ## 운영
-- UI atlas/font/audio 자산은 clientv2 내 복사본만 참조.
-- UI 상태머신 변경 시 `S04` assertion 세트 필수 갱신.
-- 디버그 HUD에서 focus owner/panel order 실시간 표시.
+- 신규 reducer 추가 시 UI 메시지 매핑 테이블을 동시 갱신한다.
+- UX 변경은 호출 결과 로그와 함께 검토한다.
 
 ## 수용 기준
-- UI 상호작용이 게임 입력과 충돌하지 않는다.
-- 대량 UI 시나리오에서 성능 예산 준수.
-- 서버 상태 반영 지연이 허용 범위 내(`<= 100ms`).
+- 사용자 액션의 성공/실패 원인이 UI에서 즉시 식별된다.
+- 교차 클라이언트 변화가 중복/누락 없이 표시된다.
+- 초기 로딩과 재연결에서 UI 불안정이 재현되지 않는다.
 
 ## Cross-Refs
 - `03-spacetimedb-contract.md`
+- `04-subscription-topology-and-aoi.md`
 - `11-audio-runtime.md`
-- `14-performance-budget-and-profiling.md`
+- `15-test-plan-and-acceptance.md`

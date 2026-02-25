@@ -1,64 +1,56 @@
 # 13 Asset Pipeline Kenney
 
-작성일: 2026-02-24
-범위: 그래픽/오디오 에셋 복사 기반 반입 및 배포 파이프라인
+작성일: 2026-02-26
+범위: Kenney 기반 에셋 파이프라인과 2.0 이벤트 타입 정합 규칙
 
 ## 목표
-- `assetdirectory` 자산을 링크 없이 복사해 clientv2 런타임 경로로 반입한다.
-- 해시/매니페스트/라이선스 스냅샷으로 재현 가능한 자산 빌드를 보장한다.
+- 런타임이 소비하는 에셋 키를 SpacetimeDB 이벤트/상태 타입과 정합시킨다.
+- 에셋 누락 시 게임이 중단되지 않도록 안전한 fallback을 제공한다.
 
 ## 범위
-- 포함: 수집, 정규화, 복사, 매니페스트, 검증, 배포.
-- 제외: 외부 CDN 실시간 참조.
+- 포함: 에셋 복사/정규화, manifest, 이벤트 타입-에셋 매핑.
+- 제외: DCC 툴 편집 워크플로.
 
 ## 인터페이스
-- 파이프라인 명령:
-  - `asset-copy sync --profile core-only`
-  - `asset-copy sync --profile core-plus-feature`
-  - `asset-copy verify --strict`
-- 출력 산출물:
-  - `stitch-orillusion-clientv2/public/props/kenney/...`
-  - `stitch-orillusion-clientv2/public/audio/...`
-  - `stitch-orillusion-clientv2/public/ui/...`
-  - `stitch-orillusion-clientv2/assets/manifest/asset_manifest_v2.json`
-  - `stitch-orillusion-clientv2/assets/manifest/license_snapshot_v2.json`
+- 파이프라인 API:
+  - `buildAssetManifest(): Promise<Manifest>`
+  - `resolveAsset(key): AssetHandle | null`
+  - `validateEventAssetMapping(): ValidationReport`
 
 ## 데이터/이벤트
-- Core pack:
-  - `building-kit`, `nature-kit`, `fantasy-town-kit`, `castle-kit`, `blocky-characters`.
-- Feature pack:
-  - `modular-dungeon-kit`, `graveyard-kit`, `survival-kit`.
-- 오디오 카테고리:
-  - `RPG sounds`, `UI sounds`, `Digital sounds`(선별), `Casino/Jingle`(옵션).
-- 매니페스트 스키마:
-  - `asset_id`, `src_path`, `dst_path`, `sha256`, `bytes`, `pack`, `category`, `license_id`, `profile_tags[]`.
+- 입력:
+  - `assetdirectory` 원본 에셋
+  - `fx_event`, `audio_event`, `ui_notification_event` 타입 목록
+- 출력:
+  - `asset_manifest.json`
+  - `event_asset_mapping.json`
+- 규칙:
+  - 이벤트 타입별 최소 1개 기본 에셋 지정
+  - 매핑 누락 이벤트는 no-op + 경고 로그로 처리
+  - 에셋 키는 stable identifier 문자열 사용
 
 ## 실패 모드
-- 링크/직참조가 남아 배포 환경에서 경로 깨짐.
-- 동일 파일 중복 복사로 용량 폭증.
-- 라이선스 스냅샷 누락.
-- 매니페스트와 실제 파일 불일치.
+- 이벤트 타입 추가 시 매핑 누락.
+- 플랫폼별 포맷 차이로 로드 실패.
+- manifest와 실제 파일 불일치.
 
 ## 검증
 - assertion:
-  - `A-ASSET-001` 심볼릭 링크 참조 0건.
-  - `A-ASSET-002` 매니페스트 해시 불일치 0건.
-  - `A-ASSET-003` core-only에서 필수 에셋 누락 0건.
-- 지표:
-  - 총 파일 수, 총 용량, 중복 제거율, 복사 시간.
+  - `A-ASSET-001` manifest 누락 키 0건
+  - `A-ASSET-002` 이벤트 타입 매핑 누락 0건
+  - `A-ASSET-003` 로드 실패율 `< 0.5%`
 
 ## 운영
-- source-of-truth는 항상 `assetdirectory` 원본.
-- clientv2는 복사본만 사용.
-- pack 변경 시 `asset_manifest_v2` rev 증가.
-- 릴리스 전에 `asset-copy verify --strict` pass 필수.
+- 이벤트 타입 추가 PR은 매핑 파일 변경을 필수 포함한다.
+- 런타임 로드 실패는 타입/에셋키를 telemetry에 기록한다.
 
 ## 수용 기준
-- core-only 모드에서 게임 루프(이동/전투/UI/오디오)가 완결된다.
-- feature 비활성 시 관련 에셋 로드 호출 0건.
-- 자동 검증으로 파일/라이선스 무결성 증명 가능.
+- 이벤트 기반 FX/Audio/UI가 에셋 누락 없이 동작한다.
+- 누락이 발생해도 게임 루프가 중단되지 않는다.
+- manifest 해시와 빌드 아티팩트 해시가 일치한다.
 
 ## Cross-Refs
+- `03-spacetimedb-contract.md`
+- `10-fx-particle-event-bus.md`
 - `11-audio-runtime.md`
-- `12-ui-runtime.md`
 - `16-build-release-cutover.md`

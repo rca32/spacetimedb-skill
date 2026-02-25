@@ -1,58 +1,59 @@
 # 17 Risk Register And Open Issues
 
-작성일: 2026-02-24
-범위: clientv2 리스크 관리와 미결정 이슈 운영
+작성일: 2026-02-26
+범위: clientv2 SpacetimeDB 2.0 리스크와 미결정 이슈 관리
 
 ## 목표
-- 빅뱅 개발/배포 리스크를 정량적으로 관리한다.
-- 미결정 이슈를 기본값과 함께 통제해 구현 지연을 방지한다.
+- 핵심 리스크를 조기 식별하고 기본 대응값을 고정한다.
+- 미결정 항목을 구현 차단 없이 추적 가능한 형태로 관리한다.
 
 ## 범위
-- 포함: 리스크 템플릿, 우선순위, 대응 SLA, 이슈 관리 규칙.
-- 제외: 일반 회의 메모.
+- 포함: 기술/운영/릴리스 리스크, 대응책, 오너, 종료 조건.
+- 제외: 우선순위가 낮은 아이디어 메모.
 
 ## 인터페이스
-- 리스크 항목 필드:
-  - `risk_id`, `title`, `type`, `probability`, `impact`, `owner`, `mitigation`, `status`, `target_date`.
-- 이슈 항목 필드:
-  - `issue_id`, `decision_needed`, `default_assumption`, `deadline`, `owner`, `status`.
+- 리스크 API:
+  - `listOpenRisks(): RiskItem[]`
+  - `updateRiskStatus(id, status): void`
+  - `exportRiskSnapshot(runId): Promise<void>`
 
 ## 데이터/이벤트
-- 초기 리스크:
-  - `R-001` Gate-0 체인 불안정으로 개발 지연
-  - `R-002` 서버 v2 계약 변경 폭 과대
-  - `R-003` 실GPU Lane B 환경 의존성
-  - `R-004` 에셋 복사 파이프라인 용량 증가
-  - `R-005` 대량 UI/FX 동시 부하로 성능 회귀
-- 초기 오픈 이슈 + 기본값:
-  - `I-001` audio_event_v2 권위 수준 -> 기본값: 서버 emit + 클라 local mix
-  - `I-002` quest UI 갱신 주기 -> 기본값: `200ms`
-  - `I-003` ultra profile 지원 범위 -> 기본값: 실GPU Lane B pass 장치만
+- R1: 이벤트 burst로 메인 스레드 포화
+  - 기본값: 프레임당 이벤트 처리 상한 `128`
+  - 대응: 우선순위 큐 + 드롭 정책
+- R2: private 바인딩 누락으로 런타임 접근 실패
+  - 기본값: private 의존 기능은 릴리스 체크리스트에서 명시
+  - 대응: codegen 옵션 검증 자동화
+- R3: confirmed reads 지연으로 입력 체감 저하
+  - 기본값: UX 표시는 optimistic, authoritative 반영은 confirmed 기준
+  - 대응: 지연 HUD + 보정 정책
+- R4: 채널 부분장애가 세션 전체 장애로 전파
+  - 기본값: 채널 독립 백오프
+  - 대응: 격리 복구 테스트 의무화
+- Open issue:
+  - O1: 대규모 공성전 이벤트 샤딩 규칙 확정 필요
+  - O2: 모바일 tier별 이벤트 budget 세분화 필요
 
 ## 실패 모드
-- 리스크 등록만 하고 대응 실행이 없음.
-- 오픈 이슈 결정 지연으로 문서-코드 괴리.
-- 소유자 미지정으로 처리 누락.
+- 리스크가 문서에만 존재하고 테스트에 반영되지 않음.
+- 미결정 이슈가 릴리스 직전까지 방치.
 
 ## 검증
-- 주 2회 리스크 리뷰.
-- High 리스크는 대응 작업 없으면 No-Go.
-- 만료된 open issue는 자동 escalatation.
+- assertion:
+  - `A-RISK-001` High risk 대응책 없는 항목 0건
+  - `A-RISK-002` Open issue 기본값 미정 0건
 
 ## 운영
-- 리스크 상태:
-  - `open`, `mitigating`, `blocked`, `closed`.
-- 대응 SLA:
-  - High: 48시간 내 완화 계획 제출.
-  - Medium: 5영업일 내 처리.
-- 릴리스 전에는 High `0`건 필수.
+- 주 1회 리스크 리뷰를 고정한다.
+- 상태 변경은 관련 문서(`14`,`15`,`16`) 동시 반영을 요구한다.
 
 ## 수용 기준
-- 모든 High 리스크에 오너/기한/완화계획이 존재.
-- open issue마다 기본값이 명시되어 구현 차단이 발생하지 않는다.
-- 리스크 업데이트 이력이 릴리스 판단에 직접 사용된다.
+- High 리스크는 완화 근거가 없으면 릴리스 불가.
+- Open issue는 모두 기본값/임시정책이 정의되어 있다.
+- 리스크 이력 추적이 자동 리포트로 가능하다.
 
 ## Cross-Refs
-- `01-scope-and-definition-of-done.md`
+- `03-spacetimedb-contract.md`
+- `14-performance-budget-and-profiling.md`
+- `15-test-plan-and-acceptance.md`
 - `16-build-release-cutover.md`
-- `19-agent-first-development-principles.md`

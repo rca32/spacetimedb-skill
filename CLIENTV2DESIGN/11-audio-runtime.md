@@ -1,72 +1,61 @@
 # 11 Audio Runtime
 
-작성일: 2026-02-24
-범위: 2D/3D 오디오 런타임, 버스 믹싱, 에셋 매핑
+작성일: 2026-02-26
+범위: 3D 오디오/믹서/스트리밍 런타임의 2.0 이벤트 동기화
 
 ## 목표
-- 월드 3D 오디오와 UI/BGM 2D 오디오를 통합 운영한다.
-- 이벤트 기반 재생으로 동기화/성능/디버깅 가능성을 확보한다.
+- 오디오 트리거를 이벤트 테이블 기반으로 통일한다.
+- 지연/중복 수신에서도 청각적 일관성을 유지한다.
 
 ## 범위
-- 포함: listener, static/position audio, bus, spatial params, asset mapping.
-- 제외: 음원 리마스터링 제작.
+- 포함: BGM/AMB/SFX 라우팅, 3D 위치 오디오, 우선순위 믹싱.
+- 제외: 음원 저작/마스터링 파이프라인.
 
 ## 인터페이스
-- 오디오 서비스 API:
-  - `play2D(key, options): AudioHandle`
-  - `play3D(key, worldPos, options): AudioHandle`
-  - `stop(handle): void`
-  - `setBusVolume(busId, volume01): void`
-  - `setMute(busId, muted): void`
-- listener API:
-  - `bindListenerTo(entityIdOrCameraId): void`
-- 이벤트 매퍼:
-  - `mapGameEventToAudio(eventCode, payload): AudioCue[]`
+- 오디오 API:
+  - `AudioRuntime.applyWorldState(weather, timeOfDay): void`
+  - `AudioRuntime.onAudioEvent(event): void`
+  - `AudioRuntime.tick(dtMs): void`
 
 ## 데이터/이벤트
-- bus 구조:
-  - `master`, `bgm`, `sfx`, `ui`, `ambient`, `voice`.
-- spatial 기본값:
-  - `refDistance=4m`, `maxDistance=45m`, `rolloff=1.0`.
-  - directional cone: `inner=45deg`, `outer=120deg`, `outerGain=0.35`.
-- 동시 재생 제한:
-  - 동일 key 동시 재생 `max=4`.
-  - `ui_*` key는 `120ms` rate limit.
-- 에셋 소스:
-  - 입력: `assetdirectory/audio/kenney_repo/Audio (295 files)`.
-  - 반영: `stitch-orillusion-clientv2/public/audio/{bgm,sfx,ui,ambient}`.
-- 키 네이밍:
-  - `ui_click_primary`, `ui_error_soft`, `rpg_hit_blunt_01`, `ambient_wind_forest_01`.
+- 상태 소스:
+  - `weather_state`, `world_time_state`, `transform_state`
+- 이벤트 소스:
+  - `audio_event(event_type, payload_json)`
+  - `combat_hit_event` 파생 SFX
+- 규칙:
+  - 이벤트는 `event_id` 기준 중복 제거
+  - UI 사운드는 `ui_notification_event`에서 파생
+  - 네트워크 지연 완충을 위한 재생 시작 버퍼 `<= 120ms`
+- 믹싱 정책:
+  - category: `music`, `ambient`, `ui`, `combat`, `world`
+  - 동시 SFX 상한: `64`
 
 ## 실패 모드
-- 키 누락으로 무음.
-- listener 바인딩 손실로 3D 위치 오디오 붕괴.
-- bus gain 비정상으로 클리핑/왜곡.
-- AOI 외부 오디오 미정리로 성능 저하.
+- 이벤트 중복으로 사운드 에코 발생.
+- 버퍼 부족으로 클릭/팝 노이즈.
+- 월드 상태 전환 시 볼륨 급변.
 
 ## 검증
-- 시나리오:
-  - `S03` 전투 hit/skill/피격 오디오.
-  - `S04` UI 다중 클릭/모달 전환.
-  - `S05` 날씨 전환 ambient 교체.
 - assertion:
-  - `A-AUDIO-001` 키 해상 실패 0건.
-  - `A-AUDIO-002` 버스별 볼륨 적용 오차 < `0.01`.
-  - `A-AUDIO-003` AOI 밖 3D 오디오 active count `0`.
-- 지표:
-  - active voices, audio thread ms, decode latency.
+  - `A-AUDIO-001` 중복 재생률 `< 0.1%`
+  - `A-AUDIO-002` 재생 실패율 `< 0.5%`
+  - `A-AUDIO-003` 카테고리 믹스 클리핑 0건
+- 시나리오:
+  - `S03` 전투+FX 동시
+  - `S05` day-night/weather 전환
 
 ## 운영
-- 자산 반입은 링크 금지, 복사본만 사용.
-- 파일명 정규화(`snake_case`) 필수.
-- 음원 누락 시 fallback key(`ui_fallback_click`) 자동 대체.
+- 오디오 이벤트 타입 변경은 문서/SDK 타입을 동시 갱신한다.
+- 모바일 tier에서는 동시 채널 상한을 동적으로 축소한다.
 
 ## 수용 기준
-- 2D/3D 오디오 동시 운용에서 아티팩트 없이 동작.
-- 서버 이벤트와 재생 타이밍 동기화가 유지.
-- 자동 시나리오로 오디오 회귀를 탐지 가능.
+- 전투/환경/UI 사운드가 누락 없이 동기화된다.
+- 장시간 플레이에서 오디오 리소스 누수가 없다.
+- 지연 구간에서도 사용자 체감 품질이 유지된다.
 
 ## Cross-Refs
 - `03-spacetimedb-contract.md`
-- `13-asset-pipeline-kenney.md`
+- `10-fx-particle-event-bus.md`
+- `12-ui-runtime.md`
 - `15-test-plan-and-acceptance.md`

@@ -1,65 +1,60 @@
 # 07 Octree Culling Picking Streaming
 
-작성일: 2026-02-24
-범위: Octree 기반 공간 질의 통합(컬링/픽/스트리밍)
+작성일: 2026-02-26
+범위: 옥트리 기반 컬링/피킹/스트리밍과 AOI 구독 연동
 
 ## 목표
-- 단일 공간 인덱스로 렌더 가시성, 상호작용 픽, 근접 탐색을 통합한다.
+- AOI 구독 결과를 옥트리 인덱스와 일관되게 동기화한다.
+- 피킹 정확도와 스트리밍 비용 사이의 균형을 유지한다.
 
 ## 범위
-- 포함: 인덱스 구조, 질의 API, 청크 스트리밍 결합, 디버그.
-- 제외: 경로탐색(네비메시) 알고리즘.
+- 포함: 옥트리 갱신 정책, 피킹 경로, LOD 스트리밍 트리거.
+- 제외: 월드 생성 알고리즘 자체.
 
 ## 인터페이스
-- 인덱스 API:
-  - `insert(entityId, bounds, flags): void`
-  - `update(entityId, bounds): void`
-  - `remove(entityId): void`
-- 질의 API:
-  - `rayCasts(ray, mask): Hit[]`
-  - `boxCasts(aabb, mask): Hit[]`
-  - `frustumCasts(frustum, mask): Hit[]`
-- 스트리밍 API:
-  - `onChunkLoaded(chunkId, bounds, entities[])`
-  - `onChunkUnloaded(chunkId)`
+- 옥트리 API:
+  - `OctreeRuntime.upsertProxy(entityKey, bounds): void`
+  - `OctreeRuntime.removeProxy(entityKey): void`
+  - `OctreeRuntime.queryFrustum(camera): EntityKey[]`
+  - `OctreeRuntime.pick(ray): PickResult`
 
 ## 데이터/이벤트
-- 노드 설정:
-  - 최대 깊이 `8`
-  - 분할 임계 객체 수 `64`
-  - 최소 노드 크기 `2m`
-- 플래그 마스크:
-  - `Renderable`, `Pickable`, `Interactable`, `Occluder`, `FxOnly`.
-- 이벤트:
-  - `OCTREE_REBUILD`, `OCTREE_QUERY`, `PICK_RESULT`, `CULL_STATS`.
+- 입력 소스:
+  - `transform_state`, `building_state`, `resource_node`, `npc_state`
+  - `terrain_chunk`, `terrain_chunk_payload`
+- 갱신 정책:
+  - 상태 테이블 diff 적용 후 옥트리 갱신
+  - 이벤트 테이블은 옥트리 구조를 직접 변경하지 않는다
+- AOI 연동:
+  - AOI enter 시 프록시 삽입
+  - AOI exit 히스테리시스 충족 시 프록시 제거
+  - `onApplied` 완료 전 프록시 삽입 금지
 
 ## 실패 모드
-- 동적 객체 이동 누락으로 잘못된 컬링.
-- 청크 언로드 시 인덱스 누락 제거 실패.
-- pick 결과와 UI 힌트 타겟 불일치.
+- AOI 재구독 중 stale 프록시 잔존.
+- 피킹 hit가 이미 삭제된 엔티티를 반환.
+- terrain payload 지연으로 LOD fallback이 장기화.
 
 ## 검증
-- 시나리오:
-  - `S02` AOI 이동 + chunk load/unload.
-  - `S04` 월드 UI 대상 클릭.
 - assertion:
-  - `A-OCT-001` 인덱스 카운트와 활성 엔티티 카운트 일치.
-  - `A-OCT-002` pick 정확도 >= `99.5%` (테스트 세트 기준).
-  - `A-OCT-003` frustum 질의 시간 p95 `< 1.5ms`.
-- 관측 지표:
-  - 노드 수, query 횟수, 평균 hit 수, rebuild 빈도.
+  - `A-OCT-001` stale 프록시 0건
+  - `A-OCT-002` 피킹 miss-rate(유효 타겟 기준) `< 1%`
+  - `A-OCT-003` AOI 전환 후 옥트리 재구성 p95 `< 120ms`
+- 시나리오:
+  - `S02` AOI 경계 왕복
+  - `S05` 차원 전환 + 대량 청크 로드
 
 ## 운영
-- 월드 리셋/차원 전환 시 full rebuild 허용.
-- 일반 프레임에서는 incremental update만 허용.
-- 디버그 오버레이로 노드 경계/쿼리 히트 시각화 제공.
+- 디버그 오버레이에 옥트리 노드 수/프록시 수/쿼리 시간을 표시한다.
+- 스트리밍 임계값 변경 시 성능 리포트를 함께 갱신한다.
 
 ## 수용 기준
-- 브루트포스 대비 공간 질의 성능 우위가 일관되게 재현된다.
-- 컬링/픽 관련 false positive/negative가 허용 기준 내 유지.
-- 스트리밍 이벤트와 인덱스가 동기화 상태를 유지한다.
+- AOI 이동 중 프록시 정합 오류가 재현되지 않는다.
+- 피킹 결과가 서버 상태와 일관된다.
+- 스트리밍 부하 상황에서도 프레임 budget을 유지한다.
 
 ## Cross-Refs
 - `04-subscription-topology-and-aoi.md`
 - `05-entity-lifecycle-and-scene-graph.md`
 - `14-performance-budget-and-profiling.md`
+- `15-test-plan-and-acceptance.md`

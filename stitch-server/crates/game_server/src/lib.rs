@@ -2,7 +2,7 @@ use data_loader::{
     parse_building_defs, parse_combat_action_defs, parse_item_defs, parse_npc_population_defs,
     parse_quest_chain_defs,
 };
-use spacetimedb::{ReducerContext, Table};
+use spacetimedb::{CaseConversionPolicy, ReducerContext, Table};
 
 pub mod agents;
 pub mod auth;
@@ -32,6 +32,9 @@ const QUEST_CHAIN_DEF_CSV: &str =
     include_str!("../../../assets/static_data/quests/quest_chain_def.csv");
 const NPC_POPULATION_DEF_CSV: &str =
     include_str!("../../../assets/static_data/npc/npc_population_def.csv");
+
+#[spacetimedb::settings]
+const CASE_CONVERSION_POLICY: CaseConversionPolicy = CaseConversionPolicy::None;
 
 #[spacetimedb::reducer]
 pub fn seed_data(ctx: &ReducerContext) {

@@ -1,66 +1,56 @@
 # 18 Agent Browser WSL Visual Proof Strategy
 
-작성일: 2026-02-24
-범위: WSL Vite + Windows 실GPU 환경의 2-Lane 자동 검증 전략
+작성일: 2026-02-26
+범위: WSL/agent 기반 시각 검증 증거 수집 전략 (2.0 이벤트 반영)
 
 ## 목표
-- GPU 기반 기능을 AI 시각 해석 대신 기계 판정 가능한 증거로 검증한다.
-- 개발 시작부터 릴리스까지 동일한 검증 체인을 유지한다.
+- 수동 캡처 없이 시각 증거를 자동으로 수집한다.
+- 이벤트 수신에서 렌더 반영까지의 타임라인을 증거로 남긴다.
 
 ## 범위
-- 포함: Lane A/Lane B, deterministic mode, semantic assertions, artifact bundle.
-- 제외: 수동 QA 전용 육안 체크리스트.
+- 포함: 브라우저 자동화, 스크린샷/비디오/로그 동시 수집, 타임라인 증거.
+- 제외: 인간 수동 QA 노트.
 
 ## 인터페이스
-- Lane A 실행 인터페이스:
-  - agent-browser + WSL Vite URL
-  - `__testHarness` scenario 실행
-- Lane B 실행 인터페이스:
-  - Windows Chrome/Edge CDP endpoint
-  - golden baseline 비교 도구(SSIM/PSNR)
+- 증거 수집 API:
+  - `VisualProofRuntime.runScenario(id): Promise<ProofResult>`
+  - `VisualProofRuntime.captureTimeline(markers): Promise<void>`
+  - `VisualProofRuntime.export(runId): Promise<void>`
 
 ## 데이터/이벤트
-- Lane A(매 커밋):
-  - 입력: WSL 환경
-  - 판정: 로그+report+샘플 픽셀+상태 assertion
-- Lane B(일 1회/RC):
-  - 입력: 실GPU
-  - 판정: 핵심 샷 golden 비교 + 핵심 assertion
-- deterministic mode 설정:
-  - random seed 고정
-  - 카메라 경로 고정
-  - day-night 고정
-  - timestep 고정
+- 수집 항목:
+  - 화면: key frame 스크린샷, 30fps 짧은 비디오
+  - 로그: reducer 호출 결과, 구독 onApplied, 이벤트 onInsert
+  - 타임라인 마커:
+    1. reducer request sent
+    2. reducer result received
+    3. event table insert received
+    4. renderer applied
+- WSL 규칙:
+  - 자동화 차단(OAuth/CAPTCHA/2FA/다운로드 제한) 시 human-in-the-loop 스킬 경로 사용
 
 ## 실패 모드
-- WSL과 실GPU 결과 편차 과대.
-- golden drift(기준샷 오염).
-- 시나리오 재현성 붕괴.
+- 화면만 있고 네트워크 증거가 없어 인과 추적 불가.
+- 타임라인 마커 누락.
+- 시나리오 재실행 시 증거 불일치.
 
 ## 검증
-- 착수 판정(Go):
-  - Lane A S01~S05 pass
-  - Lane B 스모크 pass >= 1
-  - artifact bundle 완성
-- No-Go:
-  - 위 조건 미충족 1개 이상.
-- 핵심 assertion:
-  - object-id pass sample 일치
-  - depth histogram 허용 오차 내
-  - UI anchor sample 픽셀 일치
+- assertion:
+  - `A-VIS-001` 시나리오별 필수 스크린샷 누락 0건
+  - `A-VIS-002` 타임라인 4마커 누락 0건
+  - `A-VIS-003` 재실행 간 증거 구조 불일치 0건
 
 ## 운영
-- 본 전략은 Priority #1이며 기능 개발보다 우선한다.
-- Gate-0 회귀 시 기능 개발 즉시 중단.
-- golden 갱신은 릴리스 후보 빌드에서만 허용.
-- 자동 증거 없는 PR/커밋은 병합 금지.
+- 릴리스 후보는 `S01/S03/S05` 시각 증거를 필수 첨부한다.
+- 증거 파일은 run-id와 git sha로 인덱싱한다.
 
 ## 수용 기준
-- Lane A/Lane B 결과로만 개발 진행/릴리스 판단 가능.
-- 수동 육안 확인은 참고용이며 판정 근거가 아니다.
-- 실패 시 원인 분석에 필요한 아티팩트가 항상 남는다.
+- 시각 결과와 네트워크 이벤트의 인과관계가 자동으로 추적된다.
+- 수동 녹화 없이 릴리스 승인 증거가 완성된다.
+- WSL 제약 상황에서도 동일한 증거 포맷을 유지한다.
 
 ## Cross-Refs
-- `00-development-start-gate.md`
-- `14-performance-budget-and-profiling.md`
+- `04-subscription-topology-and-aoi.md`
+- `10-fx-particle-event-bus.md`
 - `15-test-plan-and-acceptance.md`
+- `19-agent-first-development-principles.md`

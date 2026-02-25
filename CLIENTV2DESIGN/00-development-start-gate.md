@@ -1,72 +1,77 @@
 # 00 Development Start Gate
 
-작성일: 2026-02-24
-범위: clientv2 기능 개발 착수 전 필수 검증 게이트(Gate-0)
+작성일: 2026-02-26
+범위: clientv2 착수 전 차단 게이트 (SpacetimeDB 2.0 적합성 포함)
 
 ## 목표
-- 구현 전에 자동 검증 체인이 정상 동작함을 증명한다.
-- 인간 수동 확인 없이 agent 단독으로 pass/fail을 판정 가능한 상태를 강제한다.
+- 개발 시작 전에 2.0 계약 위반 가능성을 선제 차단한다.
+- 런타임/검증 체인이 자동으로 재현 가능한 상태인지 확인한다.
 
 ## 범위
-- 적용 대상: 모든 기능 에픽/스프린트 시작 시점, 렌더·UI·오디오·네트워크 핵심 변경 직후.
-- 제외 대상: 문서 편집, 비기능성 텍스트 수정.
+- 포함: 로컬 환경, 코드젠, 연결 설정, 문서 동기화, 자동 검증 준비.
+- 제외: 기능 구현 자체, 성능 미세 최적화.
 
 ## 인터페이스
-- 필수 테스트 API:
-  - `window.__testHarness.startScenario(name: ScenarioId): Promise<void>`
-  - `window.__testHarness.getReport(): TestReport`
-  - `window.__testHarness.captureFrame(tag: string): Promise<ArtifactRef>`
-- 필수 전역 리포트:
-  - `window.__testReport` (JSON 직렬화 가능)
-- 필수 로그 포맷:
-  - JSON lines, 필드 `ts`, `level`, `event_code`, `scenario_id`, `payload`.
+- Gate API:
+  - `runGate0(): Promise<GateResult>`
+  - `validateSpacetime2Compliance(): Promise<ComplianceResult>`
+  - `emitGateEvidence(runId): Promise<void>`
+- Gate 출력:
+  - `gate0_report.json`
+  - `spacetimedb2_compliance.json`
+  - `gate0_artifacts/`
 
 ## 데이터/이벤트
-- 시나리오 ID: `S01`, `S02`, `S03`, `S04`, `S05`.
-- 핵심 이벤트 코드:
-  - `NET_SUB_OK`, `NET_SUB_FAIL`
-  - `AOI_SWAP`, `AOI_STABLE`
-  - `UI_FOCUS_SET`, `UI_FOCUS_RELEASE`
-  - `FX_EMIT`, `AUDIO_PLAY`
-  - `ASSERT_PASS`, `ASSERT_FAIL`
-  - `GATE_VERDICT`
-- 필수 산출물 경로:
-  - `artifacts/gate0/<run_id>/console.jsonl`
-  - `artifacts/gate0/<run_id>/report.json`
-  - `artifacts/gate0/<run_id>/frames/*.png`
-  - `artifacts/gate0/<run_id>/timeline.json`
+- 사전 체크 항목:
+  1. SpacetimeDB CLI/SDK 2.0 계열 버전 확인
+  2. `withDatabaseName` 사용 확인
+  3. TypeScript API 표기가 공식 기준 문서와 일치하는지 확인
+     - `SpacetimeDB/docs/docs/00200-core-concepts/00600-clients/00700-typescript-reference.md`
+  4. 금지 API 문자열 스캔
+     - `withModuleName`
+     - `withLightMode`
+     - `CallReducerFlags`
+     - `set_reducer_flags`
+  5. 이벤트 테이블 명시 구독 경로 확인
+  6. `onApplied` 배리어 없이 캐시 읽는 경로 금지 확인
+  7. codegen 최신화 실행 여부 확인
+     - `spacetime generate --lang typescript --out-dir stitch-orillusion-clientv2/src/module_bindings --module-path stitch-server/crates/game_server`
+     - private 의존 시 `--include-private` 포함
+     - codegen 실행 시각이 마지막 서버 계약 변경 이후여야 함
+- 운영 체크:
+  - `spacetime call/sql/subscribe/server/list`는 CLI에서 UNSTABLE 경고 대상 명령임을 기록한다.
+  - UNSTABLE 명령은 테스트 자동화에서 버전 고정 로그를 남긴다.
 
 ## 실패 모드
-- `__testHarness` 미노출.
-- 시나리오 미실행 또는 타임아웃.
-- Lane A/Lane B 중 하나라도 fail.
-- assertion 결과 누락.
-- 아티팩트 경로 누락/권한 오류.
-- 수동 확인만 있고 자동 증적 없음.
+- 코드젠 결과와 문서 계약 불일치.
+- 연결 빌더에 1.0 API 잔존.
+- 이벤트 테이블 미구독으로 교차 클라이언트 이벤트 유실.
+- Gate 증적 누락으로 승인 근거 부재.
 
 ## 검증
-- Gate-0 체크리스트:
-  1. Harness 준비: API 3종 호출 가능, `__testReport` 생성 확인.
-  2. Lane A(WSL): S01~S05 전부 pass.
-  3. Lane B(실GPU): 핵심 시나리오 스모크 1회 이상 pass.
-  4. 아티팩트: 로그/리포트/프레임/타임라인/assertion 목록 전부 저장 확인.
-- 판정 규칙:
-  - Go: 체크리스트 1~4 모두 충족.
-  - No-Go: 하나라도 미충족.
+- 필수 assertion:
+  - `A-GATE-001` 금지 API 사용 0건
+  - `A-GATE-002` 2.0 연결 구성 검증 pass
+  - `A-GATE-003` 이벤트 구독 선언 누락 0건
+  - `A-GATE-004` 아티팩트 누락 0건
+  - `A-GATE-005` TypeScript SDK 인터페이스 표기가 공식 레퍼런스와 충돌 0건
+  - `A-GATE-006` codegen 산출물 누락/구버전 0건
+- 실행 기준:
+  - Gate fail 시 기능 브랜치 구현 금지
+  - Gate pass 후에만 시나리오 작업 시작
 
 ## 운영
-- No-Go 상태에서는 기능 구현 커밋을 금지한다.
-- No-Go 상태에서는 테스트 체인 복구가 최우선 작업이다.
-- Gate-0 결과는 매 에픽 시작 시 문서화한다.
-- 승인 기록 템플릿:
-  - 일시, 브랜치, 커밋 SHA, 환경(WSL/Windows), Lane A 결과, Lane B 결과, 최종 판정, 승인자.
+- 매일 첫 작업 전 1회 실행.
+- CI 기본 파이프라인의 첫 단계로 고정.
+- 실패 시 가장 먼저 문서(`03`,`04`,`15`)와 코드젠 설정을 동기화한다.
 
 ## 수용 기준
-- Gate-0 Go 기록이 없는 상태에서 기능 구현 PR이 생성되지 않는다.
-- 동일 시나리오 재실행 시 판정 결과가 일관된다(재현성).
-- 인간 육안 확인 또는 임의 플레이만으로 Go 판정하지 않는다.
+- Gate-0 결과만으로 착수 가능 여부가 자동 판정된다.
+- 수동 승인 없이도 2.0 위반 여부가 식별된다.
+- 재현 가능한 증거가 run-id 기준으로 추적 가능하다.
 
 ## Cross-Refs
+- `01-scope-and-definition-of-done.md`
+- `03-spacetimedb-contract.md`
 - `15-test-plan-and-acceptance.md`
-- `18-agent-browser-wsl-visual-proof-strategy.md`
 - `19-agent-first-development-principles.md`
