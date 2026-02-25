@@ -7,6 +7,8 @@
   "scripts": {
     "assets:copy": "node scripts/copy-kenney-assets.mjs sync --profile core-only",
     "asset-copy": "node scripts/copy-kenney-assets.mjs",
+    "codegen": "bash scripts/codegen-spacetimedb.sh",
+    "codegen:private": "bash scripts/codegen-spacetimedb.sh --include-private",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -15,7 +17,7 @@
     "test:lane-a-core": "node scripts/run-suite-lane-a.mjs --suite core"
   },
   "dependencies": {
-    "spacetimedb": "1.11.3"
+    "spacetimedb": "2.0.1"
   },
   "devDependencies": {
     "playwright": "1.53.2",

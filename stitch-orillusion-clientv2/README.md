@@ -19,6 +19,23 @@ bun run typecheck
 bun run asset-copy verify --strict
 ```
 
+SpacetimeDB TypeScript bindings 생성:
+
+```bash
+# public 항목만 생성
+bun run codegen
+
+# private 항목까지 포함해 생성
+bun run codegen:private
+```
+
+직접 스크립트 실행:
+
+```bash
+bash scripts/codegen-spacetimedb.sh --module-path ../stitch-server/crates/game_server
+bash scripts/codegen-spacetimedb.sh --include-private
+```
+
 Lane A 자동 실행(브라우저 harness):
 
 ```bash
