@@ -133,7 +133,7 @@ import AccountProfileRow from "./account_profile_table";
 import AchievementDefRow from "./achievement_def_table";
 import ActionStateRow from "./action_state_table";
 import AgentResultRow from "./agent_result_table";
-import AoiStreamV2Row from "./aoi_stream_v_2_table";
+import AoiStreamRow from "./aoi_stream_table";
 import AttackOutcomeRow from "./attack_outcome_table";
 import BiomeGenDefRow from "./biome_gen_def_table";
 import BuffStateRow from "./buff_state_table";
@@ -144,11 +144,11 @@ import BuildingStateRow from "./building_state_table";
 import ChatChannelRow from "./chat_channel_table";
 import ChatMessageRow from "./chat_message_table";
 import ClaimStateRow from "./claim_state_table";
-import ClientFrameV2Row from "./client_frame_v_2_table";
-import CollisionProxyV2Row from "./collision_proxy_v_2_table";
+import ClientFrameRow from "./client_frame_table";
+import CollisionProxyRow from "./collision_proxy_table";
 import CombatActionDefRow from "./combat_action_def_table";
-import CombatHitV2Row from "./combat_hit_v_2_table";
-import CombatIntentV2Row from "./combat_intent_v_2_table";
+import CombatHitRow from "./combat_hit_table";
+import CombatIntentRow from "./combat_intent_table";
 import CombatStateRow from "./combat_state_table";
 import DimensionDescRow from "./dimension_desc_table";
 import DimensionNetworkRow from "./dimension_network_table";
@@ -163,7 +163,7 @@ import InstanceStateRow from "./instance_state_table";
 import ItemDefRow from "./item_def_table";
 import MarketFillRow from "./market_fill_table";
 import MarketOrderRow from "./market_order_table";
-import MotionIntentV2Row from "./motion_intent_v_2_table";
+import MotionIntentRow from "./motion_intent_table";
 import NpcAiStatusViewRow from "./npc_ai_status_view_table";
 import NpcAnchorStateRow from "./npc_anchor_state_table";
 import NpcInteractionLogRow from "./npc_interaction_log_table";
@@ -176,7 +176,7 @@ import PartyMemberRow from "./party_member_table";
 import PartyStateRow from "./party_state_table";
 import PathResultRow from "./path_result_table";
 import PathStepRow from "./path_step_table";
-import PhysicsStateV2Row from "./physics_state_v_2_table";
+import PhysicsStateRow from "./physics_state_table";
 import PlayerInventoryContainerViewRow from "./player_inventory_container_view_table";
 import PlayerInventoryItemViewRow from "./player_inventory_item_view_table";
 import PlayerInventorySlotViewRow from "./player_inventory_slot_view_table";
@@ -197,7 +197,7 @@ import ResourceClumpDefRow from "./resource_clump_def_table";
 import ResourceGenDefRow from "./resource_gen_def_table";
 import ResourceNodeRow from "./resource_node_table";
 import ResourceStateRow from "./resource_state_table";
-import ServerCorrectionV2Row from "./server_correction_v_2_table";
+import ServerCorrectionRow from "./server_correction_table";
 import SocialFeedRow from "./social_feed_table";
 import StatusEffectRow from "./status_effect_table";
 import TerrainChunkRow from "./terrain_chunk_table";
@@ -269,17 +269,17 @@ const tablesSchema = __schema({
       { name: 'agent_result_result_id_key', constraint: 'unique', columns: ['resultId'] },
     ],
   }, AgentResultRow),
-  aoi_stream_v2: __table({
-    name: 'aoi_stream_v2',
+  aoi_stream: __table({
+    name: 'aoi_stream',
     indexes: [
       { name: 'stream_key', algorithm: 'btree', columns: [
         'streamKey',
       ] },
     ],
     constraints: [
-      { name: 'aoi_stream_v2_stream_key_key', constraint: 'unique', columns: ['streamKey'] },
+      { name: 'aoi_stream_stream_key_key', constraint: 'unique', columns: ['streamKey'] },
     ],
-  }, AoiStreamV2Row),
+  }, AoiStreamRow),
   attack_outcome: __table({
     name: 'attack_outcome',
     indexes: [
@@ -390,28 +390,28 @@ const tablesSchema = __schema({
       { name: 'claim_state_claim_id_key', constraint: 'unique', columns: ['claimId'] },
     ],
   }, ClaimStateRow),
-  client_frame_v2: __table({
-    name: 'client_frame_v2',
+  client_frame: __table({
+    name: 'client_frame',
     indexes: [
       { name: 'frame_key', algorithm: 'btree', columns: [
         'frameKey',
       ] },
     ],
     constraints: [
-      { name: 'client_frame_v2_frame_key_key', constraint: 'unique', columns: ['frameKey'] },
+      { name: 'client_frame_frame_key_key', constraint: 'unique', columns: ['frameKey'] },
     ],
-  }, ClientFrameV2Row),
-  collision_proxy_v2: __table({
-    name: 'collision_proxy_v2',
+  }, ClientFrameRow),
+  collision_proxy: __table({
+    name: 'collision_proxy',
     indexes: [
       { name: 'proxy_id', algorithm: 'btree', columns: [
         'proxyId',
       ] },
     ],
     constraints: [
-      { name: 'collision_proxy_v2_proxy_id_key', constraint: 'unique', columns: ['proxyId'] },
+      { name: 'collision_proxy_proxy_id_key', constraint: 'unique', columns: ['proxyId'] },
     ],
-  }, CollisionProxyV2Row),
+  }, CollisionProxyRow),
   combat_action_def: __table({
     name: 'combat_action_def',
     indexes: [
@@ -423,28 +423,28 @@ const tablesSchema = __schema({
       { name: 'combat_action_def_action_def_id_key', constraint: 'unique', columns: ['actionDefId'] },
     ],
   }, CombatActionDefRow),
-  combat_hit_v2: __table({
-    name: 'combat_hit_v2',
+  combat_hit: __table({
+    name: 'combat_hit',
     indexes: [
       { name: 'hit_id', algorithm: 'btree', columns: [
         'hitId',
       ] },
     ],
     constraints: [
-      { name: 'combat_hit_v2_hit_id_key', constraint: 'unique', columns: ['hitId'] },
+      { name: 'combat_hit_hit_id_key', constraint: 'unique', columns: ['hitId'] },
     ],
-  }, CombatHitV2Row),
-  combat_intent_v2: __table({
-    name: 'combat_intent_v2',
+  }, CombatHitRow),
+  combat_intent: __table({
+    name: 'combat_intent',
     indexes: [
       { name: 'intent_id', algorithm: 'btree', columns: [
         'intentId',
       ] },
     ],
     constraints: [
-      { name: 'combat_intent_v2_intent_id_key', constraint: 'unique', columns: ['intentId'] },
+      { name: 'combat_intent_intent_id_key', constraint: 'unique', columns: ['intentId'] },
     ],
-  }, CombatIntentV2Row),
+  }, CombatIntentRow),
   combat_state: __table({
     name: 'combat_state',
     indexes: [
@@ -599,17 +599,17 @@ const tablesSchema = __schema({
       { name: 'market_order_order_id_key', constraint: 'unique', columns: ['orderId'] },
     ],
   }, MarketOrderRow),
-  motion_intent_v2: __table({
-    name: 'motion_intent_v2',
+  motion_intent: __table({
+    name: 'motion_intent',
     indexes: [
       { name: 'intent_id', algorithm: 'btree', columns: [
         'intentId',
       ] },
     ],
     constraints: [
-      { name: 'motion_intent_v2_intent_id_key', constraint: 'unique', columns: ['intentId'] },
+      { name: 'motion_intent_intent_id_key', constraint: 'unique', columns: ['intentId'] },
     ],
-  }, MotionIntentV2Row),
+  }, MotionIntentRow),
   npc_ai_status_view: __table({
     name: 'npc_ai_status_view',
     indexes: [
@@ -742,17 +742,17 @@ const tablesSchema = __schema({
       { name: 'path_step_step_key_key', constraint: 'unique', columns: ['stepKey'] },
     ],
   }, PathStepRow),
-  physics_state_v2: __table({
-    name: 'physics_state_v2',
+  physics_state: __table({
+    name: 'physics_state',
     indexes: [
       { name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
     constraints: [
-      { name: 'physics_state_v2_entity_id_key', constraint: 'unique', columns: ['entityId'] },
+      { name: 'physics_state_entity_id_key', constraint: 'unique', columns: ['entityId'] },
     ],
-  }, PhysicsStateV2Row),
+  }, PhysicsStateRow),
   player_inventory_container_view: __table({
     name: 'player_inventory_container_view',
     indexes: [
@@ -973,17 +973,17 @@ const tablesSchema = __schema({
       { name: 'resource_state_entity_id_key', constraint: 'unique', columns: ['entityId'] },
     ],
   }, ResourceStateRow),
-  server_correction_v2: __table({
-    name: 'server_correction_v2',
+  server_correction: __table({
+    name: 'server_correction',
     indexes: [
       { name: 'correction_id', algorithm: 'btree', columns: [
         'correctionId',
       ] },
     ],
     constraints: [
-      { name: 'server_correction_v2_correction_id_key', constraint: 'unique', columns: ['correctionId'] },
+      { name: 'server_correction_correction_id_key', constraint: 'unique', columns: ['correctionId'] },
     ],
-  }, ServerCorrectionV2Row),
+  }, ServerCorrectionRow),
   social_feed: __table({
     name: 'social_feed',
     indexes: [

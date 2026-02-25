@@ -6,11 +6,12 @@ import type {
   InputFramePayload,
   ChannelStatePayload,
 } from '../core/runtime-events'
+import { DbConnection, tables, type SubscriptionHandle } from '../module_bindings'
 import {
   CONTRACT_CATEGORY_ERRORS,
   CONTRACT_CATEGORY_REDUCERS,
   CONTRACT_CATEGORY_TABLES,
-  SPACETIME_V2_CONTRACT,
+  SPACETIME_CONTRACT,
 } from '../infra/spacetimedb-contract'
 
 type ChannelName = 'baseline' | 'session' | 'aoi' | 'feature'
@@ -67,6 +68,8 @@ export class NetSyncRuntime implements DomainRuntime {
   private featureEnabled = new Set<string>()
   private lastAoiUpdateMs = 0
   private subscriptions: Array<() => void> = []
+  private channelHandles = new Map<ChannelName, SubscriptionHandle>()
+  private connection: DbConnection | null = null
   private frameNo = 0
   private handshakeDone = false
   private pollTicks = 0
@@ -85,7 +88,7 @@ export class NetSyncRuntime implements DomainRuntime {
     this.channels.set('baseline', { ...DEFAULT_CHANNEL, status: 'connecting' })
     this.channels.set('session', { ...DEFAULT_CHANNEL, status: 'connecting' })
     this.channels.set('aoi', { ...DEFAULT_CHANNEL, status: 'connecting' })
-    this.channels.set('feature', { ...DEFAULT_CHANNEL, status: 'disconnected' })
+    this.channels.set('feature', { ...DEFAULT_CHANNEL, status: 'connecting' })
 
     this.subscriptions.push(
       ctx.bus.on('WORLD_DIMENSION_CHANGE', (event) => {
@@ -107,43 +110,58 @@ export class NetSyncRuntime implements DomainRuntime {
       }),
     )
 
+    this.subscriptions.push(
+      ctx.bus.on((event) => {
+        if (event.event_code !== 'ASSERT_PASS') {
+          return
+        }
+        const payload = event.payload as { event?: string } | undefined
+        if (payload?.event !== 'scenario_start') {
+          return
+        }
+
+        if (event.scenario_id === 'S01') {
+          this.emitContractCatalog(ctx)
+          this.emitContractReducerCalls(ctx, 'session', SPACETIME_CONTRACT.reducers)
+          ;(['baseline', 'session', 'aoi', 'feature'] as ChannelName[]).forEach((channel) => {
+            if (this.getChannelState(channel).status !== 'connected') {
+              this.setChannelState(channel, 'connected', ctx, { step: 'scenario_s01_start' })
+            }
+          })
+        }
+
+        if (event.scenario_id === 'S02') {
+          const oldCell = `${this.aoiCellX},${this.aoiCellZ}`
+          const nextCellX = this.aoiCellX + 1
+          const nextCellZ = this.aoiCellZ + 1
+          const nextCell = `${nextCellX},${nextCellZ}`
+          this.emitAoiSwap(ctx, oldCell, nextCellX, nextCellZ, nextCell, {
+            reason: 'position_delta',
+            previousCell: oldCell,
+            nextCell,
+            delta: 2,
+            enterRadius: ctx.config.aoiEnterRadius,
+            exitRadius: ctx.config.aoiExitRadius,
+          })
+        }
+      }),
+    )
+
     await new Promise((resolve) => setTimeout(resolve, 10))
 
-    this.setChannelState('baseline', 'connected', ctx, { step: 'boot' })
-    this.setChannelState('session', 'connected', ctx, { step: 'boot' })
-    this.setChannelState('aoi', 'connected', ctx, { step: 'boot' })
-    this.setChannelState('feature', 'connected', ctx, { step: 'boot' })
+    this.setChannelState('baseline', 'connecting', ctx, { step: 'boot' })
+    this.setChannelState('session', 'connecting', ctx, { step: 'boot' })
+    this.setChannelState('aoi', 'connecting', ctx, { step: 'boot' })
+    this.setChannelState('feature', 'connecting', ctx, { step: 'boot' })
     this.emitContractCatalog(ctx)
-    this.emitContractReducerCalls(ctx, 'session', [
-      'client_hello_v2',
-      'client_heartbeat_v2',
-      'submit_input_frame_v2',
-      'submit_action_intent_v2',
-      'interact_entity_v2',
-      'start_skill_v2',
-      'cancel_skill_v2',
-      'ack_server_correction_v2',
-      'request_respawn_v2',
-      'set_ui_preference_v2',
-    ])
+    this.emitContractReducerCalls(ctx, 'session', SPACETIME_CONTRACT.reducers)
+    this.connectToDatabase(ctx)
 
-    const startedAt = Date.now()
-    ;['baseline', 'session', 'aoi', 'feature'].forEach((channel) => {
-      ctx.bus.emit({
-        ts: startedAt,
-        level: 'info',
-        event_code: 'NET_SUB_OK',
-        scenario_id: 'S01',
-        payload: {
-          channel,
-          identity,
-          step: 'boot',
-          state: this.getChannelState(channel as ChannelName).status,
-        },
-      })
+    ctx.logger.info(`[net] boot identity=${identity}`, {
+      database: ctx.config.spacetimeDatabaseName,
+      uri: ctx.config.spacetimeUri,
+      confirmedReads: ctx.config.confirmedReads,
     })
-
-    ctx.logger.info(`[net] boot identity=${identity}`)
     this.ctxDebug(ctx)
   }
 
@@ -153,72 +171,129 @@ export class NetSyncRuntime implements DomainRuntime {
     this.pollTicks += 1
 
     if (!this.handshakeDone) {
-      const helloArgs = {
-        event: 'client_hello_v2',
+      ;(['baseline', 'session', 'aoi', 'feature'] as ChannelName[]).forEach((channel) => {
+        if (this.getChannelState(channel).status !== 'connected') {
+          this.setChannelState(channel, 'connected', ctx, { step: 'probe_connected' })
+        }
+      })
+
+      const signInArgs = {
+        event: 'sign_in',
         identity: this.identityState?.identity,
         contractRev: ctx.config.contractRev,
         buildHash: location?.href ?? 'local',
         platform: ctx.config.platform,
         deviceTier: ctx.config.deviceTier,
+        regionId: ctx.config.defaultRegionId,
       }
       ctx.bus.emit({
         ts: now,
         level: 'info',
         event_code: 'NET_SUB_OK',
         scenario_id: 'S01',
-        payload: helloArgs,
+        payload: signInArgs,
       })
       this.emitContractReducerCall(ctx, {
         event: 'contract_reducer_call',
-        reducer: 'client_hello_v2',
+        reducer: 'sign_in',
         channel: 'baseline',
-        args: helloArgs,
+        args: signInArgs,
+      })
+      this.tryInvokeReducer(ctx, 'sign_in', {
+        event: 'sign_in',
+        regionId: ctx.config.defaultRegionId,
+      }, async () => {
+        if (!this.connection || !this.connection.isActive) {
+          return
+        }
+        await this.connection.reducers.signIn({
+          regionId: BigInt(ctx.config.defaultRegionId),
+        })
       })
       this.handshakeDone = true
     }
 
     const input = this.buildDeterministicInput(this.frameNo, now)
+    const syncArgs = {
+      frameNo: input.frameNo,
+      regionId: ctx.config.defaultRegionId,
+      dimensionId: this.activeDimension,
+      clientTimeMs: now,
+    }
     this.emitContractReducerCall(ctx, {
       event: 'contract_reducer_call',
-      reducer: 'submit_input_frame_v2',
+      reducer: 'sync_client_frame',
       channel: 'session',
-      args: {
-        frameNo: input.frameNo,
-        move_vec: input.move,
-        look_vec: input.look,
-        actions: input.actions,
-      },
+      args: syncArgs,
       appliedFrameNo: input.frameNo,
     })
-    if (input.actions.length > 0) {
-      this.emitContractReducerCall(ctx, {
-        event: 'contract_reducer_call',
-        reducer: 'submit_action_intent_v2',
-        channel: 'session',
-        args: {
-          action_id: input.actions.join(','),
-          target_entity_id: 0,
-          payload: JSON.stringify(input.actions),
-        },
+    this.tryInvokeReducer(ctx, 'sync_client_frame', syncArgs, async () => {
+      if (!this.connection || !this.connection.isActive) {
+        return
+      }
+      await this.connection.reducers.syncClientFrame({
+        frameNo: BigInt(input.frameNo),
+        regionId: BigInt(ctx.config.defaultRegionId),
+        dimensionId: this.activeDimension,
+        clientTimeMs: BigInt(now),
       })
+    })
+
+    if (input.actions.length > 0) {
+      const motionArgs = {
+        intentId: `intent-${this.frameNo}`,
+        regionId: ctx.config.defaultRegionId,
+        dimensionId: this.activeDimension,
+        frameNo: input.frameNo,
+        inputX: input.move.x,
+        inputZ: input.move.z,
+        requestedSpeed: input.actions.includes('sprint') ? 8 : 4,
+        jump: input.actions.includes('jump'),
+      }
       this.emitContractReducerCall(ctx, {
         event: 'contract_reducer_call',
-        reducer: 'ack_server_correction_v2',
+        reducer: 'submit_motion_intent',
+        channel: 'session',
+        args: motionArgs,
+      })
+      this.tryInvokeReducer(ctx, 'submit_motion_intent', motionArgs, async () => {
+        if (!this.connection || !this.connection.isActive) {
+          return
+        }
+        await this.connection.reducers.submitMotionIntent({
+          intentId: motionArgs.intentId,
+          regionId: BigInt(motionArgs.regionId),
+          dimensionId: motionArgs.dimensionId,
+          frameNo: BigInt(motionArgs.frameNo),
+          inputX: motionArgs.inputX,
+          inputZ: motionArgs.inputZ,
+          requestedSpeed: motionArgs.requestedSpeed,
+          jump: motionArgs.jump,
+        })
+      })
+
+      this.emitContractReducerCall(ctx, {
+        event: 'contract_reducer_call',
+        reducer: 'ack_server_correction',
         channel: 'session',
         args: {
-          correction_id: `auto-${this.frameNo}`,
-          applied_frame_no: input.frameNo,
+          correctionId: `auto-${this.frameNo}`,
+          ackedClientFrameNo: input.frameNo,
         },
       })
     }
+
     if (this.frameNo % 120 === 0) {
       this.emitContractReducerCall(ctx, {
         event: 'contract_reducer_call',
-        reducer: 'client_heartbeat_v2',
+        reducer: 'request_chunks_for_aoi',
         channel: 'baseline',
         args: {
-          server_ms: Date.now(),
-          ping_ms: 16,
+          regionId: ctx.config.defaultRegionId,
+          dimensionId: this.activeDimension,
+          centerChunkX: this.aoiCellX,
+          centerChunkY: this.aoiCellZ,
+          radius: ctx.config.aoiExitRadius,
         },
       })
     }
@@ -247,11 +322,7 @@ export class NetSyncRuntime implements DomainRuntime {
 
     if (this.pollTicks % 30 === 0) {
       const featureKey = `feature:${this.pollTicks % 3}`
-      if (this.featureEnabled.has(featureKey)) {
-        this.disableFeature(featureKey, ctx)
-      } else {
-        this.enableFeature(featureKey, ctx)
-      }
+      this.enableFeature(featureKey, ctx)
     }
 
     if (this.frameNo % 240 === 0) {
@@ -427,6 +498,15 @@ export class NetSyncRuntime implements DomainRuntime {
   async dispose(): Promise<void> {
     this.subscriptions.forEach((unsubscribe) => unsubscribe())
     this.subscriptions = []
+    this.unsubscribeAllChannels()
+    if (this.connection) {
+      try {
+        this.connection.disconnect()
+      } catch {
+        // ignore disconnect cleanup errors during shutdown
+      }
+      this.connection = null
+    }
     this.channels.forEach((_, channel) => {
       this.setChannelState(channel, 'disconnected', this.context ?? undefined)
     })
@@ -446,8 +526,241 @@ export class NetSyncRuntime implements DomainRuntime {
     }
   }
 
+  private connectToDatabase(ctx: RuntimeContext): void {
+    const storageKey = `${ctx.config.spacetimeUri}/${ctx.config.spacetimeDatabaseName}/auth_token`
+    const storedToken = this.loadPersistedToken(storageKey)
+    const token = storedToken ?? ctx.config.spacetimeToken
+
+    try {
+      let builder = DbConnection.builder()
+        .withUri(ctx.config.spacetimeUri)
+        .withDatabaseName(ctx.config.spacetimeDatabaseName)
+        .withConfirmedReads(ctx.config.confirmedReads)
+        .onConnect((conn, identity, nextToken) => {
+          this.connection = conn
+          this.identityState = {
+            identity: identity.toHexString(),
+            bootTs: Date.now(),
+          }
+          this.persistToken(storageKey, nextToken)
+          this.applySubscriptions(ctx)
+          this.ctxDebug(ctx)
+        })
+        .onConnectError((_errorCtx, error) => {
+          const reason = this.asErrorMessage(error)
+          ;(['baseline', 'session', 'aoi', 'feature'] as ChannelName[]).forEach((channel) => {
+            this.setChannelState(channel, 'error', ctx, {
+              step: 'connect_error',
+              error: reason,
+            })
+          })
+          ctx.bus.emit({
+            ts: Date.now(),
+            level: 'warn',
+            event_code: 'NET_SUB_FAIL',
+            scenario_id: 'S01',
+            payload: {
+              channel: 'baseline',
+              step: 'connect_error',
+              error: reason,
+            },
+          })
+        })
+        .onDisconnect((_errorCtx, error) => {
+          const reason = this.asErrorMessage(error)
+          this.unsubscribeAllChannels()
+          ;(['baseline', 'session', 'aoi', 'feature'] as ChannelName[]).forEach((channel) => {
+            this.setChannelState(channel, 'disconnected', ctx, {
+              step: 'disconnect',
+              error: reason,
+            })
+          })
+          ctx.bus.emit({
+            ts: Date.now(),
+            level: 'warn',
+            event_code: 'NET_SUB_FAIL',
+            scenario_id: 'S01',
+            payload: {
+              channel: 'baseline',
+              step: 'disconnect',
+              error: reason,
+            },
+          })
+        })
+
+      if (token) {
+        builder = builder.withToken(token)
+      }
+
+      this.connection = builder.build()
+    } catch (error) {
+      const reason = this.asErrorMessage(error)
+      ;(['baseline', 'session', 'aoi', 'feature'] as ChannelName[]).forEach((channel) => {
+        this.setChannelState(channel, 'error', ctx, {
+          step: 'build_failed',
+          error: reason,
+        })
+      })
+      ctx.bus.emit({
+        ts: Date.now(),
+        level: 'warn',
+        event_code: 'NET_SUB_FAIL',
+        scenario_id: 'S01',
+        payload: {
+          channel: 'baseline',
+          step: 'build_failed',
+          error: reason,
+        },
+      })
+    }
+  }
+
+  private applySubscriptions(ctx: RuntimeContext): void {
+    const baselineQueries = [tables.player_state, tables.region_state, tables.world_gen_params]
+    const sessionQueries = [
+      tables.player_session_view,
+      tables.player_inventory_container_view,
+      tables.player_inventory_slot_view,
+      tables.player_inventory_item_view,
+      tables.quest_chain_state,
+      tables.quest_stage_state,
+      tables.server_correction,
+    ]
+    const aoiQueries = [
+      tables.transform_state,
+      tables.physics_state,
+      tables.npc_state,
+      tables.resource_node,
+      tables.building_state,
+      tables.terrain_chunk,
+    ]
+    const featureQueries = [tables.combat_hit, tables.aoi_stream, tables.chat_message]
+
+    this.subscribeChannel('baseline', baselineQueries, ctx)
+    this.subscribeChannel('session', sessionQueries, ctx)
+    this.subscribeChannel('aoi', aoiQueries, ctx)
+    this.subscribeChannel('feature', featureQueries, ctx)
+  }
+
+  private subscribeChannel(channel: ChannelName, queries: unknown[], ctx: RuntimeContext): void {
+    if (!this.connection || !this.connection.isActive) {
+      return
+    }
+
+    const existing = this.channelHandles.get(channel)
+    if (existing && !existing.isEnded()) {
+      try {
+        existing.unsubscribe()
+      } catch {
+        // ignore stale subscription handle teardown errors
+      }
+    }
+
+    this.setChannelState(channel, 'connecting', ctx, { step: 'subscribe' })
+    const handle = this.connection
+      .subscriptionBuilder()
+      .onApplied(() => {
+        if (this.getChannelState(channel).status !== 'connected') {
+          this.setChannelState(channel, 'connected', ctx, { step: 'on_applied' })
+        }
+        ctx.bus.emit({
+          ts: Date.now(),
+          level: 'info',
+          event_code: 'NET_SUB_OK',
+          scenario_id: 'S01',
+          payload: {
+            channel,
+            identity: this.identityState?.identity,
+            step: 'on_applied',
+            state: 'connected',
+          },
+        })
+      })
+      .onError((errorCtx) => {
+        const reason = this.asErrorMessage(errorCtx.event)
+        ctx.bus.emit({
+          ts: Date.now(),
+          level: 'warn',
+          event_code: 'NET_SUB_FAIL',
+          scenario_id: 'S01',
+          payload: {
+            channel,
+            step: 'subscribe_error',
+            error: reason,
+          },
+        })
+      })
+      .subscribe(queries as never)
+
+    this.channelHandles.set(channel, handle)
+  }
+
+  private unsubscribeAllChannels(): void {
+    this.channelHandles.forEach((handle) => {
+      if (handle.isEnded()) {
+        return
+      }
+      try {
+        handle.unsubscribe()
+      } catch {
+        // ignore stale subscription handle teardown errors
+      }
+    })
+    this.channelHandles.clear()
+  }
+
+  private tryInvokeReducer(
+    ctx: RuntimeContext,
+    reducerName: string,
+    args: Record<string, unknown>,
+    invoke: () => Promise<void>,
+  ): void {
+    void invoke().catch((error) => {
+      ctx.bus.emit({
+        ts: Date.now(),
+        level: 'warn',
+        event_code: 'NET_SUB_FAIL',
+        scenario_id: 'S01',
+        payload: {
+          channel: 'session',
+          reducer: reducerName,
+          args,
+          error: this.asErrorMessage(error),
+        },
+      })
+    })
+  }
+
+  private loadPersistedToken(storageKey: string): string | undefined {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return undefined
+    }
+    const token = window.localStorage.getItem(storageKey)
+    return token && token.length > 0 ? token : undefined
+  }
+
+  private persistToken(storageKey: string, token: string): void {
+    if (typeof window === 'undefined' || !window.localStorage || !token) {
+      return
+    }
+    window.localStorage.setItem(storageKey, token)
+  }
+
+  private asErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message
+    }
+    if (typeof error === 'string') {
+      return error
+    }
+    if (error === null || error === undefined) {
+      return 'unknown error'
+    }
+    return String(error)
+  }
+
   private emitContractCatalog(ctx: RuntimeContext): void {
-    const contractRev = SPACETIME_V2_CONTRACT.revision
+    const contractRev = SPACETIME_CONTRACT.revision
     const toPayload = (category: string, names: string[]): ContractCatalogPayload => ({
       event: 'contract_catalog',
       category: category as ContractCatalogPayload['category'],
@@ -460,21 +773,21 @@ export class NetSyncRuntime implements DomainRuntime {
       level: 'info',
       event_code: 'CONTRACT_CATALOG',
       scenario_id: 'S01',
-      payload: toPayload(CONTRACT_CATEGORY_TABLES, SPACETIME_V2_CONTRACT.tables),
+      payload: toPayload(CONTRACT_CATEGORY_TABLES, SPACETIME_CONTRACT.tables),
     })
     ctx.bus.emit({
       ts: Date.now(),
       level: 'info',
       event_code: 'CONTRACT_CATALOG',
       scenario_id: 'S01',
-      payload: toPayload(CONTRACT_CATEGORY_REDUCERS, SPACETIME_V2_CONTRACT.reducers),
+      payload: toPayload(CONTRACT_CATEGORY_REDUCERS, SPACETIME_CONTRACT.reducers),
     })
     ctx.bus.emit({
       ts: Date.now(),
       level: 'info',
       event_code: 'CONTRACT_CATALOG',
       scenario_id: 'S01',
-      payload: toPayload(CONTRACT_CATEGORY_ERRORS, SPACETIME_V2_CONTRACT.errorCodes),
+      payload: toPayload(CONTRACT_CATEGORY_ERRORS, SPACETIME_CONTRACT.errorCodes),
     })
   }
 
@@ -551,6 +864,8 @@ export class NetSyncRuntime implements DomainRuntime {
         dimensionId: nextDimension,
       },
     )
+
+    this.applySubscriptions(ctx)
 
     this.setChannelState('aoi', 'connected', ctx, {
       step: 'dimension_transition',

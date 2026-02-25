@@ -7,7 +7,12 @@ import type {
   ContractReducerCallPayload,
   EntitySnapshotPayload,
 } from '../core/runtime-events'
-import { CONTRACT_CATEGORY_ERRORS, CONTRACT_CATEGORY_REDUCERS, CONTRACT_CATEGORY_TABLES, SPACETIME_V2_CONTRACT } from '../infra/spacetimedb-contract'
+import {
+  CONTRACT_CATEGORY_ERRORS,
+  CONTRACT_CATEGORY_REDUCERS,
+  CONTRACT_CATEGORY_TABLES,
+  SPACETIME_CONTRACT,
+} from '../infra/spacetimedb-contract'
 
 export type ScenarioId = 'S01' | 'S02' | 'S03' | 'S04' | 'S05'
 export type ScenarioSuiteId = 'all' | 'core'
@@ -85,7 +90,8 @@ export interface TestReport {
   environment: {
     artifact_root: string
     spacetime_uri: string
-    spacetime_module: string
+    spacetime_database_name: string
+    spacetime_module?: string
     perf_artifact_root: string
   }
   scenarios: ScenarioResult[]
@@ -420,7 +426,8 @@ export class VerificationRuntime {
       environment: {
         artifact_root: this.config.artifactBasePath,
         spacetime_uri: this.config.spacetimeUri,
-        spacetime_module: this.config.spacetimeModule,
+        spacetime_database_name: this.config.spacetimeDatabaseName,
+        spacetime_module: this.config.spacetimeDatabaseName,
         perf_artifact_root: this.config.perfArtifactBasePath,
       },
       scenarios: [...this.scenarioResults],
@@ -470,39 +477,39 @@ export class VerificationRuntime {
     const catalogTables = this.filterContractCatalog(scenarioWindow, CONTRACT_CATEGORY_TABLES)
     const catalogReducers = this.filterContractCatalog(scenarioWindow, CONTRACT_CATEGORY_REDUCERS)
     const catalogErrors = this.filterContractCatalog(scenarioWindow, CONTRACT_CATEGORY_ERRORS)
-    const requiredContractRev = SPACETIME_V2_CONTRACT.revision
+    const requiredContractRev = SPACETIME_CONTRACT.revision
     const observedContractRev = this.readContractRevision(scenarioWindow)
-    const schemaMatch = this.compareSets(new Set(SPACETIME_V2_CONTRACT.tables), new Set(catalogTables))
+    const schemaMatch = this.compareSets(new Set(SPACETIME_CONTRACT.tables), new Set(catalogTables))
     const reducersMatch = this.compareSets(
-      new Set(SPACETIME_V2_CONTRACT.reducers),
+      new Set(SPACETIME_CONTRACT.reducers),
       new Set(catalogReducers),
     )
-    const errorsMatch = this.compareSets(new Set(SPACETIME_V2_CONTRACT.errorCodes), new Set(catalogErrors))
+    const errorsMatch = this.compareSets(new Set(SPACETIME_CONTRACT.errorCodes), new Set(catalogErrors))
     const channelOk = this.validateSubscriptionState(scenarioWindow, ['baseline', 'session', 'aoi', 'feature'])
     this.assert(
       'S01',
       'A-CONTRACT-001',
-      !!schemaMatch && catalogTables.length === SPACETIME_V2_CONTRACT.tables.length,
+      !!schemaMatch && catalogTables.length === SPACETIME_CONTRACT.tables.length,
       'contract tables match manifest',
     )
     this.assert(
       'S01',
       'A-CONTRACT-002',
-      reducersMatch && catalogReducers.length === SPACETIME_V2_CONTRACT.reducers.length,
+      reducersMatch && catalogReducers.length === SPACETIME_CONTRACT.reducers.length,
       'contract reducers match manifest',
     )
     this.assert(
       'S01',
       'A-CONTRACT-003',
       !!errorsMatch &&
-        catalogErrors.length === SPACETIME_V2_CONTRACT.errorCodes.length &&
+        catalogErrors.length === SPACETIME_CONTRACT.errorCodes.length &&
         observedContractRev === requiredContractRev,
       'contract error code catalog matches',
     )
     this.assert(
       'S01',
       'A-CONTRACT-004',
-      this.checkRequiredReducerCalls(scenarioWindow, new Set(SPACETIME_V2_CONTRACT.reducers)),
+      this.checkRequiredReducerCalls(scenarioWindow, new Set(SPACETIME_CONTRACT.reducers)),
       'all required contract reducers can be invoked by net-sync probe events',
     )
     this.assert(

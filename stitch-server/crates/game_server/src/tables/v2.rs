@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(accessor = client_frame_v2, public)]
+#[spacetimedb::table(accessor = client_frame, public)]
 pub struct ClientFrameV2 {
     #[primary_key]
     pub frame_key: String,
@@ -12,7 +12,7 @@ pub struct ClientFrameV2 {
     pub received_at: Timestamp,
 }
 
-#[spacetimedb::table(accessor = motion_intent_v2, public)]
+#[spacetimedb::table(accessor = motion_intent, public)]
 pub struct MotionIntentV2 {
     #[primary_key]
     pub intent_id: String,
@@ -27,7 +27,7 @@ pub struct MotionIntentV2 {
     pub submitted_at: Timestamp,
 }
 
-#[spacetimedb::table(accessor = physics_state_v2, public)]
+#[spacetimedb::table(accessor = physics_state, public)]
 pub struct PhysicsStateV2 {
     #[primary_key]
     pub entity_id: Identity,
@@ -41,7 +41,7 @@ pub struct PhysicsStateV2 {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(accessor = collision_proxy_v2, public)]
+#[spacetimedb::table(accessor = collision_proxy, public)]
 pub struct CollisionProxyV2 {
     #[primary_key]
     pub proxy_id: String,
@@ -59,7 +59,7 @@ pub struct CollisionProxyV2 {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(accessor = combat_intent_v2, public)]
+#[spacetimedb::table(accessor = combat_intent, public)]
 pub struct CombatIntentV2 {
     #[primary_key]
     pub intent_id: String,
@@ -73,7 +73,7 @@ pub struct CombatIntentV2 {
     pub submitted_at: Timestamp,
 }
 
-#[spacetimedb::table(accessor = combat_hit_v2, public)]
+#[spacetimedb::table(accessor = combat_hit, public)]
 pub struct CombatHitV2 {
     #[primary_key]
     pub hit_id: String,
@@ -88,7 +88,7 @@ pub struct CombatHitV2 {
     pub resolved_at: Timestamp,
 }
 
-#[spacetimedb::table(accessor = server_correction_v2, public)]
+#[spacetimedb::table(accessor = server_correction, public)]
 pub struct ServerCorrectionV2 {
     #[primary_key]
     pub correction_id: String,
@@ -108,7 +108,7 @@ pub struct ServerCorrectionV2 {
     pub acked_at: Timestamp,
 }
 
-#[spacetimedb::table(accessor = aoi_stream_v2, public)]
+#[spacetimedb::table(accessor = aoi_stream, public)]
 pub struct AoiStreamV2 {
     #[primary_key]
     pub stream_key: String,

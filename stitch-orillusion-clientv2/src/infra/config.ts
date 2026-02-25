@@ -1,9 +1,11 @@
-import { SPACETIME_V2_CONTRACT } from './spacetimedb-contract'
+import { SPACETIME_CONTRACT } from './spacetimedb-contract'
 
 export interface ClientV2Config {
   contractRev: number
   spacetimeUri: string
-  spacetimeModule: string
+  spacetimeDatabaseName: string
+  spacetimeToken?: string
+  confirmedReads: boolean
   defaultRegionId: number
   defaultDimensionId: number
   aoiCellSize: number
@@ -18,9 +20,10 @@ export interface ClientV2Config {
 }
 
 const defaults: ClientV2Config = {
-  contractRev: SPACETIME_V2_CONTRACT.revision,
+  contractRev: SPACETIME_CONTRACT.revision,
   spacetimeUri: 'ws://127.0.0.1:3000',
-  spacetimeModule: 'stitch-server',
+  spacetimeDatabaseName: 'stitch-server',
+  confirmedReads: true,
   defaultRegionId: 1,
   defaultDimensionId: 1,
   aoiCellSize: 32,
@@ -60,11 +63,31 @@ const toTier = (value: string | undefined): 'low' | 'mid' | 'high' => {
   return 'mid'
 }
 
+const toBoolean = (value: string | undefined, fallback: boolean): boolean => {
+  if (!value) {
+    return fallback
+  }
+  const normalized = value.trim().toLowerCase()
+  if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') {
+    return true
+  }
+  if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') {
+    return false
+  }
+  return fallback
+}
+
 export function loadConfig(): ClientV2Config {
   return {
     contractRev: toNumber(import.meta.env.VITE_CLIENTV2_CONTRACT_REV, defaults.contractRev),
     spacetimeUri: import.meta.env.VITE_SPACETIME_URI ?? defaults.spacetimeUri,
-    spacetimeModule: import.meta.env.VITE_SPACETIME_MODULE ?? defaults.spacetimeModule,
+    spacetimeDatabaseName:
+      import.meta.env.VITE_SPACETIME_DATABASE_NAME ??
+      import.meta.env.VITE_SPACETIME_DATABASE ??
+      import.meta.env.VITE_SPACETIME_MODULE ??
+      defaults.spacetimeDatabaseName,
+    spacetimeToken: import.meta.env.VITE_SPACETIME_TOKEN,
+    confirmedReads: toBoolean(import.meta.env.VITE_SPACETIME_CONFIRMED_READS, defaults.confirmedReads),
     defaultRegionId: toNumber(import.meta.env.VITE_CLIENTV2_DEFAULT_REGION, defaults.defaultRegionId),
     defaultDimensionId: toNumber(
       import.meta.env.VITE_CLIENTV2_DEFAULT_DIMENSION,
@@ -75,12 +98,12 @@ export function loadConfig(): ClientV2Config {
       import.meta.env.VITE_CLIENTV2_AOI_ENTER_RADIUS,
       defaults.aoiEnterRadius,
     ),
-  aoiExitRadius: toNumber(import.meta.env.VITE_CLIENTV2_AOI_EXIT_RADIUS, defaults.aoiExitRadius),
-  frameTargetMs: toNumber(import.meta.env.VITE_CLIENTV2_FRAME_MS, defaults.frameTargetMs),
-  artifactBasePath: import.meta.env.VITE_CLIENTV2_ARTIFACT_BASE ?? defaults.artifactBasePath,
-  perfArtifactBasePath: import.meta.env.VITE_CLIENTV2_PERF_ARTIFACT_BASE ?? defaults.perfArtifactBasePath,
-  platform: navigator.platform,
-  deviceTier: toTier(import.meta.env.VITE_CLIENTV2_DEVICE_TIER),
-  seed: toSeed(import.meta.env.VITE_CLIENTV2_RANDOM_SEED, defaults.seed),
-}
+    aoiExitRadius: toNumber(import.meta.env.VITE_CLIENTV2_AOI_EXIT_RADIUS, defaults.aoiExitRadius),
+    frameTargetMs: toNumber(import.meta.env.VITE_CLIENTV2_FRAME_MS, defaults.frameTargetMs),
+    artifactBasePath: import.meta.env.VITE_CLIENTV2_ARTIFACT_BASE ?? defaults.artifactBasePath,
+    perfArtifactBasePath: import.meta.env.VITE_CLIENTV2_PERF_ARTIFACT_BASE ?? defaults.perfArtifactBasePath,
+    platform: navigator.platform,
+    deviceTier: toTier(import.meta.env.VITE_CLIENTV2_DEVICE_TIER),
+    seed: toSeed(import.meta.env.VITE_CLIENTV2_RANDOM_SEED, defaults.seed),
+  }
 }

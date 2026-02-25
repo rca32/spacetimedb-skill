@@ -2,8 +2,8 @@ use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::services::nav::build_nav_grid;
 use crate::tables::v2::{
-    aoi_stream_v2, client_frame_v2, collision_proxy_v2, combat_hit_v2, combat_intent_v2,
-    motion_intent_v2, physics_state_v2, server_correction_v2,
+    aoi_stream, client_frame, collision_proxy, combat_hit, combat_intent, motion_intent,
+    physics_state, server_correction,
 };
 use crate::tables::{
     AoiStreamV2, ClientFrameV2, CollisionProxyV2, CombatHitV2, CombatIntentV2, MotionIntentV2,
@@ -46,10 +46,10 @@ pub fn sync_client_frame(
         received_at: ctx.timestamp,
     };
 
-    if ctx.db.client_frame_v2().frame_key().find(key).is_some() {
-        ctx.db.client_frame_v2().frame_key().update(row);
+    if ctx.db.client_frame().frame_key().find(key).is_some() {
+        ctx.db.client_frame().frame_key().update(row);
     } else {
-        ctx.db.client_frame_v2().insert(row);
+        ctx.db.client_frame().insert(row);
     }
 
     ensure_physics_state(ctx, ctx.sender(), region_id, dimension_id, frame_no);
@@ -85,7 +85,7 @@ pub fn submit_motion_intent(
 
     if ctx
         .db
-        .motion_intent_v2()
+        .motion_intent()
         .intent_id()
         .find(intent_id.clone())
         .is_some()
@@ -93,7 +93,7 @@ pub fn submit_motion_intent(
         return Ok(());
     }
 
-    ctx.db.motion_intent_v2().insert(MotionIntentV2 {
+    ctx.db.motion_intent().insert(MotionIntentV2 {
         intent_id: intent_id.clone(),
         identity: ctx.sender(),
         region_id,
@@ -108,7 +108,7 @@ pub fn submit_motion_intent(
 
     let current = ctx
         .db
-        .physics_state_v2()
+        .physics_state()
         .entity_id()
         .find(ctx.sender())
         .unwrap_or_else(|| {
@@ -171,14 +171,14 @@ pub fn submit_motion_intent(
 
     if ctx
         .db
-        .physics_state_v2()
+        .physics_state()
         .entity_id()
         .find(ctx.sender())
         .is_some()
     {
-        ctx.db.physics_state_v2().entity_id().update(next_state);
+        ctx.db.physics_state().entity_id().update(next_state);
     } else {
-        ctx.db.physics_state_v2().insert(next_state);
+        ctx.db.physics_state().insert(next_state);
     }
 
     upsert_player_proxy(
@@ -247,7 +247,7 @@ pub fn submit_combat_intent(
 
     if ctx
         .db
-        .combat_intent_v2()
+        .combat_intent()
         .intent_id()
         .find(intent_id.clone())
         .is_some()
@@ -255,7 +255,7 @@ pub fn submit_combat_intent(
         return Ok(());
     }
 
-    ctx.db.combat_intent_v2().insert(CombatIntentV2 {
+    ctx.db.combat_intent().insert(CombatIntentV2 {
         intent_id: intent_id.clone(),
         attacker: ctx.sender(),
         target,
@@ -271,7 +271,7 @@ pub fn submit_combat_intent(
     let damage = 10 + (u32::from(skill_slot) * 2);
     let crit = frame_no % 7 == 0;
 
-    ctx.db.combat_hit_v2().insert(CombatHitV2 {
+    ctx.db.combat_hit().insert(CombatHitV2 {
         hit_id: hit_id.clone(),
         attacker: ctx.sender(),
         target,
@@ -287,7 +287,7 @@ pub fn submit_combat_intent(
     let aoi_key = format!("combat:{}", hit_id);
     let payload = damage.to_le_bytes().to_vec();
 
-    ctx.db.aoi_stream_v2().insert(AoiStreamV2 {
+    ctx.db.aoi_stream().insert(AoiStreamV2 {
         stream_key: aoi_key,
         region_id,
         dimension_id,
@@ -315,7 +315,7 @@ pub fn ack_server_correction(
 
     let current = ctx
         .db
-        .server_correction_v2()
+        .server_correction()
         .correction_id()
         .find(correction_id.clone())
         .ok_or_else(|| format!("correction not found: {correction_id}"))?;
@@ -325,7 +325,7 @@ pub fn ack_server_correction(
     }
 
     ctx.db
-        .server_correction_v2()
+        .server_correction()
         .correction_id()
         .update(ServerCorrectionV2 {
             correction_id,
@@ -357,7 +357,7 @@ fn ensure_physics_state(
 ) {
     if ctx
         .db
-        .physics_state_v2()
+        .physics_state()
         .entity_id()
         .find(entity_id)
         .is_some()
@@ -365,7 +365,7 @@ fn ensure_physics_state(
         return;
     }
 
-    ctx.db.physics_state_v2().insert(default_physics_state(
+    ctx.db.physics_state().insert(default_physics_state(
         entity_id,
         region_id,
         dimension_id,
@@ -421,14 +421,14 @@ fn upsert_player_proxy(
 
     if ctx
         .db
-        .collision_proxy_v2()
+        .collision_proxy()
         .proxy_id()
         .find(proxy_id)
         .is_some()
     {
-        ctx.db.collision_proxy_v2().proxy_id().update(next);
+        ctx.db.collision_proxy().proxy_id().update(next);
     } else {
-        ctx.db.collision_proxy_v2().insert(next);
+        ctx.db.collision_proxy().insert(next);
     }
 
     let _ = frame_no;
@@ -460,14 +460,14 @@ fn upsert_aoi_player(
 
     if ctx
         .db
-        .aoi_stream_v2()
+        .aoi_stream()
         .stream_key()
         .find(stream_key)
         .is_some()
     {
-        ctx.db.aoi_stream_v2().stream_key().update(next);
+        ctx.db.aoi_stream().stream_key().update(next);
     } else {
-        ctx.db.aoi_stream_v2().insert(next);
+        ctx.db.aoi_stream().insert(next);
     }
 }
 
@@ -501,14 +501,14 @@ fn upsert_server_correction(
 
     if ctx
         .db
-        .server_correction_v2()
+        .server_correction()
         .correction_id()
         .find(correction_id)
         .is_some()
     {
-        ctx.db.server_correction_v2().correction_id().update(row);
+        ctx.db.server_correction().correction_id().update(row);
     } else {
-        ctx.db.server_correction_v2().insert(row);
+        ctx.db.server_correction().insert(row);
     }
 }
 
