@@ -27,7 +27,7 @@ pub fn has_rate_limit_capacity(
     action_type: &str,
     scope_id: &str,
 ) -> Result<(), String> {
-    let key = format!("{}:{}:{}", action_type, ctx.sender, scope_id);
+    let key = format!("{}:{}:{}", action_type, ctx.sender(), scope_id);
     if let Some(mut bucket) = ctx.db.rate_limit_bucket().bucket_key().find(key.clone()) {
         let elapsed = ctx
             .timestamp
@@ -52,7 +52,7 @@ pub fn has_rate_limit_capacity(
 
     ctx.db.rate_limit_bucket().insert(RateLimitBucket {
         bucket_key: key,
-        identity: ctx.sender,
+        identity: ctx.sender(),
         action_type: action_type.to_string(),
         count_in_window: 1,
         window_started_at: ctx.timestamp,

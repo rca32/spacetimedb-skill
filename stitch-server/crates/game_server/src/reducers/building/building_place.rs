@@ -47,7 +47,7 @@ pub fn building_validate_preview(
     facing: u8,
 ) -> Result<(), String> {
     let request_id = anti_cheat::validate_request_id(&request_id)?;
-    let request_key = anti_cheat::request_key(ctx.sender, &request_id);
+    let request_key = anti_cheat::request_key(ctx.sender(), &request_id);
 
     let Some(building_def) = ctx.db.building_def().building_def_id().find(building_def_id) else {
         upsert_preview_feedback(
@@ -99,7 +99,7 @@ pub fn building_validate_preview(
 #[spacetimedb::reducer]
 pub fn building_place_from_preview(ctx: &ReducerContext, request_id: String) -> Result<(), String> {
     let request_id = anti_cheat::validate_request_id(&request_id)?;
-    let request_key = anti_cheat::request_key(ctx.sender, &request_id);
+    let request_key = anti_cheat::request_key(ctx.sender(), &request_id);
 
     let preview = ctx
         .db
@@ -211,7 +211,7 @@ pub(crate) fn building_place_with_dimension(
         .db
         .session_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("active session required".to_string())?;
     if session.region_id != region_id {
         return Err("region mismatch".to_string());
@@ -224,7 +224,7 @@ pub(crate) fn building_place_with_dimension(
         .db
         .transform_state()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("transform missing".to_string())?;
     let player_hex = world_to_hex(transform.position[0], transform.position[2], dimension_id);
     let build_hex = HexCoord::new(hex_x, hex_z, dimension_id);
@@ -244,7 +244,7 @@ pub(crate) fn building_place_with_dimension(
 
     if dimension_id == DEFAULT_WORLD_DIMENSION_ID {
         if let Some(claim) = claim_covering(ctx, region_id, dimension_id, hex_x, hex_z) {
-            if claim.owner_identity != ctx.sender
+            if claim.owner_identity != ctx.sender()
                 && !permissions::has_permission(ctx, 1, claim.claim_id, permissions::PERM_BUILD)
             {
                 return Err("no build permission in claim".to_string());
@@ -275,7 +275,7 @@ pub(crate) fn building_place_with_dimension(
 
     ctx.db.building_state().insert(BuildingState {
         entity_id: building_id,
-        owner_identity: ctx.sender,
+        owner_identity: ctx.sender(),
         region_id,
         dimension_id,
         hex_x,
@@ -304,14 +304,14 @@ pub(crate) fn building_place_with_dimension(
     replace_building_footprint(ctx, building_id, region_id, dimension_id, &footprint_tiles);
 
     // owner gets build+admin permission on this building
-    let key = permissions::permission_key(2, building_id, ctx.sender);
+    let key = permissions::permission_key(2, building_id, ctx.sender());
     ctx.db
         .permission_state()
         .insert(crate::tables::PermissionState {
             permission_key: key,
             target_kind: 2,
             target_id: building_id,
-            subject_identity: ctx.sender,
+            subject_identity: ctx.sender(),
             flags: permissions::PERM_BUILD | permissions::PERM_ADMIN,
         });
 
@@ -362,7 +362,7 @@ fn validate_placement_common(
         .db
         .session_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or(PREVIEW_REASON_ACTIVE_SESSION_REQUIRED)?;
     if session.region_id != region_id {
         return Err(PREVIEW_REASON_REGION_MISMATCH);
@@ -375,7 +375,7 @@ fn validate_placement_common(
         .db
         .transform_state()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or(PREVIEW_REASON_TRANSFORM_MISSING)?;
     let player_hex = world_to_hex(transform.position[0], transform.position[2], dimension_id);
     let build_hex = HexCoord::new(hex_x, hex_z, dimension_id);
@@ -385,7 +385,7 @@ fn validate_placement_common(
 
     if dimension_id == DEFAULT_WORLD_DIMENSION_ID {
         if let Some(claim) = claim_covering(ctx, region_id, dimension_id, hex_x, hex_z) {
-            if claim.owner_identity != ctx.sender
+            if claim.owner_identity != ctx.sender()
                 && !permissions::has_permission(ctx, 1, claim.claim_id, permissions::PERM_BUILD)
             {
                 return Err(PREVIEW_REASON_NO_BUILD_PERMISSION_IN_CLAIM);
@@ -476,7 +476,7 @@ fn upsert_project_site_state(
 ) {
     let row = ProjectSiteState {
         entity_id: building_id,
-        owner_identity: ctx.sender,
+        owner_identity: ctx.sender(),
         region_id,
         dimension_id,
         hex_x,
@@ -571,7 +571,7 @@ fn upsert_preview_feedback(
 ) {
     let row = BuildingPreviewFeedbackView {
         request_key: request_key.to_string(),
-        identity: ctx.sender,
+        identity: ctx.sender(),
         request_id: request_id.to_string(),
         region_id,
         dimension_id,
@@ -621,7 +621,7 @@ fn consume_items_from_main_inventory(
         .db
         .inventory_container()
         .iter()
-        .find(|c| c.owner_identity == ctx.sender && c.inventory_index == 0)
+        .find(|c| c.owner_identity == ctx.sender() && c.inventory_index == 0)
         .ok_or("main inventory container not found".to_string())?;
 
     let mut remaining = quantity;
@@ -718,7 +718,7 @@ pub(crate) fn add_items_to_main_inventory(
         .db
         .inventory_container()
         .iter()
-        .find(|c| c.owner_identity == ctx.sender && c.inventory_index == 0)
+        .find(|c| c.owner_identity == ctx.sender() && c.inventory_index == 0)
         .ok_or("main inventory container not found".to_string())?;
 
     let item_def = ctx

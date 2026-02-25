@@ -21,10 +21,10 @@ pub fn claim_expand(ctx: &ReducerContext, claim_id: u64, radius_delta: u32) -> R
         .db
         .session_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("active session required".to_string())?;
 
-    if claim.owner_identity != ctx.sender
+    if claim.owner_identity != ctx.sender()
         && !permissions::has_permission(ctx, 1, claim_id, permissions::PERM_ADMIN)
     {
         return Err("no claim expand permission".to_string());
@@ -38,7 +38,7 @@ pub fn claim_expand(ctx: &ReducerContext, claim_id: u64, radius_delta: u32) -> R
         .db
         .transform_state()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("transform missing".to_string())?;
     if transform.region_id != claim.region_id || transform.dimension_id != claim.dimension_id {
         return Err("transform and claim dimension mismatch".to_string());

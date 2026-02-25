@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = building_preview_feedback_view, public)]
+#[spacetimedb::table(accessor = building_preview_feedback_view, public)]
 pub struct BuildingPreviewFeedbackView {
     #[primary_key]
     pub request_key: String,

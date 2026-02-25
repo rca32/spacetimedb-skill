@@ -24,10 +24,10 @@ pub(super) fn ensure_nonce(request_nonce: String) -> Result<String, String> {
 }
 
 pub(super) fn upsert_lease(ctx: &ReducerContext, kind: u8, request_nonce: String, leased_id: u64) {
-    let key = lease_key(ctx.sender, kind);
+    let key = lease_key(ctx.sender(), kind);
     let next = IdLeaseState {
         lease_key: key.clone(),
-        identity: ctx.sender,
+        identity: ctx.sender(),
         kind,
         request_nonce,
         leased_id,

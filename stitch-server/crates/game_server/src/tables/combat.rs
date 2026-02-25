@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = combat_state, public)]
+#[spacetimedb::table(accessor = combat_state, public)]
 pub struct CombatState {
     #[primary_key]
     pub identity: Identity,
@@ -12,7 +12,7 @@ pub struct CombatState {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = threat_state, public)]
+#[spacetimedb::table(accessor = threat_state, public)]
 pub struct ThreatState {
     #[primary_key]
     pub threat_key: String,
@@ -22,7 +22,7 @@ pub struct ThreatState {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = attack_schedule_state, private)]
+#[spacetimedb::table(accessor = attack_schedule_state, private)]
 pub struct AttackScheduled {
     #[primary_key]
     pub request_key: String,
@@ -37,7 +37,7 @@ pub struct AttackScheduled {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = attack_outcome, public)]
+#[spacetimedb::table(accessor = attack_outcome, public)]
 pub struct AttackOutcome {
     #[primary_key]
     pub outcome_id: String,

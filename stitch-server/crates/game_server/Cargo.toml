@@ -9,5 +9,5 @@ crate-type = ["cdylib"]
 [dependencies]
 anyhow = "1"
 log = "0.4"
-spacetimedb = "1.11.*"
+spacetimedb = "2.0.*"
 data_loader = { path = "../data_loader" }

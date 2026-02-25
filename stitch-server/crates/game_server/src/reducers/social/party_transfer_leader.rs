@@ -15,7 +15,7 @@ pub fn party_transfer_leader(
     if pid.is_empty() {
         return Err("party_id must not be empty".to_string());
     }
-    if new_leader_identity == ctx.sender {
+    if new_leader_identity == ctx.sender() {
         return Err("new leader must be different from caller".to_string());
     }
 
@@ -26,7 +26,7 @@ pub fn party_transfer_leader(
         .find(pid.clone())
         .ok_or("party not found".to_string())?;
 
-    if party.leader_identity != ctx.sender {
+    if party.leader_identity != ctx.sender() {
         return Err("only party leader can transfer leadership".to_string());
     }
 
@@ -38,12 +38,12 @@ pub fn party_transfer_leader(
     party.leader_identity = new_leader_identity;
     ctx.db.party_state().party_id().update(party);
 
-    set_member_role(ctx, &pid, ctx.sender, PARTY_ROLE_MEMBER)?;
+    set_member_role(ctx, &pid, ctx.sender(), PARTY_ROLE_MEMBER)?;
     set_member_role(ctx, &pid, new_leader_identity, PARTY_ROLE_LEADER)?;
 
     append_social_feed(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         "party_leader_changed",
         format!(
             "{{\"party_id\":\"{}\",\"new_leader\":\"{}\"}}",

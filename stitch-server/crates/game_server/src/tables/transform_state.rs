@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = transform_state, public)]
+#[spacetimedb::table(accessor = transform_state, public)]
 pub struct TransformState {
     #[primary_key]
     pub entity_id: Identity,

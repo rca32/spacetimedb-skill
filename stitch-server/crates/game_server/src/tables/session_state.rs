@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = session_state, private)]
+#[spacetimedb::table(accessor = session_state, private)]
 pub struct SessionState {
     #[primary_key]
     pub identity: Identity,

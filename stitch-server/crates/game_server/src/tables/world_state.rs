@@ -1,6 +1,6 @@
 use spacetimedb::Timestamp;
 
-#[spacetimedb::table(name = region_state, public)]
+#[spacetimedb::table(accessor = region_state, public)]
 pub struct RegionState {
     #[primary_key]
     pub region_id: u64,
@@ -9,7 +9,7 @@ pub struct RegionState {
     pub shard_load_permille: u16,
 }
 
-#[spacetimedb::table(name = instance_state, public)]
+#[spacetimedb::table(accessor = instance_state, public)]
 pub struct InstanceState {
     #[primary_key]
     pub instance_id: u64,
@@ -18,7 +18,7 @@ pub struct InstanceState {
     pub ttl_seconds: u32,
 }
 
-#[spacetimedb::table(name = entity_core, public)]
+#[spacetimedb::table(accessor = entity_core, public)]
 pub struct EntityCore {
     #[primary_key]
     pub entity_id: u64,
@@ -28,7 +28,7 @@ pub struct EntityCore {
     pub visibility: u8,
 }
 
-#[spacetimedb::table(name = terrain_chunk, public)]
+#[spacetimedb::table(accessor = terrain_chunk, public)]
 pub struct TerrainChunk {
     #[primary_key]
     pub chunk_key: String,
@@ -46,7 +46,7 @@ pub struct TerrainChunk {
     pub cell_payload: Vec<i16>,
 }
 
-#[spacetimedb::table(name = terrain_chunk_stream, public)]
+#[spacetimedb::table(accessor = terrain_chunk_stream, public)]
 pub struct TerrainChunkStream {
     #[primary_key]
     pub chunk_key: String,
@@ -62,7 +62,7 @@ pub struct TerrainChunkStream {
     pub water_ratio_permille: u16,
 }
 
-#[spacetimedb::table(name = terrain_chunk_payload, public)]
+#[spacetimedb::table(accessor = terrain_chunk_payload, public)]
 pub struct TerrainChunkPayload {
     #[primary_key]
     pub chunk_key: String,
@@ -76,7 +76,7 @@ pub struct TerrainChunkPayload {
     pub generated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = resource_node, public)]
+#[spacetimedb::table(accessor = resource_node, public)]
 pub struct ResourceNode {
     #[primary_key]
     pub entity_id: u64,
@@ -95,7 +95,7 @@ pub struct ResourceNode {
     pub respawn_at: Timestamp,
 }
 
-#[spacetimedb::table(name = worldgen_chunk_generation_queue, public)]
+#[spacetimedb::table(accessor = worldgen_chunk_generation_queue, public)]
 pub struct WorldgenChunkGenerationQueue {
     #[primary_key]
     pub queue_key: String,

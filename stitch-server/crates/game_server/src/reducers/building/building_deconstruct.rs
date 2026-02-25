@@ -16,7 +16,7 @@ pub fn building_deconstruct(ctx: &ReducerContext, building_id: u64) -> Result<()
         .find(building_id)
         .ok_or("building not found".to_string())?;
 
-    if building.owner_identity != ctx.sender
+    if building.owner_identity != ctx.sender()
         && !permissions::has_permission(ctx, 2, building_id, permissions::PERM_BUILD)
     {
         return Err("no deconstruct permission".to_string());

@@ -1,6 +1,6 @@
 use spacetimedb::Identity;
 
-#[spacetimedb::table(name = permission_state, private)]
+#[spacetimedb::table(accessor = permission_state, private)]
 pub struct PermissionState {
     #[primary_key]
     pub permission_key: String,

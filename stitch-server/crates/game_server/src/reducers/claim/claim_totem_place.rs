@@ -32,10 +32,10 @@ pub fn claim_totem_place(
         .db
         .session_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("active session required".to_string())?;
 
-    if building.owner_identity != ctx.sender {
+    if building.owner_identity != ctx.sender() {
         return Err("not owner of totem building".to_string());
     }
     if building.state != 1 {
@@ -60,7 +60,7 @@ pub fn claim_totem_place(
 
     ctx.db.claim_state().insert(ClaimState {
         claim_id,
-        owner_identity: ctx.sender,
+        owner_identity: ctx.sender(),
         totem_building_id,
         region_id: building.region_id,
         dimension_id: building.dimension_id,
@@ -72,12 +72,12 @@ pub fn claim_totem_place(
         updated_at: ctx.timestamp,
     });
 
-    let key = permissions::permission_key(1, claim_id, ctx.sender);
+    let key = permissions::permission_key(1, claim_id, ctx.sender());
     ctx.db.permission_state().insert(PermissionState {
         permission_key: key,
         target_kind: 1,
         target_id: claim_id,
-        subject_identity: ctx.sender,
+        subject_identity: ctx.sender(),
         flags: permissions::PERM_BUILD | permissions::PERM_ADMIN,
     });
 

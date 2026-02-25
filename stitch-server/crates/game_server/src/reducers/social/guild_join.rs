@@ -14,7 +14,7 @@ pub fn guild_join(ctx: &ReducerContext, guild_id: String) -> Result<(), String> 
         return Err("guild_id must not be empty".to_string());
     }
 
-    if find_guild_id_by_identity(ctx, ctx.sender).is_some() {
+    if find_guild_id_by_identity(ctx, ctx.sender()).is_some() {
         return Err("already in a guild".to_string());
     }
 
@@ -26,16 +26,16 @@ pub fn guild_join(ctx: &ReducerContext, guild_id: String) -> Result<(), String> 
         .ok_or("guild not found".to_string())?;
 
     ctx.db.guild_member().insert(GuildMember {
-        member_key: guild_member_key(&gid, ctx.sender),
+        member_key: guild_member_key(&gid, ctx.sender()),
         guild_id: gid.clone(),
-        member_identity: ctx.sender,
+        member_identity: ctx.sender(),
         role: GUILD_ROLE_MEMBER,
         joined_at: ctx.timestamp,
     });
 
     append_social_feed(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         "guild_joined",
         format!("{{\"guild_id\":\"{}\"}}", gid),
     );

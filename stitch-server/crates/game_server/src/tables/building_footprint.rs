@@ -1,6 +1,6 @@
 use spacetimedb::Timestamp;
 
-#[spacetimedb::table(name = building_footprint, public)]
+#[spacetimedb::table(accessor = building_footprint, public)]
 pub struct BuildingFootprint {
     #[primary_key]
     pub tile_key: String,

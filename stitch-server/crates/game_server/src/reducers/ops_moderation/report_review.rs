@@ -37,7 +37,7 @@ pub fn report_review(
             target_identity: report.target_identity,
             action_type: "report_review_valid".to_string(),
             reason: reason.clone(),
-            actor_identity: ctx.sender,
+            actor_identity: ctx.sender(),
             created_at: ctx.timestamp,
         });
     }

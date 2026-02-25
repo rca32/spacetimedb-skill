@@ -20,7 +20,7 @@ pub fn lock_inventory_container(
     ctx.db.inventory_lock().insert(InventoryLock {
         container_id,
         lock_reason: reason,
-        locked_by: ctx.sender,
+        locked_by: ctx.sender(),
         expires_at: ctx.timestamp,
     });
 
@@ -65,7 +65,7 @@ pub(crate) fn ensure_owner(ctx: &ReducerContext, container_id: u64) -> Result<()
         .find(container_id)
         .ok_or("container not found".to_string())?;
 
-    if container.owner_identity != ctx.sender {
+    if container.owner_identity != ctx.sender() {
         return Err("unauthorized inventory access".to_string());
     }
 

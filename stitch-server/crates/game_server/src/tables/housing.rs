@@ -1,7 +1,7 @@
 use crate::reducers::housing::interior_collapse_rebuild::interior_collapse_rebuild;
 use spacetimedb::{Identity, ScheduleAt, Timestamp};
 
-#[spacetimedb::table(name = housing_state, public)]
+#[spacetimedb::table(accessor = housing_state, public)]
 pub struct HousingState {
     #[primary_key]
     pub entity_id: u64,
@@ -14,7 +14,7 @@ pub struct HousingState {
     pub is_empty: bool,
 }
 
-#[spacetimedb::table(name = dimension_network, public)]
+#[spacetimedb::table(accessor = dimension_network, public)]
 pub struct DimensionNetwork {
     #[primary_key]
     pub entity_id: u64,
@@ -22,7 +22,7 @@ pub struct DimensionNetwork {
     pub collapse_respawn_timestamp: Timestamp,
 }
 
-#[spacetimedb::table(name = dimension_desc, public)]
+#[spacetimedb::table(accessor = dimension_desc, public)]
 pub struct DimensionDesc {
     #[primary_key]
     pub entity_id: u64,
@@ -32,14 +32,14 @@ pub struct DimensionDesc {
     pub collapse_timestamp: Timestamp,
 }
 
-#[spacetimedb::table(name = rent_state, public)]
+#[spacetimedb::table(accessor = rent_state, public)]
 pub struct RentState {
     #[primary_key]
     pub entity_id: u64,
     pub white_list: Vec<Identity>,
 }
 
-#[spacetimedb::table(name = rent_whitelist_entry, public)]
+#[spacetimedb::table(accessor = rent_whitelist_entry, public)]
 pub struct RentWhitelistEntry {
     #[primary_key]
     pub entry_key: String,
@@ -47,7 +47,7 @@ pub struct RentWhitelistEntry {
     pub identity: Identity,
 }
 
-#[spacetimedb::table(name = interior_collapse_timer, scheduled(interior_collapse_rebuild))]
+#[spacetimedb::table(accessor = interior_collapse_timer, scheduled(interior_collapse_rebuild))]
 pub struct InteriorCollapseTimer {
     #[primary_key]
     pub scheduled_id: u64,

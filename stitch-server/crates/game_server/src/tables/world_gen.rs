@@ -1,6 +1,6 @@
 use spacetimedb::Timestamp;
 
-#[spacetimedb::table(name = world_gen_params, public)]
+#[spacetimedb::table(accessor = world_gen_params, public)]
 pub struct WorldGenParams {
     #[primary_key]
     pub id: u64,
@@ -23,7 +23,7 @@ pub struct WorldGenParams {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = biome_gen_def, public)]
+#[spacetimedb::table(accessor = biome_gen_def, public)]
 pub struct BiomeGenDef {
     #[primary_key]
     pub biome_id: u16,
@@ -35,7 +35,7 @@ pub struct BiomeGenDef {
     pub resource_bias_permille: u16,
 }
 
-#[spacetimedb::table(name = resource_gen_def, public)]
+#[spacetimedb::table(accessor = resource_gen_def, public)]
 pub struct ResourceGenDef {
     #[primary_key]
     pub resource_type: u8,
@@ -50,7 +50,7 @@ pub struct ResourceGenDef {
     pub respawn_seconds: u32,
 }
 
-#[spacetimedb::table(name = resource_clump_def, public)]
+#[spacetimedb::table(accessor = resource_clump_def, public)]
 pub struct ResourceClumpDef {
     #[primary_key]
     pub clump_key: String,

@@ -27,7 +27,7 @@ pub fn guild_set_role(
         .find(gid.clone())
         .ok_or("guild not found".to_string())?;
 
-    let actor_key = guild_member_key(&gid, ctx.sender);
+    let actor_key = guild_member_key(&gid, ctx.sender());
     let actor = ctx
         .db
         .guild_member()
@@ -47,20 +47,20 @@ pub fn guild_set_role(
         .find(target_key)
         .ok_or("target member not found".to_string())?;
 
-    if member_identity == ctx.sender && role != GUILD_ROLE_LEADER {
+    if member_identity == ctx.sender() && role != GUILD_ROLE_LEADER {
         return Err("leader cannot demote self".to_string());
     }
 
     target.role = role;
     ctx.db.guild_member().member_key().update(target);
 
-    if role == GUILD_ROLE_LEADER && member_identity != ctx.sender {
-        set_member_role(ctx, &gid, ctx.sender, GUILD_ROLE_OFFICER)?;
+    if role == GUILD_ROLE_LEADER && member_identity != ctx.sender() {
+        set_member_role(ctx, &gid, ctx.sender(), GUILD_ROLE_OFFICER)?;
     }
 
     append_social_feed(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         "guild_role_set",
         format!(
             "{{\"guild_id\":\"{}\",\"target\":\"{}\",\"role\":{}}}",

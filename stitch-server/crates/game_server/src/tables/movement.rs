@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = movement_violation, private)]
+#[spacetimedb::table(accessor = movement_violation, private)]
 pub struct MovementViolation {
     #[primary_key]
     pub violation_id: String,
@@ -10,7 +10,7 @@ pub struct MovementViolation {
     pub attempted_position: Vec<f32>,
 }
 
-#[spacetimedb::table(name = movement_request_log, private)]
+#[spacetimedb::table(accessor = movement_request_log, private)]
 pub struct MovementRequestLog {
     #[primary_key]
     pub request_key: String,
@@ -22,7 +22,7 @@ pub struct MovementRequestLog {
     pub processed_at: Timestamp,
 }
 
-#[spacetimedb::table(name = movement_actor_state, private)]
+#[spacetimedb::table(accessor = movement_actor_state, private)]
 pub struct MovementActorState {
     #[primary_key]
     pub identity: Identity,

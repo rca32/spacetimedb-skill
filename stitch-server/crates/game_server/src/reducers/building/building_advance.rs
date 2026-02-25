@@ -21,7 +21,7 @@ pub fn building_advance(ctx: &ReducerContext, building_id: u64, steps: u32) -> R
         return Err("building is not in project state".to_string());
     }
 
-    if building.owner_identity != ctx.sender
+    if building.owner_identity != ctx.sender()
         && !permissions::has_permission(ctx, 2, building_id, permissions::PERM_BUILD)
     {
         return Err("no build permission".to_string());

@@ -16,7 +16,7 @@ pub fn has_permission(
     target_id: u64,
     required: u32,
 ) -> bool {
-    let key = permission_key(target_kind, target_id, ctx.sender);
+    let key = permission_key(target_kind, target_id, ctx.sender());
     if let Some(row) = ctx.db.permission_state().permission_key().find(key) {
         return row.flags & required == required;
     }

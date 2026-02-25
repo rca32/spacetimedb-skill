@@ -23,7 +23,7 @@ pub fn housing_propagate_permissions(
         .find(housing_entity_id)
         .ok_or("housing not found".to_string())?;
 
-    if ctx.sender != housing.owner_identity
+    if ctx.sender() != housing.owner_identity
         && !permissions::has_permission(
             ctx,
             TARGET_HOUSING,

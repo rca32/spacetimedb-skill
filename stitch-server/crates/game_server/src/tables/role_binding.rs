@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = role_binding, private)]
+#[spacetimedb::table(accessor = role_binding, private)]
 pub struct RoleBinding {
     #[primary_key]
     pub binding_id: String,

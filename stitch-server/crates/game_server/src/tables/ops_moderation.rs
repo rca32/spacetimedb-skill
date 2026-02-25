@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = moderation_flag, private)]
+#[spacetimedb::table(accessor = moderation_flag, private)]
 pub struct ModerationFlag {
     #[primary_key]
     pub identity: Identity,
@@ -9,7 +9,7 @@ pub struct ModerationFlag {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = ban_list, private)]
+#[spacetimedb::table(accessor = ban_list, private)]
 pub struct BanList {
     #[primary_key]
     pub identity: Identity,
@@ -18,7 +18,7 @@ pub struct BanList {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = report_queue, private)]
+#[spacetimedb::table(accessor = report_queue, private)]
 pub struct ReportQueue {
     #[primary_key]
     #[auto_inc]
@@ -30,7 +30,7 @@ pub struct ReportQueue {
     pub created_at: Timestamp,
 }
 
-#[spacetimedb::table(name = moderation_action, private)]
+#[spacetimedb::table(accessor = moderation_action, private)]
 pub struct ModerationAction {
     #[primary_key]
     #[auto_inc]
@@ -42,7 +42,7 @@ pub struct ModerationAction {
     pub created_at: Timestamp,
 }
 
-#[spacetimedb::table(name = rate_limit_bucket, private)]
+#[spacetimedb::table(accessor = rate_limit_bucket, private)]
 pub struct RateLimitBucket {
     #[primary_key]
     pub bucket_key: String,
@@ -52,7 +52,7 @@ pub struct RateLimitBucket {
     pub window_started_at: Timestamp,
 }
 
-#[spacetimedb::table(name = audit_log, private)]
+#[spacetimedb::table(accessor = audit_log, private)]
 pub struct AuditLog {
     #[primary_key]
     #[auto_inc]

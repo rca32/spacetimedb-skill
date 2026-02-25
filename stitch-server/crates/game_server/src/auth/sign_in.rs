@@ -10,7 +10,7 @@ use crate::tables::SessionState;
 pub fn sign_in(ctx: &ReducerContext, region_id: u64) -> Result<(), String> {
     log::info!(
         "sign_in requested: identity={} region_id={}",
-        ctx.sender,
+        ctx.sender(),
         region_id
     );
     super::ensure_account_exists(ctx);
@@ -19,11 +19,11 @@ pub fn sign_in(ctx: &ReducerContext, region_id: u64) -> Result<(), String> {
         .db
         .account()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("account not found".to_string())?;
 
     if account.status != 0 {
-        log::warn!("blocked sign_in attempt: identity={}", ctx.sender);
+        log::warn!("blocked sign_in attempt: identity={}", ctx.sender());
         return Err("account blocked".to_string());
     }
 
@@ -35,13 +35,13 @@ pub fn sign_in(ctx: &ReducerContext, region_id: u64) -> Result<(), String> {
     projection_views::reconcile_npc_state_stream(ctx);
 
     let next_state = SessionState {
-        identity: ctx.sender,
+        identity: ctx.sender(),
         region_id,
         dimension_id: DEFAULT_WORLD_DIMENSION_ID,
         last_active_at: ctx.timestamp,
     };
 
-    let had_session = ctx.db.session_state().identity().find(ctx.sender).is_some();
+    let had_session = ctx.db.session_state().identity().find(ctx.sender()).is_some();
     if had_session {
         ctx.db.session_state().identity().update(next_state);
     } else {
@@ -49,19 +49,19 @@ pub fn sign_in(ctx: &ReducerContext, region_id: u64) -> Result<(), String> {
     }
     log::info!(
         "sign_in session_upsert: identity={} region_id={} mode={}",
-        ctx.sender,
+        ctx.sender(),
         region_id,
         if had_session { "update" } else { "insert" }
     );
 
     super::ensure_player_state_exists(ctx, "new-player".to_string());
     super::ensure_transform_exists(ctx, region_id, DEFAULT_WORLD_DIMENSION_ID);
-    projection_views::sync_player_session_view(ctx, ctx.sender);
+    projection_views::sync_player_session_view(ctx, ctx.sender());
     log::info!(
         "sign_in session_view_synced: identity={} region_id={}",
-        ctx.sender,
+        ctx.sender(),
         region_id
     );
-    projection_views::sync_player_wallet_view(ctx, ctx.sender);
+    projection_views::sync_player_wallet_view(ctx, ctx.sender());
     Ok(())
 }

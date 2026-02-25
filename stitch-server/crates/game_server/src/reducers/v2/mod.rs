@@ -35,10 +35,10 @@ pub fn sync_client_frame(
         return Err("dimension_id must be > 0".to_string());
     }
 
-    let key = frame_key(ctx.sender, frame_no);
+    let key = frame_key(ctx.sender(), frame_no);
     let row = ClientFrameV2 {
         frame_key: key.clone(),
-        identity: ctx.sender,
+        identity: ctx.sender(),
         region_id,
         dimension_id,
         frame_no,
@@ -52,7 +52,7 @@ pub fn sync_client_frame(
         ctx.db.client_frame_v2().insert(row);
     }
 
-    ensure_physics_state(ctx, ctx.sender, region_id, dimension_id, frame_no);
+    ensure_physics_state(ctx, ctx.sender(), region_id, dimension_id, frame_no);
     Ok(())
 }
 
@@ -95,7 +95,7 @@ pub fn submit_motion_intent(
 
     ctx.db.motion_intent_v2().insert(MotionIntentV2 {
         intent_id: intent_id.clone(),
-        identity: ctx.sender,
+        identity: ctx.sender(),
         region_id,
         dimension_id,
         frame_no,
@@ -110,9 +110,9 @@ pub fn submit_motion_intent(
         .db
         .physics_state_v2()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .unwrap_or_else(|| {
-            default_physics_state(ctx.sender, region_id, dimension_id, frame_no, ctx.timestamp)
+            default_physics_state(ctx.sender(), region_id, dimension_id, frame_no, ctx.timestamp)
         });
 
     let current_position = vec3_or_zero(&current.position);
@@ -158,7 +158,7 @@ pub fn submit_motion_intent(
     .sqrt();
 
     let next_state = PhysicsStateV2 {
-        entity_id: ctx.sender,
+        entity_id: ctx.sender(),
         region_id,
         dimension_id,
         position: next_position.to_vec(),
@@ -173,7 +173,7 @@ pub fn submit_motion_intent(
         .db
         .physics_state_v2()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .is_some()
     {
         ctx.db.physics_state_v2().entity_id().update(next_state);
@@ -183,20 +183,20 @@ pub fn submit_motion_intent(
 
     upsert_player_proxy(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         region_id,
         dimension_id,
         next_position,
         frame_no,
     );
-    upsert_aoi_player(ctx, ctx.sender, region_id, dimension_id, next_position);
+    upsert_aoi_player(ctx, ctx.sender(), region_id, dimension_id, next_position);
 
     if let Some(reason) = correction_reason {
         let correction_id = format!("{}:{}:{reason}", intent_id, frame_no);
         upsert_server_correction(
             ctx,
             correction_id,
-            ctx.sender,
+            ctx.sender(),
             region_id,
             dimension_id,
             reason,
@@ -212,7 +212,7 @@ pub fn submit_motion_intent(
         upsert_server_correction(
             ctx,
             correction_id,
-            ctx.sender,
+            ctx.sender(),
             region_id,
             dimension_id,
             "speed_audit_soft",
@@ -257,7 +257,7 @@ pub fn submit_combat_intent(
 
     ctx.db.combat_intent_v2().insert(CombatIntentV2 {
         intent_id: intent_id.clone(),
-        attacker: ctx.sender,
+        attacker: ctx.sender(),
         target,
         region_id,
         dimension_id,
@@ -273,7 +273,7 @@ pub fn submit_combat_intent(
 
     ctx.db.combat_hit_v2().insert(CombatHitV2 {
         hit_id: hit_id.clone(),
-        attacker: ctx.sender,
+        attacker: ctx.sender(),
         target,
         region_id,
         dimension_id,
@@ -294,7 +294,7 @@ pub fn submit_combat_intent(
         chunk_x: 0,
         chunk_y: 0,
         entity_type: 9,
-        entity_key: ctx.sender.to_string(),
+        entity_key: ctx.sender().to_string(),
         position: vec![0.0, 0.0, 0.0],
         payload,
         updated_at: ctx.timestamp,
@@ -320,7 +320,7 @@ pub fn ack_server_correction(
         .find(correction_id.clone())
         .ok_or_else(|| format!("correction not found: {correction_id}"))?;
 
-    if current.identity != ctx.sender {
+    if current.identity != ctx.sender() {
         return Err("correction does not belong to sender".to_string());
     }
 

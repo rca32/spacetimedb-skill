@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = player_inventory_container_view, public)]
+#[spacetimedb::table(accessor = player_inventory_container_view, public)]
 pub struct PlayerInventoryContainerView {
     #[primary_key]
     pub view_key: String,
@@ -11,7 +11,7 @@ pub struct PlayerInventoryContainerView {
     pub cargo_pocket_volume: i32,
 }
 
-#[spacetimedb::table(name = player_inventory_slot_view, public)]
+#[spacetimedb::table(accessor = player_inventory_slot_view, public)]
 pub struct PlayerInventorySlotView {
     #[primary_key]
     pub slot_key: String,
@@ -24,7 +24,7 @@ pub struct PlayerInventorySlotView {
     pub volume: i32,
 }
 
-#[spacetimedb::table(name = player_inventory_item_view, public)]
+#[spacetimedb::table(accessor = player_inventory_item_view, public)]
 pub struct PlayerInventoryItemView {
     #[primary_key]
     pub item_instance_id: u64,
@@ -37,7 +37,7 @@ pub struct PlayerInventoryItemView {
     pub bound: bool,
 }
 
-#[spacetimedb::table(name = player_wallet_view, public)]
+#[spacetimedb::table(accessor = player_wallet_view, public)]
 pub struct PlayerWalletView {
     #[primary_key]
     pub identity: Identity,
@@ -45,7 +45,7 @@ pub struct PlayerWalletView {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = player_session_view, public)]
+#[spacetimedb::table(accessor = player_session_view, public)]
 pub struct PlayerSessionView {
     #[primary_key]
     pub identity: Identity,
@@ -54,7 +54,7 @@ pub struct PlayerSessionView {
     pub last_active_at: Timestamp,
 }
 
-#[spacetimedb::table(name = player_movement_feedback_view, public)]
+#[spacetimedb::table(accessor = player_movement_feedback_view, public)]
 pub struct PlayerMovementFeedbackView {
     #[primary_key]
     pub request_key: String,

@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = npc_state, public)]
+#[spacetimedb::table(accessor = npc_state, public)]
 pub struct NpcState {
     #[primary_key]
     pub npc_id: u64,
@@ -20,7 +20,7 @@ pub struct NpcState {
     pub previous_anchors: Vec<u64>,
 }
 
-#[spacetimedb::table(name = npc_state_stream, public)]
+#[spacetimedb::table(accessor = npc_state_stream, public)]
 pub struct NpcStateStream {
     #[primary_key]
     pub npc_id: u64,
@@ -39,7 +39,7 @@ pub struct NpcStateStream {
     pub anchor_entity_id: u64,
 }
 
-#[spacetimedb::table(name = npc_population_def, public)]
+#[spacetimedb::table(accessor = npc_population_def, public)]
 pub struct NpcPopulationDef {
     #[primary_key]
     pub npc_type: u8,
@@ -53,7 +53,7 @@ pub struct NpcPopulationDef {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_anchor_state, public)]
+#[spacetimedb::table(accessor = npc_anchor_state, public)]
 pub struct NpcAnchorState {
     #[primary_key]
     pub anchor_id: u64,
@@ -66,7 +66,7 @@ pub struct NpcAnchorState {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_trade_order_def, public)]
+#[spacetimedb::table(accessor = npc_trade_order_def, public)]
 pub struct NpcTradeOrderDef {
     #[primary_key]
     pub order_def_id: u64,
@@ -82,7 +82,7 @@ pub struct NpcTradeOrderDef {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_trade_order_state, public)]
+#[spacetimedb::table(accessor = npc_trade_order_state, public)]
 pub struct NpcTradeOrderState {
     #[primary_key]
     pub order_key: String,
@@ -98,7 +98,7 @@ pub struct NpcTradeOrderState {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_interaction_log, public)]
+#[spacetimedb::table(accessor = npc_interaction_log, public)]
 pub struct NpcInteractionLog {
     #[primary_key]
     pub interaction_key: String,
@@ -111,7 +111,7 @@ pub struct NpcInteractionLog {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_ai_status_view, public)]
+#[spacetimedb::table(accessor = npc_ai_status_view, public)]
 pub struct NpcAiStatusView {
     #[primary_key]
     pub status_key: u8,
@@ -119,7 +119,7 @@ pub struct NpcAiStatusView {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = quest_chain_state, public)]
+#[spacetimedb::table(accessor = quest_chain_state, public)]
 pub struct QuestChainState {
     #[primary_key]
     pub chain_key: String,
@@ -130,7 +130,7 @@ pub struct QuestChainState {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = quest_stage_state, public)]
+#[spacetimedb::table(accessor = quest_stage_state, public)]
 pub struct QuestStageState {
     #[primary_key]
     pub stage_key: String,
@@ -140,7 +140,7 @@ pub struct QuestStageState {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = agent_request, private)]
+#[spacetimedb::table(accessor = agent_request, private)]
 pub struct AgentRequest {
     #[primary_key]
     pub request_id: String,
@@ -153,7 +153,7 @@ pub struct AgentRequest {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = agent_result, public)]
+#[spacetimedb::table(accessor = agent_result, public)]
 pub struct AgentResult {
     #[primary_key]
     pub result_id: String,

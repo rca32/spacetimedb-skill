@@ -1,4 +1,4 @@
-#[spacetimedb::table(name = inventory_slot, private)]
+#[spacetimedb::table(accessor = inventory_slot, private)]
 pub struct InventorySlot {
     #[primary_key]
     pub slot_key: String,

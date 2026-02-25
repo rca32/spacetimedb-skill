@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = trade_session, public)]
+#[spacetimedb::table(accessor = trade_session, public)]
 pub struct TradeSession {
     #[primary_key]
     pub session_id: String,
@@ -15,7 +15,7 @@ pub struct TradeSession {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = trade_offer, public)]
+#[spacetimedb::table(accessor = trade_offer, public)]
 pub struct TradeOffer {
     #[primary_key]
     pub offer_key: String,
@@ -27,7 +27,7 @@ pub struct TradeOffer {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = market_order, public)]
+#[spacetimedb::table(accessor = market_order, public)]
 pub struct MarketOrder {
     #[primary_key]
     pub order_id: String,
@@ -42,7 +42,7 @@ pub struct MarketOrder {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = market_fill, public)]
+#[spacetimedb::table(accessor = market_fill, public)]
 pub struct MarketFill {
     #[primary_key]
     pub fill_id: String,

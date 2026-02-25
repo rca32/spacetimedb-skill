@@ -70,7 +70,7 @@ fn request_path_internal(
     };
     let summary = pathfinding::request_path_and_store(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         region_id,
         start,
         goal,
@@ -80,7 +80,7 @@ fn request_path_internal(
 
     log::info!(
         "request_path complete: requester={} region_id={} dimension_id={} status={} explored_nodes={} steps={}",
-        ctx.sender,
+        ctx.sender(),
         region_id,
         dimension_id,
         summary.status.as_str(),

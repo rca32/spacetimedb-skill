@@ -19,7 +19,7 @@ pub fn party_leave(ctx: &ReducerContext, party_id: String) -> Result<(), String>
         .find(pid.clone())
         .ok_or("party not found".to_string())?;
 
-    let leaving_key = party_member_key(&pid, ctx.sender);
+    let leaving_key = party_member_key(&pid, ctx.sender());
     if ctx
         .db
         .party_member()
@@ -43,14 +43,14 @@ pub fn party_leave(ctx: &ReducerContext, party_id: String) -> Result<(), String>
         ctx.db.party_state().party_id().delete(party.party_id);
         append_social_feed(
             ctx,
-            ctx.sender,
+            ctx.sender(),
             "party_disbanded",
             format!("{{\"party_id\":\"{}\"}}", pid),
         );
         return Ok(());
     }
 
-    if party.leader_identity == ctx.sender {
+    if party.leader_identity == ctx.sender() {
         let next_leader = remaining[0].member_identity;
         party.leader_identity = next_leader;
         ctx.db.party_state().party_id().update(party);
@@ -65,7 +65,7 @@ pub fn party_leave(ctx: &ReducerContext, party_id: String) -> Result<(), String>
 
     append_social_feed(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         "party_left",
         format!("{{\"party_id\":\"{}\"}}", pid),
     );

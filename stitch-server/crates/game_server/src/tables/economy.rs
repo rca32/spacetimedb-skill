@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = wallet, private)]
+#[spacetimedb::table(accessor = wallet, private)]
 pub struct Wallet {
     #[primary_key]
     pub identity: Identity,
@@ -8,7 +8,7 @@ pub struct Wallet {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = currency_txn, private)]
+#[spacetimedb::table(accessor = currency_txn, private)]
 pub struct CurrencyTxn {
     #[primary_key]
     #[auto_inc]
@@ -19,7 +19,7 @@ pub struct CurrencyTxn {
     pub created_at: Timestamp,
 }
 
-#[spacetimedb::table(name = tax_policy, private)]
+#[spacetimedb::table(accessor = tax_policy, private)]
 pub struct TaxPolicy {
     #[primary_key]
     pub item_def_id: u64,
@@ -27,7 +27,7 @@ pub struct TaxPolicy {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = price_index, public)]
+#[spacetimedb::table(accessor = price_index, public)]
 pub struct PriceIndex {
     #[primary_key]
     pub index_key: String,
@@ -37,7 +37,7 @@ pub struct PriceIndex {
     pub recorded_at: Timestamp,
 }
 
-#[spacetimedb::table(name = order_fill, private)]
+#[spacetimedb::table(accessor = order_fill, private)]
 pub struct OrderFill {
     #[primary_key]
     #[auto_inc]
@@ -48,7 +48,7 @@ pub struct OrderFill {
     pub created_at: Timestamp,
 }
 
-#[spacetimedb::table(name = escrow_item, private)]
+#[spacetimedb::table(accessor = escrow_item, private)]
 pub struct EscrowItem {
     #[primary_key]
     pub escrow_key: String,

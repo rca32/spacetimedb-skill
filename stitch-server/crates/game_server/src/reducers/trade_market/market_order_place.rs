@@ -32,7 +32,7 @@ pub fn market_order_place(
         .db
         .session_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("active session required".to_string())?;
 
     if ctx.db.item_def().item_def_id().find(item_def_id).is_none() {
@@ -41,7 +41,7 @@ pub fn market_order_place(
 
     ctx.db.market_order().insert(MarketOrder {
         order_id: oid,
-        owner_identity: ctx.sender,
+        owner_identity: ctx.sender(),
         region_id: session.region_id,
         side,
         item_def_id,

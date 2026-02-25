@@ -23,13 +23,13 @@ pub fn inventory_bootstrap(ctx: &ReducerContext) -> Result<(), String> {
         .find(container_id)
         .is_some()
     {
-        projection_views::sync_player_inventory_views(ctx, ctx.sender);
+        projection_views::sync_player_inventory_views(ctx, ctx.sender());
         return Ok(());
     }
 
     ctx.db.inventory_container().insert(InventoryContainer {
         container_id,
-        owner_identity: ctx.sender,
+        owner_identity: ctx.sender(),
         inventory_index: 0,
         cargo_index: 12,
         slot_count: DEFAULT_MAIN_SLOT_COUNT,
@@ -72,7 +72,7 @@ pub fn inventory_bootstrap(ctx: &ReducerContext) -> Result<(), String> {
     slot0.item_instance_id = starter_instance_id;
     ctx.db.inventory_slot().slot_key().update(slot0);
 
-    projection_views::sync_player_inventory_views(ctx, ctx.sender);
+    projection_views::sync_player_inventory_views(ctx, ctx.sender());
 
     Ok(())
 }
@@ -93,6 +93,6 @@ pub(crate) fn next_item_instance_id(ctx: &ReducerContext) -> u64 {
 
 fn default_container_id(ctx: &ReducerContext) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    ctx.sender.to_string().hash(&mut hasher);
+    ctx.sender().to_string().hash(&mut hasher);
     hasher.finish()
 }

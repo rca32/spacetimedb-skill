@@ -9,7 +9,7 @@ use crate::tables::npc_quest::{npc_anchor_state, npc_population_def};
 use crate::tables::{FeatureFlags, NpcAnchorState, NpcPopulationDef, NpcTradeOrderDef};
 
 fn require_server_or_admin(ctx: &ReducerContext) -> Result<(), String> {
-    if ctx.sender != Identity::ZERO
+    if ctx.sender() != Identity::ZERO
         && !permissions::has_permission(ctx, 0, 0, permissions::PERM_ADMIN)
     {
         return Err("server/admin authorization required".to_string());

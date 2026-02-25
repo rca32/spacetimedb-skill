@@ -1,0 +1,4 @@
+interface:
+  display_name: "SpacetimeDB"
+  short_description: "SpacetimeDB 서버/클라이언트 작업용 스킬"
+  default_prompt: "Use $spacetimedb to implement, debug, and deploy SpacetimeDB modules, clients, and subscriptions."

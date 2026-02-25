@@ -24,7 +24,7 @@ pub fn attack_start(
         return Err("request_id must not be empty".to_string());
     }
 
-    if ctx.sender == target_identity {
+    if ctx.sender() == target_identity {
         return Err("cannot attack self".to_string());
     }
 
@@ -32,7 +32,7 @@ pub fn attack_start(
         .db
         .session_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("active attacker session required".to_string())?;
     let target_session = ctx
         .db
@@ -62,7 +62,7 @@ pub fn attack_start(
         .db
         .transform_state()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("attacker transform missing".to_string())?;
     let target_tf = ctx
         .db
@@ -92,7 +92,7 @@ pub fn attack_start(
         return Err("target out of range".to_string());
     }
 
-    let request_key = format!("{}:{}", ctx.sender, req);
+    let request_key = format!("{}:{}", ctx.sender(), req);
     if ctx
         .db
         .attack_schedule_state()
@@ -107,9 +107,9 @@ pub fn attack_start(
         ctx.db
             .combat_state()
             .identity()
-            .find(ctx.sender)
+            .find(ctx.sender())
             .unwrap_or(CombatState {
-                identity: ctx.sender,
+                identity: ctx.sender(),
                 region_id: attacker_session.region_id,
                 dimension_id: attacker_dimension,
                 in_combat: false,
@@ -134,7 +134,7 @@ pub fn attack_start(
     attacker_combat.last_attack_client_ts_ms = client_ts_ms;
     attacker_combat.updated_at = ctx.timestamp;
 
-    if ctx.db.combat_state().identity().find(ctx.sender).is_some() {
+    if ctx.db.combat_state().identity().find(ctx.sender()).is_some() {
         ctx.db.combat_state().identity().update(attacker_combat);
     } else {
         ctx.db.combat_state().insert(attacker_combat);
@@ -175,7 +175,7 @@ pub fn attack_start(
 
     ctx.db.attack_schedule_state().insert(AttackScheduled {
         request_key,
-        attacker_identity: ctx.sender,
+        attacker_identity: ctx.sender(),
         target_identity,
         region_id: attacker_session.region_id,
         dimension_id: attacker_dimension,

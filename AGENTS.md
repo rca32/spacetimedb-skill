@@ -45,7 +45,7 @@
 - 수치/타이머/제약은 **본 프로젝트 파라미터/정책 정의**로부터 도출한다.
 
 ## SpacetimeDB 작업 규칙
-- SpacetimeDB 관련 작업은 반드시 `.opencode/skills/spacetimedb-korean/SKILL.md` 스킬을 참조한다.
+- SpacetimeDB 관련 작업은 반드시 `.opencode/skills/spacetimedb/SKILL.md` 스킬을 참조한다.
 
 ## WSL 브라우저 자동화 규칙
 - WSL에서 OAuth/CAPTCHA/2FA/다운로드 제한으로 자동화가 막히면 기본 스킬로 `.agents/skills/wsl-human-cdp-download/SKILL.md`를 사용한다.

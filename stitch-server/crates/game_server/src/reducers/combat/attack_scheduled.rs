@@ -15,7 +15,7 @@ pub fn attack_scheduled(ctx: &ReducerContext, request_key: String) -> Result<(),
         return Ok(());
     }
 
-    if ctx.sender != scheduled.attacker_identity {
+    if ctx.sender() != scheduled.attacker_identity {
         return Err("only attacker can schedule impact".to_string());
     }
 

@@ -18,7 +18,7 @@ pub fn party_create(ctx: &ReducerContext, party_id: String) -> Result<(), String
         return Err("party_id already exists".to_string());
     }
 
-    if find_party_id_by_identity(ctx, ctx.sender).is_some() {
+    if find_party_id_by_identity(ctx, ctx.sender()).is_some() {
         return Err("already in a party".to_string());
     }
 
@@ -26,26 +26,26 @@ pub fn party_create(ctx: &ReducerContext, party_id: String) -> Result<(), String
         .db
         .session_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("active session required".to_string())?;
 
     ctx.db.party_state().insert(PartyState {
         party_id: pid.clone(),
-        leader_identity: ctx.sender,
+        leader_identity: ctx.sender(),
         region_id: session.region_id,
         created_at: ctx.timestamp,
     });
     ctx.db.party_member().insert(PartyMember {
-        member_key: party_member_key(&pid, ctx.sender),
+        member_key: party_member_key(&pid, ctx.sender()),
         party_id: pid.clone(),
-        member_identity: ctx.sender,
+        member_identity: ctx.sender(),
         role: PARTY_ROLE_LEADER,
         joined_at: ctx.timestamp,
     });
 
     append_social_feed(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         "party_created",
         format!("{{\"party_id\":\"{}\"}}", pid),
     );

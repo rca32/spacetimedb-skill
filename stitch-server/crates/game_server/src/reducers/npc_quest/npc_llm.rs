@@ -22,7 +22,7 @@ const NPC_ACTION_STATUS_DONE: u8 = 2;
 const NPC_ACTION_STATUS_FAILED: u8 = 3;
 
 fn require_server_or_admin(ctx: &ReducerContext) -> Result<(), String> {
-    if ctx.sender != Identity::ZERO
+    if ctx.sender() != Identity::ZERO
         && !permissions::has_permission(ctx, 0, 0, permissions::PERM_ADMIN)
     {
         return Err("server/admin authorization required".to_string());
@@ -61,13 +61,13 @@ pub fn npc_dialogue_request(
         .db
         .session_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("active session required".to_string())?;
     let caller_tf = ctx
         .db
         .transform_state()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("caller transform missing".to_string())?;
     if caller_tf.region_id != session.region_id || caller_tf.dimension_id != session.dimension_id {
         return Err("caller transform/session mismatch".to_string());
@@ -89,7 +89,7 @@ pub fn npc_dialogue_request(
     }
 
     let session_id = if conversation_id.trim().is_empty() {
-        format!("dlg:{}:{}", npc_id, ctx.sender)
+        format!("dlg:{}:{}", npc_id, ctx.sender())
     } else {
         conversation_id.trim().to_string()
     };
@@ -112,7 +112,7 @@ pub fn npc_dialogue_request(
             .insert(NpcConversationSession {
                 session_id: session_id.clone(),
                 npc_id,
-                player_identity: ctx.sender,
+                player_identity: ctx.sender(),
                 status: 1,
                 last_at: ctx.timestamp,
             });
@@ -132,7 +132,7 @@ pub fn npc_dialogue_request(
     let cache_key = format!("{}:{}", npc_id, prompt_hash);
     let pending_marker = format!("[pending:{}]", rid);
 
-    let interaction_key = format!("dialogue:{}:{}", ctx.sender, rid);
+    let interaction_key = format!("dialogue:{}:{}", ctx.sender(), rid);
     if ctx
         .db
         .npc_interaction_log()
@@ -143,7 +143,7 @@ pub fn npc_dialogue_request(
         ctx.db.npc_interaction_log().insert(NpcInteractionLog {
             interaction_key,
             npc_id,
-            caller_identity: ctx.sender,
+            caller_identity: ctx.sender(),
             interaction_kind: 1,
             status: 1,
             detail: "dialogue request accepted".to_string(),
@@ -247,7 +247,7 @@ pub fn npc_action_resolve(
                     .find(sid.clone())
             })
             .map(|row| row.player_identity)
-            .unwrap_or(ctx.sender);
+            .unwrap_or(ctx.sender());
         ctx.db.npc_policy_violation().insert(NpcPolicyViolation {
             violation_id: 0,
             npc_id: request.npc_id,

@@ -20,13 +20,13 @@ pub fn npc_talk(ctx: &ReducerContext, npc_id: u64, request_id: String) -> Result
         .db
         .session_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("active session required".to_string())?;
     let caller_tf = ctx
         .db
         .transform_state()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("caller transform missing".to_string())?;
     if caller_tf.region_id != session.region_id || caller_tf.dimension_id != session.dimension_id {
         return Err("caller transform/session mismatch".to_string());
@@ -48,7 +48,7 @@ pub fn npc_talk(ctx: &ReducerContext, npc_id: u64, request_id: String) -> Result
         return Err("npc is too far to talk".to_string());
     }
 
-    let interaction_key = format!("talk:{}:{}", ctx.sender, req);
+    let interaction_key = format!("talk:{}:{}", ctx.sender(), req);
     if ctx
         .db
         .npc_interaction_log()
@@ -62,7 +62,7 @@ pub fn npc_talk(ctx: &ReducerContext, npc_id: u64, request_id: String) -> Result
     ctx.db.npc_interaction_log().insert(NpcInteractionLog {
         interaction_key,
         npc_id,
-        caller_identity: ctx.sender,
+        caller_identity: ctx.sender(),
         interaction_kind: 1,
         status: 1,
         detail: "talk accepted".to_string(),

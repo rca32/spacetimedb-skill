@@ -27,13 +27,13 @@ pub fn housing_enter(
         return Err("housing is locked".to_string());
     }
 
-    if ctx.sender != housing.owner_identity {
+    if ctx.sender() != housing.owner_identity {
         let permitted_by_rent = ctx
             .db
             .rent_state()
             .entity_id()
             .find(housing_entity_id)
-            .map(|r| r.white_list.contains(&ctx.sender))
+            .map(|r| r.white_list.contains(&ctx.sender()))
             .unwrap_or(false);
 
         let permitted_by_permissions =
@@ -59,7 +59,7 @@ pub fn housing_enter(
         .unwrap_or(DEFAULT_WORLD_DIMENSION_ID);
 
     let next = TransformState {
-        entity_id: ctx.sender,
+        entity_id: ctx.sender(),
         region_id: housing.region_index as u64,
         dimension_id: target_dimension_id,
         position: vec![portal_x, portal_y, portal_z],
@@ -71,7 +71,7 @@ pub fn housing_enter(
         .db
         .transform_state()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .is_some()
     {
         ctx.db.transform_state().entity_id().update(next);
@@ -79,7 +79,7 @@ pub fn housing_enter(
         ctx.db.transform_state().insert(next);
     }
 
-    if let Some(mut session) = ctx.db.session_state().identity().find(ctx.sender) {
+    if let Some(mut session) = ctx.db.session_state().identity().find(ctx.sender()) {
         session.region_id = housing.region_index as u64;
         session.dimension_id = target_dimension_id;
         session.last_active_at = ctx.timestamp;
@@ -89,7 +89,7 @@ pub fn housing_enter(
             dimension_id: session.dimension_id,
             last_active_at: session.last_active_at,
         });
-        projection_views::sync_player_session_view(ctx, ctx.sender);
+        projection_views::sync_player_session_view(ctx, ctx.sender());
     }
 
     Ok(())

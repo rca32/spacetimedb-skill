@@ -21,16 +21,16 @@ pub fn has_role(ctx: &ReducerContext, identity: Identity, role: &str) -> bool {
 }
 
 pub fn require_admin(ctx: &ReducerContext) -> Result<(), String> {
-    if !has_role(ctx, ctx.sender, ROLE_ADMIN) {
+    if !has_role(ctx, ctx.sender(), ROLE_ADMIN) {
         return Err("admin role required".to_string());
     }
     Ok(())
 }
 
 pub fn require_ops_role(ctx: &ReducerContext) -> Result<(), String> {
-    if has_role(ctx, ctx.sender, ROLE_ADMIN)
-        || has_role(ctx, ctx.sender, ROLE_GM)
-        || has_role(ctx, ctx.sender, ROLE_MOD)
+    if has_role(ctx, ctx.sender(), ROLE_ADMIN)
+        || has_role(ctx, ctx.sender(), ROLE_GM)
+        || has_role(ctx, ctx.sender(), ROLE_MOD)
     {
         return Ok(());
     }
@@ -42,7 +42,7 @@ pub fn ensure_ops_rate_limit(
     action_type: &str,
     scope_id: &str,
 ) -> Result<(), String> {
-    let key = format!("ops:{}:{}:{}", action_type, ctx.sender, scope_id);
+    let key = format!("ops:{}:{}:{}", action_type, ctx.sender(), scope_id);
     if let Some(mut bucket) = ctx.db.rate_limit_bucket().bucket_key().find(key.clone()) {
         let elapsed = ctx
             .timestamp
@@ -67,7 +67,7 @@ pub fn ensure_ops_rate_limit(
 
     ctx.db.rate_limit_bucket().insert(RateLimitBucket {
         bucket_key: key,
-        identity: ctx.sender,
+        identity: ctx.sender(),
         action_type: action_type.to_string(),
         count_in_window: 1,
         window_started_at: ctx.timestamp,
@@ -79,7 +79,7 @@ pub fn ensure_ops_rate_limit(
 pub fn append_audit_log(ctx: &ReducerContext, action_type: &str, payload: String) {
     ctx.db.audit_log().insert(AuditLog {
         audit_id: 0,
-        actor_identity: ctx.sender,
+        actor_identity: ctx.sender(),
         action_type: action_type.to_string(),
         payload,
         created_at: ctx.timestamp,

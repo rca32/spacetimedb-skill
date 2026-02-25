@@ -22,9 +22,9 @@ pub fn trade_accept(
         return Err("trade session is not active".to_string());
     }
 
-    if session.initiator_identity == ctx.sender {
+    if session.initiator_identity == ctx.sender() {
         session.initiator_accepted = accepted;
-    } else if session.partner_identity == ctx.sender {
+    } else if session.partner_identity == ctx.sender() {
         session.partner_accepted = accepted;
     } else {
         return Err("only session participants can accept".to_string());

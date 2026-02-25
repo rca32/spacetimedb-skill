@@ -19,9 +19,9 @@ pub mod sign_in;
 pub mod sign_out;
 
 pub(crate) fn ensure_account_exists(ctx: &ReducerContext) {
-    if ctx.db.account().identity().find(ctx.sender).is_none() {
+    if ctx.db.account().identity().find(ctx.sender()).is_none() {
         ctx.db.account().insert(Account {
-            identity: ctx.sender,
+            identity: ctx.sender(),
             created_at: ctx.timestamp,
             status: 0,
         });
@@ -29,15 +29,15 @@ pub(crate) fn ensure_account_exists(ctx: &ReducerContext) {
 }
 
 pub(crate) fn ensure_player_state_exists(ctx: &ReducerContext, display_name: String) {
-    if ctx.db.player_state().player_id().find(ctx.sender).is_none() {
+    if ctx.db.player_state().player_id().find(ctx.sender()).is_none() {
         ctx.db.player_state().insert(PlayerState {
-            player_id: ctx.sender,
+            player_id: ctx.sender(),
             display_name,
             created_at: ctx.timestamp,
         });
     }
 
-    let entity_id = identity_to_entity_id(ctx.sender);
+    let entity_id = identity_to_entity_id(ctx.sender());
     if ctx
         .db
         .character_stats()
@@ -77,12 +77,12 @@ pub(crate) fn ensure_transform_exists(ctx: &ReducerContext, region_id: u64, dime
         .db
         .transform_state()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .is_none()
     {
         let spawn = resolve_spawn_position(ctx, region_id, dimension_id);
         ctx.db.transform_state().insert(TransformState {
-            entity_id: ctx.sender,
+            entity_id: ctx.sender(),
             region_id,
             dimension_id,
             position: spawn,
@@ -102,7 +102,7 @@ pub fn set_active_dimension(ctx: &ReducerContext, dimension_id: u32) -> Result<(
         .db
         .session_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("active session required".to_string())?;
     if dimension_id != DEFAULT_WORLD_DIMENSION_ID {
         let exists_in_housing = ctx
@@ -129,7 +129,7 @@ pub fn set_active_dimension(ctx: &ReducerContext, dimension_id: u32) -> Result<(
         });
     }
 
-    if let Some(mut tf) = ctx.db.transform_state().entity_id().find(ctx.sender) {
+    if let Some(mut tf) = ctx.db.transform_state().entity_id().find(ctx.sender()) {
         let dimension_changed = tf.dimension_id != dimension_id;
         let region_changed = tf.region_id != session.region_id;
         tf.dimension_id = dimension_id;
@@ -142,7 +142,7 @@ pub fn set_active_dimension(ctx: &ReducerContext, dimension_id: u32) -> Result<(
     } else {
         let spawn = resolve_spawn_position(ctx, session.region_id, dimension_id);
         ctx.db.transform_state().insert(TransformState {
-            entity_id: ctx.sender,
+            entity_id: ctx.sender(),
             region_id: session.region_id,
             dimension_id,
             position: spawn,
@@ -151,7 +151,7 @@ pub fn set_active_dimension(ctx: &ReducerContext, dimension_id: u32) -> Result<(
         });
     }
 
-    projection_views::sync_player_session_view(ctx, ctx.sender);
+    projection_views::sync_player_session_view(ctx, ctx.sender());
     Ok(())
 }
 

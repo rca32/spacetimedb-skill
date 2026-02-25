@@ -1,4 +1,4 @@
-#[spacetimedb::table(name = building_def, public)]
+#[spacetimedb::table(accessor = building_def, public)]
 pub struct BuildingDef {
     #[primary_key]
     pub building_def_id: u64,
@@ -8,7 +8,7 @@ pub struct BuildingDef {
     pub footprint_radius: u32,
 }
 
-#[spacetimedb::table(name = combat_action_def, public)]
+#[spacetimedb::table(accessor = combat_action_def, public)]
 pub struct CombatActionDef {
     #[primary_key]
     pub action_def_id: u64,
@@ -17,7 +17,7 @@ pub struct CombatActionDef {
     pub range_meters: u32,
 }
 
-#[spacetimedb::table(name = quest_chain_def, public)]
+#[spacetimedb::table(accessor = quest_chain_def, public)]
 pub struct QuestChainDef {
     #[primary_key]
     pub chain_id: u64,

@@ -28,8 +28,8 @@ pub fn trade_item_add(
         .find(session_id.clone())
         .ok_or("trade session not found".to_string())?;
 
-    let is_initiator = session.initiator_identity == ctx.sender;
-    let is_partner = session.partner_identity == ctx.sender;
+    let is_initiator = session.initiator_identity == ctx.sender();
+    let is_partner = session.partner_identity == ctx.sender();
     if !is_initiator && !is_partner {
         return Err("only session participants can add offer items".to_string());
     }
@@ -40,7 +40,7 @@ pub fn trade_item_add(
         .db
         .session_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("active session required".to_string())?;
     let caller_dimension = if caller_session.dimension_id == 0 {
         DEFAULT_WORLD_DIMENSION_ID
@@ -56,13 +56,13 @@ pub fn trade_item_add(
         return Err("trade session dimension mismatch".to_string());
     }
 
-    let owner_container = main_container_id(ctx, ctx.sender)
+    let owner_container = main_container_id(ctx, ctx.sender())
         .ok_or("main inventory container not found".to_string())?;
     ensure_not_locked(ctx, owner_container)?;
 
     ensure_item_owned_in_container(ctx, owner_container, item_instance_id, quantity)?;
 
-    let offer_key = format!("{}:{}:{}", session_id, ctx.sender, item_instance_id);
+    let offer_key = format!("{}:{}:{}", session_id, ctx.sender(), item_instance_id);
     if let Some(mut offer) = ctx.db.trade_offer().offer_key().find(offer_key.clone()) {
         offer.quantity = quantity;
         offer.updated_at = ctx.timestamp;
@@ -71,7 +71,7 @@ pub fn trade_item_add(
         ctx.db.trade_offer().insert(TradeOffer {
             offer_key,
             session_id,
-            owner_identity: ctx.sender,
+            owner_identity: ctx.sender(),
             item_instance_id,
             quantity,
             created_at: ctx.timestamp,

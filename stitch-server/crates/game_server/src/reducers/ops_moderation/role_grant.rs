@@ -30,7 +30,7 @@ pub fn role_grant(
             identity: target_identity,
             role: normalized.clone(),
             granted_at: ctx.timestamp,
-            granted_by: ctx.sender,
+            granted_by: ctx.sender(),
         });
     }
 

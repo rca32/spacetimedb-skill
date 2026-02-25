@@ -20,7 +20,7 @@ pub fn movement_feedback_cleanup(ctx: &ReducerContext, keep_rows: u32) -> Result
         .db
         .player_movement_feedback_view()
         .iter()
-        .filter(|row| row.identity == ctx.sender)
+        .filter(|row| row.identity == ctx.sender())
         .collect();
 
     if rows.len() <= keep {

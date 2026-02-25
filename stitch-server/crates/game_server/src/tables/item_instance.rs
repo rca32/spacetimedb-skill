@@ -1,4 +1,4 @@
-#[spacetimedb::table(name = item_instance, private)]
+#[spacetimedb::table(accessor = item_instance, private)]
 pub struct ItemInstance {
     #[primary_key]
     pub item_instance_id: u64,

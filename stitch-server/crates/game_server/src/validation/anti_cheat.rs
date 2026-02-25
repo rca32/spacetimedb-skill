@@ -23,7 +23,7 @@ pub(crate) fn request_key(identity: Identity, request_id: &str) -> String {
 }
 
 pub(crate) fn is_duplicate_request(ctx: &ReducerContext, request_id: &str) -> bool {
-    let req_key = request_key(ctx.sender, request_id);
+    let req_key = request_key(ctx.sender(), request_id);
     ctx.db
         .movement_request_log()
         .request_key()
@@ -58,16 +58,16 @@ pub(crate) fn log_movement_violation(
     region_id: u64,
     client_ts_ms: u64,
 ) {
-    let violation_id = make_violation_id(ctx.sender, ctx.timestamp, reason);
+    let violation_id = make_violation_id(ctx.sender(), ctx.timestamp, reason);
     ctx.db.movement_violation().insert(MovementViolation {
         violation_id,
-        identity: ctx.sender,
+        identity: ctx.sender(),
         reason: reason.to_string(),
         ts: ctx.timestamp,
         attempted_position: position.clone(),
     });
 
-    let req_key = request_key(ctx.sender, request_id);
+    let req_key = request_key(ctx.sender(), request_id);
     if ctx
         .db
         .movement_request_log()
@@ -77,7 +77,7 @@ pub(crate) fn log_movement_violation(
     {
         ctx.db.movement_request_log().insert(MovementRequestLog {
             request_key: req_key,
-            identity: ctx.sender,
+            identity: ctx.sender(),
             request_id: request_id.to_string(),
             region_id,
             client_ts_ms,
@@ -87,12 +87,12 @@ pub(crate) fn log_movement_violation(
     }
 
     projection_views::upsert_movement_feedback(
-        ctx, ctx.sender, request_id, false, reason, position,
+        ctx, ctx.sender(), request_id, false, reason, position,
     );
 
     log::warn!(
         "movement denied: identity={} reason={} request_id={} region_id={}",
-        ctx.sender,
+        ctx.sender(),
         reason,
         request_id,
         region_id

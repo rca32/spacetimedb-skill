@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = inventory_lock, private)]
+#[spacetimedb::table(accessor = inventory_lock, private)]
 pub struct InventoryLock {
     #[primary_key]
     pub container_id: u64,

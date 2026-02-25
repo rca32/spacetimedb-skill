@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = path_result, public)]
+#[spacetimedb::table(accessor = path_result, public)]
 pub struct PathResult {
     #[primary_key]
     pub path_id: String,
@@ -19,7 +19,7 @@ pub struct PathResult {
     pub expires_at: Timestamp,
 }
 
-#[spacetimedb::table(name = path_step, public)]
+#[spacetimedb::table(accessor = path_step, public)]
 pub struct PathStep {
     #[primary_key]
     pub step_key: String,
@@ -30,7 +30,7 @@ pub struct PathStep {
     pub hex_z: i32,
 }
 
-#[spacetimedb::table(name = npc_path_state, private)]
+#[spacetimedb::table(accessor = npc_path_state, private)]
 pub struct NpcPathState {
     #[primary_key]
     pub npc_id: u64,

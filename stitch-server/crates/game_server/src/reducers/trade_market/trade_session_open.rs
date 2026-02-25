@@ -18,7 +18,7 @@ pub fn trade_session_open(
     if sid.is_empty() {
         return Err("session_id must not be empty".to_string());
     }
-    if ctx.sender == partner_identity {
+    if ctx.sender() == partner_identity {
         return Err("cannot open trade with self".to_string());
     }
 
@@ -36,7 +36,7 @@ pub fn trade_session_open(
         .db
         .session_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("active initiator session required".to_string())?;
     let partner_session = ctx
         .db
@@ -66,7 +66,7 @@ pub fn trade_session_open(
         .db
         .transform_state()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .ok_or("initiator transform missing".to_string())?;
     let partner_tf = ctx
         .db
@@ -94,7 +94,7 @@ pub fn trade_session_open(
 
     ctx.db.trade_session().insert(TradeSession {
         session_id: sid,
-        initiator_identity: ctx.sender,
+        initiator_identity: ctx.sender(),
         partner_identity,
         region_id: my_session.region_id,
         dimension_id: my_dimension,

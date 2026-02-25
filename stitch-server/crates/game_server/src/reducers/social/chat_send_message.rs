@@ -40,20 +40,20 @@ pub fn chat_send_message(
     let message_id = format!(
         "{}:{}:{}",
         cid,
-        ctx.sender,
+        ctx.sender(),
         ctx.timestamp.to_micros_since_unix_epoch()
     );
     ctx.db.chat_message().insert(ChatMessage {
         message_id,
         channel_id: cid.clone(),
-        sender_identity: ctx.sender,
+        sender_identity: ctx.sender(),
         body: message_body.clone(),
         created_at: ctx.timestamp,
     });
 
     append_social_feed(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         "chat",
         format!(
             "{{\"channel_id\":\"{}\",\"body\":\"{}\"}}",
@@ -76,7 +76,7 @@ fn validate_channel_access(
                 .db
                 .session_state()
                 .identity()
-                .find(ctx.sender)
+                .find(ctx.sender())
                 .ok_or("active session required for region chat".to_string())?;
             ensure_region_scope(session, scope_id)
         }
@@ -85,7 +85,7 @@ fn validate_channel_access(
                 .db
                 .party_member()
                 .iter()
-                .any(|m| m.party_id == scope_id && m.member_identity == ctx.sender);
+                .any(|m| m.party_id == scope_id && m.member_identity == ctx.sender());
             if !in_party {
                 return Err("party chat requires party membership".to_string());
             }
@@ -96,7 +96,7 @@ fn validate_channel_access(
                 .db
                 .guild_member()
                 .iter()
-                .any(|m| m.guild_id == scope_id && m.member_identity == ctx.sender);
+                .any(|m| m.guild_id == scope_id && m.member_identity == ctx.sender());
             if !in_guild {
                 return Err("guild chat requires guild membership".to_string());
             }

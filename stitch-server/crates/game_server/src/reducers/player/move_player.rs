@@ -25,7 +25,7 @@ pub fn move_to(
     if !x.is_finite() || !y.is_finite() || !z.is_finite() {
         log::warn!(
             "move_to dropped invalid_position: identity={} request_id={} region_id={} client_ts_ms={} pos=({},{},{})",
-            ctx.sender,
+            ctx.sender(),
             request_id,
             region_id,
             client_ts_ms,
@@ -47,7 +47,7 @@ pub fn move_to(
     if anti_cheat::is_duplicate_request(ctx, &request_id) {
         log::info!(
             "move_to duplicate ignored: identity={} request_id={} region_id={} client_ts_ms={}",
-            ctx.sender,
+            ctx.sender(),
             request_id,
             region_id,
             client_ts_ms
@@ -56,12 +56,12 @@ pub fn move_to(
         return Ok(());
     }
 
-    let session = match ctx.db.session_state().identity().find(ctx.sender) {
+    let session = match ctx.db.session_state().identity().find(ctx.sender()) {
         Some(session) => session,
         None => {
             log::warn!(
                 "move_to dropped missing_session: identity={} request_id={} region_id={} client_ts_ms={}",
-                ctx.sender,
+                ctx.sender(),
                 request_id,
                 region_id,
                 client_ts_ms
@@ -81,7 +81,7 @@ pub fn move_to(
     if session.region_id != region_id {
         log::warn!(
             "move_to dropped region_mismatch: identity={} request_id={} session_region_id={} request_region_id={} client_ts_ms={}",
-            ctx.sender,
+            ctx.sender(),
             request_id,
             session.region_id,
             region_id,
@@ -106,13 +106,13 @@ pub fn move_to(
         last_active_at: ctx.timestamp,
     });
 
-    let actor_state = ctx.db.movement_actor_state().identity().find(ctx.sender);
+    let actor_state = ctx.db.movement_actor_state().identity().find(ctx.sender());
     if let Err(reason) =
         anti_cheat::validate_actor_progression(actor_state.as_ref(), client_ts_ms, &next_position)
     {
         log::warn!(
             "move_to dropped anti_cheat: identity={} request_id={} reason={} region_id={} client_ts_ms={}",
-            ctx.sender,
+            ctx.sender(),
             request_id,
             reason,
             region_id,
@@ -133,7 +133,7 @@ pub fn move_to(
         .db
         .transform_state()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .map(|row| row.position)
         .or_else(|| actor_state.as_ref().map(|row| row.last_position.clone()))
         .unwrap_or_else(|| next_position.clone());
@@ -147,7 +147,7 @@ pub fn move_to(
     ) {
         log::warn!(
             "move_to dropped terrain_validation: identity={} request_id={} reason={} region_id={} client_ts_ms={} pos=({},{},{})",
-            ctx.sender,
+            ctx.sender(),
             request_id,
             reason,
             region_id,
@@ -168,7 +168,7 @@ pub fn move_to(
     }
 
     let next_transform = TransformState {
-        entity_id: ctx.sender,
+        entity_id: ctx.sender(),
         region_id,
         dimension_id: session.dimension_id,
         position: next_position.clone(),
@@ -179,7 +179,7 @@ pub fn move_to(
         .db
         .transform_state()
         .entity_id()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .is_some()
     {
         ctx.db.transform_state().entity_id().update(next_transform);
@@ -188,8 +188,8 @@ pub fn move_to(
     }
 
     ctx.db.movement_request_log().insert(MovementRequestLog {
-        request_key: anti_cheat::request_key(ctx.sender, &request_id),
-        identity: ctx.sender,
+        request_key: anti_cheat::request_key(ctx.sender(), &request_id),
+        identity: ctx.sender(),
         request_id: request_id.clone(),
         region_id,
         client_ts_ms,
@@ -198,7 +198,7 @@ pub fn move_to(
     });
 
     let next_actor_state = MovementActorState {
-        identity: ctx.sender,
+        identity: ctx.sender(),
         region_id,
         last_client_ts_ms: client_ts_ms,
         last_request_id: request_id.clone(),
@@ -209,7 +209,7 @@ pub fn move_to(
         .db
         .movement_actor_state()
         .identity()
-        .find(ctx.sender)
+        .find(ctx.sender())
         .is_some()
     {
         ctx.db
@@ -222,7 +222,7 @@ pub fn move_to(
 
     projection_views::upsert_movement_feedback(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         &request_id,
         true,
         "ok",
@@ -230,7 +230,7 @@ pub fn move_to(
     );
     log::info!(
         "move_to accepted: identity={} request_id={} region_id={} client_ts_ms={} pos=({},{},{})",
-        ctx.sender,
+        ctx.sender(),
         request_id,
         region_id,
         client_ts_ms,

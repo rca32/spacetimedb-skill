@@ -286,7 +286,7 @@ pub fn request_npc_step(
 
     let stored = request_path_and_store(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         region_id,
         start,
         goal,

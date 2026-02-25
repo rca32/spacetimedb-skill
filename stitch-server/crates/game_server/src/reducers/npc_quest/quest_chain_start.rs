@@ -5,7 +5,7 @@ use crate::tables::QuestChainState;
 
 #[spacetimedb::reducer]
 pub fn quest_chain_start(ctx: &ReducerContext, chain_id: u64) -> Result<(), String> {
-    let chain_key = format!("{}:{}", ctx.sender, chain_id);
+    let chain_key = format!("{}:{}", ctx.sender(), chain_id);
     if ctx
         .db
         .quest_chain_state()
@@ -18,7 +18,7 @@ pub fn quest_chain_start(ctx: &ReducerContext, chain_id: u64) -> Result<(), Stri
 
     ctx.db.quest_chain_state().insert(QuestChainState {
         chain_key,
-        identity: ctx.sender,
+        identity: ctx.sender(),
         chain_id,
         status: 0,
         started_at: ctx.timestamp,

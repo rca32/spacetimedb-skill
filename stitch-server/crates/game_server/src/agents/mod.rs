@@ -1276,9 +1276,9 @@ fn synthetic_anchor_id(region_id: u64, chunk_x: i32, chunk_y: i32) -> u64 {
 
 #[spacetimedb::reducer]
 pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
-    let sender_has_session = ctx.db.session_state().identity().find(ctx.sender).is_some();
+    let sender_has_session = ctx.db.session_state().identity().find(ctx.sender()).is_some();
     if sender_has_session
-        && ctx.sender != Identity::ZERO
+        && ctx.sender() != Identity::ZERO
         && !permissions::has_permission(ctx, 0, 0, permissions::PERM_ADMIN)
     {
         log::warn!("npc_ai_agent_loop rejected: server/admin authorization required");

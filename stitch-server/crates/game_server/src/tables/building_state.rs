@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = building_state, public)]
+#[spacetimedb::table(accessor = building_state, public)]
 pub struct BuildingState {
     #[primary_key]
     pub entity_id: u64,

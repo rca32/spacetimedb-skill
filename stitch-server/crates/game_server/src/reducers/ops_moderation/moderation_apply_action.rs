@@ -53,7 +53,7 @@ pub fn moderation_apply_action(
         target_identity,
         action_type: action.clone(),
         reason: reason.clone(),
-        actor_identity: ctx.sender,
+        actor_identity: ctx.sender(),
         created_at: ctx.timestamp,
     });
 

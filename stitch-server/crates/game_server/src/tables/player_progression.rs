@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = character_stats, private)]
+#[spacetimedb::table(accessor = character_stats, private)]
 pub struct CharacterStats {
     #[primary_key]
     pub entity_id: u64,
@@ -10,7 +10,7 @@ pub struct CharacterStats {
     pub max_satiation: u32,
 }
 
-#[spacetimedb::table(name = resource_state, public)]
+#[spacetimedb::table(accessor = resource_state, public)]
 pub struct ResourceState {
     #[primary_key]
     pub entity_id: u64,
@@ -22,7 +22,7 @@ pub struct ResourceState {
     pub last_regen_at: Timestamp,
 }
 
-#[spacetimedb::table(name = action_state, public)]
+#[spacetimedb::table(accessor = action_state, public)]
 pub struct ActionState {
     #[primary_key]
     pub entity_id: u64,
@@ -31,7 +31,7 @@ pub struct ActionState {
     pub cooldown_until: Timestamp,
 }
 
-#[spacetimedb::table(name = buff_state, public)]
+#[spacetimedb::table(accessor = buff_state, public)]
 pub struct BuffState {
     #[primary_key]
     pub buff_key: String,
@@ -41,7 +41,7 @@ pub struct BuffState {
     pub expires_at: Timestamp,
 }
 
-#[spacetimedb::table(name = status_effect, public)]
+#[spacetimedb::table(accessor = status_effect, public)]
 pub struct StatusEffect {
     #[primary_key]
     pub status_key: String,
@@ -51,7 +51,7 @@ pub struct StatusEffect {
     pub expires_at: Timestamp,
 }
 
-#[spacetimedb::table(name = knowledge_state, private)]
+#[spacetimedb::table(accessor = knowledge_state, private)]
 pub struct KnowledgeState {
     #[primary_key]
     pub knowledge_key: String,
@@ -61,7 +61,7 @@ pub struct KnowledgeState {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = skill_progress, private)]
+#[spacetimedb::table(accessor = skill_progress, private)]
 pub struct SkillProgress {
     #[primary_key]
     pub skill_key: String,
@@ -72,7 +72,7 @@ pub struct SkillProgress {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = quest_state, private)]
+#[spacetimedb::table(accessor = quest_state, private)]
 pub struct QuestState {
     #[primary_key]
     pub quest_key: String,
@@ -83,7 +83,7 @@ pub struct QuestState {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = quest_stage_def, public)]
+#[spacetimedb::table(accessor = quest_stage_def, public)]
 pub struct QuestStageDef {
     #[primary_key]
     pub stage_id: u64,
@@ -93,7 +93,7 @@ pub struct QuestStageDef {
     pub objective_count: u32,
 }
 
-#[spacetimedb::table(name = achievement_def, public)]
+#[spacetimedb::table(accessor = achievement_def, public)]
 pub struct AchievementDef {
     #[primary_key]
     pub achievement_id: u64,
@@ -103,7 +103,7 @@ pub struct AchievementDef {
     pub criteria_count: u32,
 }
 
-#[spacetimedb::table(name = achievement_state, private)]
+#[spacetimedb::table(accessor = achievement_state, private)]
 pub struct AchievementState {
     #[primary_key]
     pub achievement_key: String,
@@ -113,7 +113,7 @@ pub struct AchievementState {
     pub completed_at: Timestamp,
 }
 
-#[spacetimedb::table(name = llm_params, private)]
+#[spacetimedb::table(accessor = llm_params, private)]
 pub struct LlmParams {
     #[primary_key]
     pub param_key: String,
@@ -122,7 +122,7 @@ pub struct LlmParams {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_relation, private)]
+#[spacetimedb::table(accessor = npc_relation, private)]
 pub struct NpcRelation {
     #[primary_key]
     pub relation_key: String,
@@ -133,7 +133,7 @@ pub struct NpcRelation {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_memory_short, private)]
+#[spacetimedb::table(accessor = npc_memory_short, private)]
 pub struct NpcMemoryShort {
     #[primary_key]
     pub npc_id: u64,
@@ -141,7 +141,7 @@ pub struct NpcMemoryShort {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_memory_long, private)]
+#[spacetimedb::table(accessor = npc_memory_long, private)]
 pub struct NpcMemoryLong {
     #[primary_key]
     pub npc_id: u64,
@@ -149,7 +149,7 @@ pub struct NpcMemoryLong {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_conversation_session, private)]
+#[spacetimedb::table(accessor = npc_conversation_session, private)]
 pub struct NpcConversationSession {
     #[primary_key]
     pub session_id: String,
@@ -159,7 +159,7 @@ pub struct NpcConversationSession {
     pub last_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_conversation_turn, private)]
+#[spacetimedb::table(accessor = npc_conversation_turn, private)]
 pub struct NpcConversationTurn {
     #[primary_key]
     pub turn_key: String,
@@ -169,7 +169,7 @@ pub struct NpcConversationTurn {
     pub output_summary: String,
 }
 
-#[spacetimedb::table(name = npc_action_schedule, private)]
+#[spacetimedb::table(accessor = npc_action_schedule, private)]
 pub struct NpcActionSchedule {
     #[primary_key]
     pub npc_id: u64,
@@ -178,7 +178,7 @@ pub struct NpcActionSchedule {
     pub target_region_id: Option<u64>,
 }
 
-#[spacetimedb::table(name = npc_action_request, private)]
+#[spacetimedb::table(accessor = npc_action_request, private)]
 pub struct NpcActionRequest {
     #[primary_key]
     pub request_id: String,
@@ -189,7 +189,7 @@ pub struct NpcActionRequest {
     pub created_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_action_result, private)]
+#[spacetimedb::table(accessor = npc_action_result, private)]
 pub struct NpcActionResult {
     #[primary_key]
     pub result_id: String,
@@ -199,7 +199,7 @@ pub struct NpcActionResult {
     pub created_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_response_cache, private)]
+#[spacetimedb::table(accessor = npc_response_cache, private)]
 pub struct NpcResponseCache {
     #[primary_key]
     pub cache_key: String,
@@ -209,7 +209,7 @@ pub struct NpcResponseCache {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_policy_violation, private)]
+#[spacetimedb::table(accessor = npc_policy_violation, private)]
 pub struct NpcPolicyViolation {
     #[primary_key]
     #[auto_inc]
@@ -221,7 +221,7 @@ pub struct NpcPolicyViolation {
     pub created_at: Timestamp,
 }
 
-#[spacetimedb::table(name = npc_cost_metrics, private)]
+#[spacetimedb::table(accessor = npc_cost_metrics, private)]
 pub struct NpcCostMetrics {
     #[primary_key]
     #[auto_inc]

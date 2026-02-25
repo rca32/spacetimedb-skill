@@ -13,7 +13,7 @@ pub fn agent_tick(
     region_id: u64,
     payload: String,
 ) -> Result<(), String> {
-    if ctx.sender != Identity::ZERO
+    if ctx.sender() != Identity::ZERO
         && !permissions::has_permission(ctx, 0, 0, permissions::PERM_ADMIN)
     {
         return Err("agent_tick requires server/admin authorization".to_string());
@@ -43,7 +43,7 @@ pub fn agent_tick(
             let created = AgentRequest {
                 request_id: request_id.clone(),
                 agent_kind,
-                requested_by: ctx.sender,
+                requested_by: ctx.sender(),
                 region_id,
                 status: 1,
                 payload,

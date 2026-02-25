@@ -1,6 +1,6 @@
 use spacetimedb::Identity;
 
-#[spacetimedb::table(name = inventory_container, private)]
+#[spacetimedb::table(accessor = inventory_container, private)]
 pub struct InventoryContainer {
     #[primary_key]
     pub container_id: u64,

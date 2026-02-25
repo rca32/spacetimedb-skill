@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = id_lease_state, public)]
+#[spacetimedb::table(accessor = id_lease_state, public)]
 pub struct IdLeaseState {
     #[primary_key]
     pub lease_key: String,

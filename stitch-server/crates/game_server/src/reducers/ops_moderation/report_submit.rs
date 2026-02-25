@@ -11,7 +11,7 @@ pub fn report_submit(
     report_type: String,
     payload: String,
 ) -> Result<(), String> {
-    if target_identity == ctx.sender {
+    if target_identity == ctx.sender() {
         return Err("cannot report self".to_string());
     }
 
@@ -28,7 +28,7 @@ pub fn report_submit(
 
     ctx.db.report_queue().insert(ReportQueue {
         report_id: 0,
-        reporter_identity: ctx.sender,
+        reporter_identity: ctx.sender(),
         target_identity,
         report_type: report_type.clone(),
         payload: payload.clone(),

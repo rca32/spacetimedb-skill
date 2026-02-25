@@ -21,7 +21,7 @@ pub fn guild_create(ctx: &ReducerContext, guild_id: String, name: String) -> Res
     if ctx.db.guild_state().guild_id().find(gid.clone()).is_some() {
         return Err("guild_id already exists".to_string());
     }
-    if find_guild_id_by_identity(ctx, ctx.sender).is_some() {
+    if find_guild_id_by_identity(ctx, ctx.sender()).is_some() {
         return Err("already in a guild".to_string());
     }
     if ctx.db.guild_state().iter().any(|g| g.name == guild_name) {
@@ -31,20 +31,20 @@ pub fn guild_create(ctx: &ReducerContext, guild_id: String, name: String) -> Res
     ctx.db.guild_state().insert(GuildState {
         guild_id: gid.clone(),
         name: guild_name,
-        founder_identity: ctx.sender,
+        founder_identity: ctx.sender(),
         created_at: ctx.timestamp,
     });
     ctx.db.guild_member().insert(GuildMember {
-        member_key: guild_member_key(&gid, ctx.sender),
+        member_key: guild_member_key(&gid, ctx.sender()),
         guild_id: gid.clone(),
-        member_identity: ctx.sender,
+        member_identity: ctx.sender(),
         role: GUILD_ROLE_LEADER,
         joined_at: ctx.timestamp,
     });
 
     append_social_feed(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         "guild_created",
         format!("{{\"guild_id\":\"{}\"}}", gid),
     );

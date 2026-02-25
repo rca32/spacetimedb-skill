@@ -42,7 +42,7 @@ pub fn guild_project_update(
         .db
         .guild_member()
         .member_key()
-        .find(guild_member_key(&gid, ctx.sender))
+        .find(guild_member_key(&gid, ctx.sender()))
         .ok_or("guild membership required".to_string())?;
 
     if actor.role != GUILD_ROLE_OFFICER && actor.role != GUILD_ROLE_LEADER {
@@ -71,7 +71,7 @@ pub fn guild_project_update(
 
     append_social_feed(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         "guild_project_updated",
         format!(
             "{{\"guild_id\":\"{}\",\"project_id\":\"{}\",\"progress_permille\":{}}}",

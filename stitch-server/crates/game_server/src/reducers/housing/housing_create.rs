@@ -33,7 +33,7 @@ pub fn housing_create(
         .find(entrance_building_entity_id)
         .ok_or("entrance building not found".to_string())?;
 
-    if building.owner_identity != ctx.sender
+    if building.owner_identity != ctx.sender()
         && !permissions::has_permission(
             ctx,
             2,
@@ -46,7 +46,7 @@ pub fn housing_create(
 
     ctx.db.housing_state().insert(HousingState {
         entity_id: housing_entity_id,
-        owner_identity: ctx.sender,
+        owner_identity: ctx.sender(),
         entrance_building_entity_id,
         exit_portal_entity_id: entrance_building_entity_id,
         network_entity_id,
@@ -69,7 +69,7 @@ pub fn housing_create(
         collapse_timestamp: ctx.timestamp,
     });
 
-    let white_list = vec![ctx.sender];
+    let white_list = vec![ctx.sender()];
     ctx.db.rent_state().insert(RentState {
         entity_id: housing_entity_id,
         white_list: white_list.clone(),

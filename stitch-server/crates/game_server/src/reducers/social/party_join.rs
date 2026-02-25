@@ -16,7 +16,7 @@ pub fn party_join(ctx: &ReducerContext, party_id: String) -> Result<(), String> 
         return Err("party_id must not be empty".to_string());
     }
 
-    if find_party_id_by_identity(ctx, ctx.sender).is_some() {
+    if find_party_id_by_identity(ctx, ctx.sender()).is_some() {
         return Err("already in a party".to_string());
     }
 
@@ -32,16 +32,16 @@ pub fn party_join(ctx: &ReducerContext, party_id: String) -> Result<(), String> 
     }
 
     ctx.db.party_member().insert(PartyMember {
-        member_key: party_member_key(&pid, ctx.sender),
+        member_key: party_member_key(&pid, ctx.sender()),
         party_id: pid.clone(),
-        member_identity: ctx.sender,
+        member_identity: ctx.sender(),
         role: PARTY_ROLE_MEMBER,
         joined_at: ctx.timestamp,
     });
 
     append_social_feed(
         ctx,
-        ctx.sender,
+        ctx.sender(),
         "party_joined",
         format!("{{\"party_id\":\"{}\"}}", pid),
     );

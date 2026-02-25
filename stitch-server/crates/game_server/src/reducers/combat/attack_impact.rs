@@ -24,7 +24,7 @@ pub fn attack_impact(
         .find(request_key.clone())
         .ok_or("scheduled attack not found".to_string())?;
 
-    if scheduled.attacker_identity != ctx.sender {
+    if scheduled.attacker_identity != ctx.sender() {
         return Err("only attacker can resolve impact".to_string());
     }
     if scheduled.phase != 1 {

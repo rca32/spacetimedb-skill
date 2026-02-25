@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, Timestamp};
 
-#[spacetimedb::table(name = account, public)]
+#[spacetimedb::table(accessor = account, public)]
 pub struct Account {
     #[primary_key]
     pub identity: Identity,

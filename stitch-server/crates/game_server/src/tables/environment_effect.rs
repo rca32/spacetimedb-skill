@@ -1,6 +1,6 @@
 use spacetimedb::Timestamp;
 
-#[spacetimedb::table(name = environment_effect_desc, public)]
+#[spacetimedb::table(accessor = environment_effect_desc, public)]
 pub struct EnvironmentEffectDesc {
     #[primary_key]
     pub effect_id: u64,
@@ -16,7 +16,7 @@ pub struct EnvironmentEffectDesc {
     pub enabled: bool,
 }
 
-#[spacetimedb::table(name = environment_effect_state, private)]
+#[spacetimedb::table(accessor = environment_effect_state, private)]
 pub struct EnvironmentEffectState {
     #[primary_key]
     pub entity_id: u64,
@@ -25,7 +25,7 @@ pub struct EnvironmentEffectState {
     pub is_submerged: bool,
 }
 
-#[spacetimedb::table(name = environment_effect_exposure, private)]
+#[spacetimedb::table(accessor = environment_effect_exposure, private)]
 pub struct EnvironmentEffectExposure {
     #[primary_key]
     pub exposure_key: String,

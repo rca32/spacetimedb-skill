@@ -10,7 +10,7 @@ pub fn quest_stage_complete(
     chain_id: u64,
     stage_index: u32,
 ) -> Result<(), String> {
-    let chain_key = format!("{}:{}", ctx.sender, chain_id);
+    let chain_key = format!("{}:{}", ctx.sender(), chain_id);
     if ctx
         .db
         .quest_chain_state()
