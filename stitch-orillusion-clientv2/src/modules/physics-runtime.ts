@@ -29,6 +29,19 @@ interface ConstraintDesc {
   type: 'Hinge' | 'Slider' | 'Fixed' | 'PointToPoint' | 'D6'
 }
 
+interface ServerCorrection {
+  bodyId: number
+  frameNo: number
+  position?: Partial<PhysicsState>
+  velocity?: Partial<PhysicsState>
+}
+
+interface ReconcileResult {
+  frameNo: number
+  correctedBodies: number
+  maxPositionError: number
+}
+
 export class PhysicsRuntime implements DomainRuntime {
   name = 'PhysicsRuntime'
   private state: PhysicsState = { posX: 0, posY: 0, posZ: 0, velX: 0, velY: 0, velZ: 0 }
@@ -40,6 +53,12 @@ export class PhysicsRuntime implements DomainRuntime {
   private frameNo = 0
   private scenarioMode: 'idle' | 'combat' | 'cinematic' = 'idle'
   private grounded = true
+  private pendingCorrections: ServerCorrection[] = []
+  private lastReconcile: ReconcileResult = {
+    frameNo: 0,
+    correctedBodies: 0,
+    maxPositionError: 0,
+  }
 
   async init(ctx: RuntimeContext): Promise<void> {
     this.reset()
@@ -342,6 +361,57 @@ export class PhysicsRuntime implements DomainRuntime {
     body.state.velY = event ? 0 : 0
   }
 
+  applyServerCorrection(correction: ServerCorrection): void {
+    const body = this.ensureBody(correction.bodyId, { bodyType: 'box' })
+    if (correction.position) {
+      body.state.posX = correction.position.posX ?? body.state.posX
+      body.state.posY = correction.position.posY ?? body.state.posY
+      body.state.posZ = correction.position.posZ ?? body.state.posZ
+    }
+    if (correction.velocity) {
+      body.state.velX = correction.velocity.velX ?? body.state.velX
+      body.state.velY = correction.velocity.velY ?? body.state.velY
+      body.state.velZ = correction.velocity.velZ ?? body.state.velZ
+    }
+    body.awake = true
+    this.pendingCorrections.push(correction)
+  }
+
+  reconcile(frameNo: number): ReconcileResult {
+    let correctedBodies = 0
+    let maxPositionError = 0
+    const remaining: ServerCorrection[] = []
+    for (const correction of this.pendingCorrections) {
+      if (correction.frameNo > frameNo) {
+        remaining.push(correction)
+        continue
+      }
+      const body = this.bodies.get(correction.bodyId)
+      if (!body) {
+        continue
+      }
+      const expectedX = correction.position?.posX ?? body.state.posX
+      const expectedY = correction.position?.posY ?? body.state.posY
+      const expectedZ = correction.position?.posZ ?? body.state.posZ
+      const error = Math.max(
+        Math.abs(body.state.posX - expectedX),
+        Math.abs(body.state.posY - expectedY),
+        Math.abs(body.state.posZ - expectedZ),
+      )
+      if (error > maxPositionError) {
+        maxPositionError = error
+      }
+      correctedBodies += 1
+    }
+    this.pendingCorrections = remaining
+    this.lastReconcile = {
+      frameNo,
+      correctedBodies,
+      maxPositionError,
+    }
+    return this.lastReconcile
+  }
+
   snapshot(): PhysicsState {
     return this.state
   }
@@ -453,5 +523,11 @@ export class PhysicsRuntime implements DomainRuntime {
     this.nextBodyId = 1
     this.nextConstraintId = 1
     this.frameNo = 0
+    this.pendingCorrections = []
+    this.lastReconcile = {
+      frameNo: 0,
+      correctedBodies: 0,
+      maxPositionError: 0,
+    }
   }
 }

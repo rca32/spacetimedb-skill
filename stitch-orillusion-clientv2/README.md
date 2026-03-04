@@ -17,6 +17,7 @@ bun run dev
 ```bash
 bun run typecheck
 bun run asset-copy verify --strict
+bun run release:check      # typecheck + lane-a + risk snapshot
 ```
 
 SpacetimeDB TypeScript bindings 생성:
@@ -42,6 +43,13 @@ Lane A 자동 실행(브라우저 harness):
 bun run test:lane-a          # S01~S05 전체 runSuite + artifact 저장
 bun run test:lane-a --suite core # S01~S03만 실행
 bun run test:lane-a -- --headed # 브라우저 창 표시
+```
+
+리스크/릴리스 보조 명령:
+
+```bash
+bun run risk:check
+bun run risk:snapshot -- manual-run
 ```
 
 ## 핵심 엔트리

@@ -1,0 +1,9 @@
+{
+  "pass": true,
+  "observed": {
+    "frameP95Ms": 2.599999999627471,
+    "totalP95Ms": 18.799999998882413,
+    "onAppliedP95Ms": 121
+  },
+  "reasons": []
+}

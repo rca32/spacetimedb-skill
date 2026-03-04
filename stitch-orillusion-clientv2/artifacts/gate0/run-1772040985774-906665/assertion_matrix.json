@@ -1,0 +1,114 @@
+[
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-CONTRACT-001",
+    "passed": true,
+    "detail": "contract tables match manifest",
+    "ts": 1772040987447
+  },
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-CONTRACT-002",
+    "passed": true,
+    "detail": "contract reducers match manifest",
+    "ts": 1772040987447
+  },
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-CONTRACT-003",
+    "passed": true,
+    "detail": "contract error code catalog matches",
+    "ts": 1772040987447
+  },
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-CONTRACT-004",
+    "passed": true,
+    "detail": "all required contract reducers can be invoked by net-sync probe events",
+    "ts": 1772040987448
+  },
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-SUB-001",
+    "passed": true,
+    "detail": "subscription state stream stable (20 channel-state samples, duplicate_connected=1)",
+    "ts": 1772040987448
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-SUB-002",
+    "passed": true,
+    "detail": "AOI swap/stable pairing complete (2 swaps, 14 stable)",
+    "ts": 1772040989652
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-SUB-003",
+    "passed": true,
+    "detail": "event-channel recovery observed for 3 fault(s), max recovery 242ms",
+    "ts": 1772040989652
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-ENT-001",
+    "passed": true,
+    "detail": "entity_spawn duplicates checked for 0 entities",
+    "ts": 1772040989652
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-ENT-002",
+    "passed": true,
+    "detail": "no ENTITY_* updates after despawn",
+    "ts": 1772040989652
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-ENT-003",
+    "passed": true,
+    "detail": "parent world transform delta max=0.0000 within 0.01 (47 checks)",
+    "ts": 1772040989653
+  },
+  {
+    "scenario_id": "S03",
+    "assertion_id": "A-AUDIO-001",
+    "passed": true,
+    "detail": "fx/audio coupling observed (fx=1, audio=92, matched_fx=1)",
+    "ts": 1772040991381
+  },
+  {
+    "scenario_id": "S03",
+    "assertion_id": "A-AUDIO-003",
+    "passed": true,
+    "detail": "fx/audio coupling observed (fx=1, audio=92, matched_fx=1)",
+    "ts": 1772040991382
+  },
+  {
+    "scenario_id": "S04",
+    "assertion_id": "A-UI-001",
+    "passed": true,
+    "detail": "ui focus set/release observed (1772040991382 -> 1772040991479)",
+    "ts": 1772040991551
+  },
+  {
+    "scenario_id": "S04",
+    "assertion_id": "A-UI-002",
+    "passed": true,
+    "detail": "ui focus set/release observed (1772040991382 -> 1772040991479)",
+    "ts": 1772040991552
+  },
+  {
+    "scenario_id": "S05",
+    "assertion_id": "A-ARCH-002",
+    "passed": true,
+    "detail": "world progressed with weather change (delta=6.37s, weather_states=clear,windy,rain)",
+    "ts": 1772040997955
+  },
+  {
+    "scenario_id": "S05",
+    "assertion_id": "A-PERF-001",
+    "passed": true,
+    "detail": "perf budget pass (frame_p95=0.80ms,total_p95=14.07ms,on_applied_p95=124.40ms)",
+    "ts": 1772040997976
+  }
+]

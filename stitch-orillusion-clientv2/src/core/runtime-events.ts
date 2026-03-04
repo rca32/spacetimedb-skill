@@ -57,7 +57,7 @@ export interface InputFramePayload extends EventPayloadRecord {
 }
 
 export interface ChannelStatePayload extends EventPayloadRecord {
-  channel: 'baseline' | 'session' | 'aoi' | 'feature'
+  channel: 'baseline' | 'session' | 'aoi' | 'event' | 'feature'
   state: 'connecting' | 'connected' | 'disconnected' | 'error'
   lastOkTs?: number | null
   lastErr?: string | null
@@ -84,7 +84,7 @@ export interface ContractCatalogPayload extends EventPayloadRecord {
 export interface ContractReducerCallPayload extends EventPayloadRecord {
   event: 'contract_reducer_call'
   reducer: string
-  channel: 'baseline' | 'session' | 'aoi' | 'feature'
+  channel: 'baseline' | 'session' | 'aoi' | 'event' | 'feature'
   args: EventPayloadRecord
   appliedFrameNo?: number
 }

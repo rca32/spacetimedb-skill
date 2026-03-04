@@ -135,6 +135,7 @@ import ActionStateRow from "./action_state_table";
 import AgentResultRow from "./agent_result_table";
 import AoiStreamRow from "./aoi_stream_table";
 import AttackOutcomeRow from "./attack_outcome_table";
+import AudioEventRow from "./audio_event_table";
 import BiomeGenDefRow from "./biome_gen_def_table";
 import BuffStateRow from "./buff_state_table";
 import BuildingDefRow from "./building_def_table";
@@ -148,12 +149,14 @@ import ClientFrameRow from "./client_frame_table";
 import CollisionProxyRow from "./collision_proxy_table";
 import CombatActionDefRow from "./combat_action_def_table";
 import CombatHitRow from "./combat_hit_table";
+import CombatHitEventRow from "./combat_hit_event_table";
 import CombatIntentRow from "./combat_intent_table";
 import CombatStateRow from "./combat_state_table";
 import DimensionDescRow from "./dimension_desc_table";
 import DimensionNetworkRow from "./dimension_network_table";
 import EntityCoreRow from "./entity_core_table";
 import EnvironmentEffectDescRow from "./environment_effect_desc_table";
+import FxEventRow from "./fx_event_table";
 import GuildMemberRow from "./guild_member_table";
 import GuildProjectRow from "./guild_project_table";
 import GuildStateRow from "./guild_state_table";
@@ -207,6 +210,7 @@ import ThreatStateRow from "./threat_state_table";
 import TradeOfferRow from "./trade_offer_table";
 import TradeSessionRow from "./trade_session_table";
 import TransformStateRow from "./transform_state_table";
+import UiNotificationEventRow from "./ui_notification_event_table";
 import WorldGenParamsRow from "./world_gen_params_table";
 import WorldgenChunkGenerationQueueRow from "./worldgen_chunk_generation_queue_table";
 
@@ -291,6 +295,17 @@ const tablesSchema = __schema({
       { name: 'attack_outcome_outcome_id_key', constraint: 'unique', columns: ['outcomeId'] },
     ],
   }, AttackOutcomeRow),
+  audio_event: __table({
+    name: 'audio_event',
+    indexes: [
+      { name: 'event_id', algorithm: 'btree', columns: [
+        'eventId',
+      ] },
+    ],
+    constraints: [
+      { name: 'audio_event_event_id_key', constraint: 'unique', columns: ['eventId'] },
+    ],
+  }, AudioEventRow),
   biome_gen_def: __table({
     name: 'biome_gen_def',
     indexes: [
@@ -434,6 +449,17 @@ const tablesSchema = __schema({
       { name: 'combat_hit_hit_id_key', constraint: 'unique', columns: ['hitId'] },
     ],
   }, CombatHitRow),
+  combat_hit_event: __table({
+    name: 'combat_hit_event',
+    indexes: [
+      { name: 'event_id', algorithm: 'btree', columns: [
+        'eventId',
+      ] },
+    ],
+    constraints: [
+      { name: 'combat_hit_event_event_id_key', constraint: 'unique', columns: ['eventId'] },
+    ],
+  }, CombatHitEventRow),
   combat_intent: __table({
     name: 'combat_intent',
     indexes: [
@@ -500,6 +526,17 @@ const tablesSchema = __schema({
       { name: 'environment_effect_desc_effect_id_key', constraint: 'unique', columns: ['effectId'] },
     ],
   }, EnvironmentEffectDescRow),
+  fx_event: __table({
+    name: 'fx_event',
+    indexes: [
+      { name: 'event_id', algorithm: 'btree', columns: [
+        'eventId',
+      ] },
+    ],
+    constraints: [
+      { name: 'fx_event_event_id_key', constraint: 'unique', columns: ['eventId'] },
+    ],
+  }, FxEventRow),
   guild_member: __table({
     name: 'guild_member',
     indexes: [
@@ -1083,6 +1120,17 @@ const tablesSchema = __schema({
       { name: 'transform_state_entity_id_key', constraint: 'unique', columns: ['entityId'] },
     ],
   }, TransformStateRow),
+  ui_notification_event: __table({
+    name: 'ui_notification_event',
+    indexes: [
+      { name: 'event_id', algorithm: 'btree', columns: [
+        'eventId',
+      ] },
+    ],
+    constraints: [
+      { name: 'ui_notification_event_event_id_key', constraint: 'unique', columns: ['eventId'] },
+    ],
+  }, UiNotificationEventRow),
   world_gen_params: __table({
     name: 'world_gen_params',
     indexes: [

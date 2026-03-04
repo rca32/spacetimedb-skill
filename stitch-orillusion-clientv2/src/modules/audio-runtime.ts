@@ -16,6 +16,7 @@ interface AudioHandle {
 export class AudioRuntime implements DomainRuntime {
   name = 'AudioRuntime'
   private muted = false
+  private busEmitter: RuntimeContext['bus'] | null = null
   private bus = new Map<string, BusState>([
     ['master', { volume: 1, muted: false }],
     ['bgm', { volume: 1, muted: false }],
@@ -32,6 +33,7 @@ export class AudioRuntime implements DomainRuntime {
   async init(ctx: RuntimeContext): Promise<void> {
     this.muted = false
     this.active = []
+    this.busEmitter = ctx.bus
     this.listenerBind = 'player-camera'
 
     this.subscriptions.push(
@@ -59,7 +61,7 @@ export class AudioRuntime implements DomainRuntime {
     )
 
     this.subscriptions.push(
-      ctx.bus.on('AUDIO_PLAY', (event) => {
+      ctx.bus.on('AUDIO_PLAY_REQUEST', (event) => {
         const payload = event.payload as { key?: string; bus?: string; gain?: number } | undefined
         if (!payload?.key || !payload?.bus) {
           return
@@ -129,6 +131,18 @@ export class AudioRuntime implements DomainRuntime {
       bus: busId,
     }
     this.active.push(handle)
+    this.busEmitter?.emit({
+      ts: Date.now(),
+      level: 'info',
+      event_code: 'AUDIO_PLAY',
+      payload: {
+        key,
+        bus: busId,
+        gain,
+        loop: handle.loop,
+        handleId: handle.id,
+      },
+    })
     return handle
   }
 
@@ -191,6 +205,7 @@ export class AudioRuntime implements DomainRuntime {
     this.subscriptions = []
     this.muted = true
     this.active = []
+    this.busEmitter = null
   }
 
   private getBusVolume(busId: string): number {

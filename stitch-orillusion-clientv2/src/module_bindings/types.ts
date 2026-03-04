@@ -128,6 +128,16 @@ export const AttackOutcome = __t.object("AttackOutcome", {
 });
 export type AttackOutcome = __Infer<typeof AttackOutcome>;
 
+export const AudioEventV2 = __t.object("AudioEventV2", {
+  eventId: __t.string(),
+  regionId: __t.u64(),
+  dimensionId: __t.u32(),
+  eventType: __t.string(),
+  payloadJson: __t.string(),
+  emittedAt: __t.timestamp(),
+});
+export type AudioEventV2 = __Infer<typeof AudioEventV2>;
+
 export const AuditLog = __t.object("AuditLog", {
   auditId: __t.u64(),
   actorIdentity: __t.identity(),
@@ -305,6 +315,16 @@ export const CombatActionDef = __t.object("CombatActionDef", {
 });
 export type CombatActionDef = __Infer<typeof CombatActionDef>;
 
+export const CombatHitEventV2 = __t.object("CombatHitEventV2", {
+  eventId: __t.string(),
+  attacker: __t.identity(),
+  target: __t.identity(),
+  damage: __t.u32(),
+  crit: __t.bool(),
+  emittedAt: __t.timestamp(),
+});
+export type CombatHitEventV2 = __Infer<typeof CombatHitEventV2>;
+
 export const CombatHitV2 = __t.object("CombatHitV2", {
   hitId: __t.string(),
   attacker: __t.identity(),
@@ -457,6 +477,16 @@ export const FriendEdge = __t.object("FriendEdge", {
   updatedAt: __t.timestamp(),
 });
 export type FriendEdge = __Infer<typeof FriendEdge>;
+
+export const FxEventV2 = __t.object("FxEventV2", {
+  eventId: __t.string(),
+  regionId: __t.u64(),
+  dimensionId: __t.u32(),
+  eventType: __t.string(),
+  payloadJson: __t.string(),
+  emittedAt: __t.timestamp(),
+});
+export type FxEventV2 = __Infer<typeof FxEventV2>;
 
 export const GuildMember = __t.object("GuildMember", {
   memberKey: __t.string(),
@@ -1428,6 +1458,15 @@ export const TransformState = __t.object("TransformState", {
   updatedAt: __t.timestamp(),
 });
 export type TransformState = __Infer<typeof TransformState>;
+
+export const UiNotificationEventV2 = __t.object("UiNotificationEventV2", {
+  eventId: __t.string(),
+  identity: __t.identity(),
+  code: __t.string(),
+  payloadJson: __t.string(),
+  emittedAt: __t.timestamp(),
+});
+export type UiNotificationEventV2 = __Infer<typeof UiNotificationEventV2>;
 
 export const Wallet = __t.object("Wallet", {
   identity: __t.identity(),

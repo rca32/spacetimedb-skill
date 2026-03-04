@@ -1,0 +1,93 @@
+[
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-CONTRACT-001",
+    "passed": true,
+    "detail": "contract tables match manifest",
+    "ts": 1772040963790
+  },
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-CONTRACT-002",
+    "passed": true,
+    "detail": "contract reducers match manifest",
+    "ts": 1772040963791
+  },
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-CONTRACT-003",
+    "passed": true,
+    "detail": "contract error code catalog matches",
+    "ts": 1772040963791
+  },
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-CONTRACT-004",
+    "passed": true,
+    "detail": "all required contract reducers can be invoked by net-sync probe events",
+    "ts": 1772040963791
+  },
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-SUB-001",
+    "passed": true,
+    "detail": "subscription state stream stable (23 channel-state samples, duplicate_connected=1)",
+    "ts": 1772040963792
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-SUB-002",
+    "passed": true,
+    "detail": "AOI swap/stable pairing complete (2 swaps, 14 stable)",
+    "ts": 1772040965995
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-SUB-003",
+    "passed": true,
+    "detail": "event-channel recovery observed for 3 fault(s), max recovery 8ms",
+    "ts": 1772040965995
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-ENT-001",
+    "passed": true,
+    "detail": "entity_spawn duplicates checked for 0 entities",
+    "ts": 1772040965995
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-ENT-002",
+    "passed": true,
+    "detail": "no ENTITY_* updates after despawn",
+    "ts": 1772040965996
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-ENT-003",
+    "passed": true,
+    "detail": "parent world transform delta max=0.0000 within 0.01 (49 checks)",
+    "ts": 1772040965996
+  },
+  {
+    "scenario_id": "S03",
+    "assertion_id": "A-AUDIO-001",
+    "passed": true,
+    "detail": "fx/audio coupling observed (fx=2, audio=106, matched_fx=2)",
+    "ts": 1772040967709
+  },
+  {
+    "scenario_id": "S03",
+    "assertion_id": "A-AUDIO-003",
+    "passed": true,
+    "detail": "fx/audio coupling observed (fx=2, audio=106, matched_fx=2)",
+    "ts": 1772040967709
+  },
+  {
+    "scenario_id": "S03",
+    "assertion_id": "A-PERF-001",
+    "passed": true,
+    "detail": "perf budget pass (frame_p95=0.30ms,total_p95=4.61ms,on_applied_p95=95.25ms)",
+    "ts": 1772040967712
+  }
+]

@@ -100,11 +100,14 @@ pub use static_data::{BuildingDef, CombatActionDef, QuestChainDef};
 pub use trade_market::{MarketFill, MarketOrder, TradeOffer, TradeSession};
 pub use transform_state::TransformState;
 pub use v2::{
+    AudioEventV2, AudioEventV2 as AudioEvent, CombatHitEventV2, CombatHitEventV2 as CombatHitEvent,
+    FxEventV2, FxEventV2 as FxEvent,
     AoiStreamV2, AoiStreamV2 as AoiStream, ClientFrameV2, ClientFrameV2 as ClientFrame,
     CollisionProxyV2, CollisionProxyV2 as CollisionProxy, CombatHitV2, CombatHitV2 as CombatHit,
     CombatIntentV2, CombatIntentV2 as CombatIntent, MotionIntentV2, MotionIntentV2 as MotionIntent,
     PhysicsStateV2, PhysicsStateV2 as PhysicsState, ServerCorrectionV2,
-    ServerCorrectionV2 as ServerCorrection,
+    ServerCorrectionV2 as ServerCorrection, UiNotificationEventV2,
+    UiNotificationEventV2 as UiNotificationEvent,
 };
 pub use world_gen::{BiomeGenDef, ResourceClumpDef, ResourceGenDef, WorldGenParams};
 pub use world_state::{

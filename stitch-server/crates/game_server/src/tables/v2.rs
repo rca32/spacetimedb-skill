@@ -88,6 +88,49 @@ pub struct CombatHitV2 {
     pub resolved_at: Timestamp,
 }
 
+#[spacetimedb::table(accessor = combat_hit_event, public)]
+pub struct CombatHitEventV2 {
+    #[primary_key]
+    pub event_id: String,
+    pub attacker: Identity,
+    pub target: Identity,
+    pub damage: u32,
+    pub crit: bool,
+    pub emitted_at: Timestamp,
+}
+
+#[spacetimedb::table(accessor = fx_event, public)]
+pub struct FxEventV2 {
+    #[primary_key]
+    pub event_id: String,
+    pub region_id: u64,
+    pub dimension_id: u32,
+    pub event_type: String,
+    pub payload_json: String,
+    pub emitted_at: Timestamp,
+}
+
+#[spacetimedb::table(accessor = audio_event, public)]
+pub struct AudioEventV2 {
+    #[primary_key]
+    pub event_id: String,
+    pub region_id: u64,
+    pub dimension_id: u32,
+    pub event_type: String,
+    pub payload_json: String,
+    pub emitted_at: Timestamp,
+}
+
+#[spacetimedb::table(accessor = ui_notification_event, public)]
+pub struct UiNotificationEventV2 {
+    #[primary_key]
+    pub event_id: String,
+    pub identity: Identity,
+    pub code: String,
+    pub payload_json: String,
+    pub emitted_at: Timestamp,
+}
+
 #[spacetimedb::table(accessor = server_correction, public)]
 pub struct ServerCorrectionV2 {
     #[primary_key]

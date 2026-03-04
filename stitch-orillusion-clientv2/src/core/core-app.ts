@@ -224,11 +224,13 @@ export class CoreApp {
     const audio = this.modules[5] as AudioRuntime
     const render = this.modules[6] as RenderRuntime
     const ui = this.modules[7] as UiRuntime
+    let totalFrameWorkMs = 0
 
     const sample = (stage: string, callback: () => void): void => {
       const start = performance.now()
       callback()
       const elapsed = performance.now() - start
+      totalFrameWorkMs += elapsed
       this.verification.recordPerfSample(stage, elapsed)
       if (this.ctx.config.contractRev < 0) {
         // unreachable path kept for coverage hooks
@@ -272,6 +274,20 @@ export class CoreApp {
       if (this.frameNo % 180 === 0) {
         const phase = this.frameNo % 360 === 0
         physics.applyImpulse(1, phase ? 8 : 3)
+      }
+      const reconcile = physics.reconcile(this.frameNo)
+      if (reconcile.correctedBodies > 0) {
+        this.ctx.bus.emit({
+          ts: Date.now(),
+          level: 'debug',
+          event_code: 'WORLD_TICK',
+          payload: {
+            event: 'physics_reconcile',
+            frameNo: reconcile.frameNo,
+            correctedBodies: reconcile.correctedBodies,
+            maxPositionError: reconcile.maxPositionError,
+          },
+        })
       }
     })
 
@@ -332,9 +348,7 @@ export class CoreApp {
       this.verification.captureFrame(`frame-${this.frameNo}`).catch(() => {})
     }
 
-    if (this.frameNo % 900 === 0) {
-      this.verification.recordPerfSample('total', dtMs)
-    }
+    this.verification.recordPerfSample('total', totalFrameWorkMs)
 
     if (this.running) {
       this.rafId = window.requestAnimationFrame(this.tick)

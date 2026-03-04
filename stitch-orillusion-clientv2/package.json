@@ -14,10 +14,13 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test:lane-a": "node scripts/run-suite-lane-a.mjs",
-    "test:lane-a-core": "node scripts/run-suite-lane-a.mjs --suite core"
+    "test:lane-a-core": "node scripts/run-suite-lane-a.mjs --suite core",
+    "risk:check": "node scripts/risk-registry.mjs check",
+    "risk:snapshot": "node scripts/risk-registry.mjs snapshot",
+    "release:check": "node scripts/release-check.mjs"
   },
   "dependencies": {
-    "spacetimedb": "2.0.1"
+    "spacetimedb": "file:../SpacetimeDB/crates/bindings-typescript"
   },
   "devDependencies": {
     "playwright": "1.53.2",

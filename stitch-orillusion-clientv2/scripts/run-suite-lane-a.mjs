@@ -110,6 +110,7 @@ try {
   }
 
   const wrote = await persistArtifacts(result.artifacts)
+  await writeVisualProofIndex(result.report, wrote.paths)
   const gateSummary = evaluateGateResult(result.report, suite, wrote.paths, wrote.missing, result.suiteResult)
 
   process.stdout.write(`${JSON.stringify(gateSummary, null, 2)}\n`)
@@ -199,15 +200,20 @@ function evaluateGateResult(report, suiteType, writtenPaths, storeMissing, suite
     reportedScenarios.length !== expectedScenarios.length ||
     expectedScenarios.some((scenarioId) => !reportedScenarios.some((entry) => entry.scenario_id === scenarioId))
   const assertionFailures = report.assertions.filter((entry) => !entry.passed).length
+  const perfBudgetPass = report.perf_budget?.pass === true
   const requiredArtifacts = [
     `${report.environment.artifact_root}/${report.run_id}/console.jsonl`,
     `${report.environment.artifact_root}/${report.run_id}/test_report.json`,
     `${report.environment.artifact_root}/${report.run_id}/report.json`,
     `${report.environment.artifact_root}/${report.run_id}/assertion_matrix.json`,
+    `${report.environment.artifact_root}/${report.run_id}/scenario_coverage.json`,
+    `${report.environment.artifact_root}/${report.run_id}/dod_matrix.json`,
+    `${report.environment.artifact_root}/${report.run_id}/visual-proof-index.json`,
     `${report.environment.artifact_root}/${report.run_id}/artifact_index.json`,
     `${report.environment.artifact_root}/${report.run_id}/timeline.json`,
     `${report.environment.perf_artifact_root}/${report.run_id}/perf_report.json`,
     `${report.environment.perf_artifact_root}/${report.run_id}/frame_timeline.json`,
+    `${report.environment.perf_artifact_root}/${report.run_id}/perf_budget.json`,
   ]
   const missingArtifacts = requiredArtifacts.filter((path) => !writtenPaths.has(path))
   const missingArtifactStoreCount = storeMissing.size
@@ -215,6 +221,7 @@ function evaluateGateResult(report, suiteType, writtenPaths, storeMissing, suite
     !missingScenarioPass &&
     report.scenarios.length === expectedScenarios.length &&
     assertionFailures === 0 &&
+    perfBudgetPass &&
     missingArtifacts.length === 0 &&
     missingArtifactStoreCount === 0 &&
     !scenarioResultMismatch
@@ -225,6 +232,7 @@ function evaluateGateResult(report, suiteType, writtenPaths, storeMissing, suite
     run_id: report.run_id,
     scenario_results: report.scenarios,
     assertions_failed: assertionFailures,
+    perf_budget_pass: perfBudgetPass,
     required_artifacts: requiredArtifacts,
     missing_artifacts: missingArtifacts,
     artifacts_written: writtenPaths.size,
@@ -260,6 +268,22 @@ async function persistArtifacts(artifactStore = {}) {
     written.add(relativePath)
   }
   return { paths: written, missing }
+}
+
+async function writeVisualProofIndex(report, writtenPaths) {
+  const framePaths = [...writtenPaths.values()]
+    .filter((value) => value.endsWith('.png'))
+    .sort()
+  const relativePath = `${report.environment.artifact_root}/${report.run_id}/visual-proof-index.json`
+  const targetPath = path.resolve(projectRoot, relativePath)
+  const payload = {
+    run_id: report.run_id,
+    frame_count: framePaths.length,
+    frames: framePaths,
+  }
+  await mkdir(path.dirname(targetPath), { recursive: true })
+  await writeFile(targetPath, JSON.stringify(payload, null, 2), 'utf8')
+  writtenPaths.add(relativePath)
 }
 
 function waitForHttpReady(getUrl, timeoutMs) {

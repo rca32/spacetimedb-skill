@@ -19,6 +19,24 @@ export interface WorldSnapshot {
   profileId: 'low' | 'medium' | 'high' | 'ultra'
 }
 
+export interface SpatialBounds {
+  min: { x: number; y: number; z: number }
+  max: { x: number; y: number; z: number }
+}
+
+export interface SpatialRay {
+  origin: { x: number; y: number; z: number }
+  direction: { x: number; y: number; z: number }
+  maxDistance?: number
+}
+
+export interface PickHit {
+  entityId: bigint
+  distance: number
+  position: { x: number; y: number; z: number }
+  entityType?: EntityType
+}
+
 type EntityType = 'player' | 'npc' | 'building' | 'resource' | 'projectile' | 'effect' | 'ui_anchor'
 type LifecycleState = 'Discovered' | 'Spawning' | 'Active' | 'Dormant' | 'Despawning' | 'Disposed'
 type DespawnReason = 'aoi_exit' | 'world_despawn' | 'dimension_change' | 'disconnect'
@@ -56,6 +74,9 @@ export class WorldRuntime implements DomainRuntime {
   private readonly poolableTypes = new Set<EntityType>(['projectile', 'effect', 'ui_anchor'])
   private readonly dormantTtlMs = 30_000
   private readonly parentFixtureId = 2n
+  private readonly spatialCellSize = 16
+  private spatialDirty = true
+  private spatialBuckets = new Map<string, Set<bigint>>()
 
   async init(ctx: RuntimeContext): Promise<void> {
     this.reset()
@@ -212,6 +233,7 @@ export class WorldRuntime implements DomainRuntime {
       player.lastUpdatedAt = Date.now()
       player.lastFrameNo = this.frameNo
       this.entities.set(this.playerId, player)
+      this.spatialDirty = true
       this.emitEntitySnapshot({
         event: 'ENTITY_UPDATE',
         entityId: Number(this.playerId),
@@ -363,6 +385,7 @@ export class WorldRuntime implements DomainRuntime {
         lastFrameNo: this.frameNo,
       }
       this.entities.set(normalizedId, entity)
+      this.spatialDirty = true
       this.emitEntitySnapshot({
         event: 'ENTITY_SPAWN_BEGIN',
         entityId: Number(normalizedId),
@@ -377,6 +400,7 @@ export class WorldRuntime implements DomainRuntime {
       entity.lastUpdatedAt = Date.now()
       entity.lastFrameNo = this.frameNo
       this.entities.set(normalizedId, entity)
+      this.spatialDirty = true
       this.emitEntitySnapshot({
         event: 'ENTITY_SPAWN_DONE',
         entityId: Number(normalizedId),
@@ -412,6 +436,7 @@ export class WorldRuntime implements DomainRuntime {
       }
 
       this.entities.set(normalizedId, previous)
+      this.spatialDirty = true
       this.emitEntitySnapshot({
         event: 'ENTITY_SPAWN_BEGIN',
         entityId: Number(normalizedId),
@@ -430,6 +455,7 @@ export class WorldRuntime implements DomainRuntime {
         previous.entityType = normalizedType
       }
       this.entities.set(normalizedId, previous)
+      this.spatialDirty = true
 
       this.emitEntitySnapshot({
         event: 'ENTITY_SPAWN_DONE',
@@ -461,6 +487,7 @@ export class WorldRuntime implements DomainRuntime {
       previous.entityType = normalizedType
     }
     this.entities.set(normalizedId, previous)
+    this.spatialDirty = true
     this.emitEntitySnapshot({
       event: 'ENTITY_UPDATE',
       entityId: Number(normalizedId),
@@ -511,6 +538,7 @@ export class WorldRuntime implements DomainRuntime {
       next.entityType = normalizedType
     }
     this.entities.set(normalizedId, next)
+    this.spatialDirty = true
 
     if (wasDormant) {
       this.emitEntitySnapshot({
@@ -591,9 +619,11 @@ export class WorldRuntime implements DomainRuntime {
       }
       existing.lifecycle = 'Disposed'
       this.entities.delete(normalizedId)
+      this.spatialDirty = true
     } else {
       // Keep AOI-exited pooled entities dormant for fast re-activation.
       this.entities.set(normalizedId, existing)
+      this.spatialDirty = true
     }
 
     if (emitWorldEvent) {
@@ -617,6 +647,111 @@ export class WorldRuntime implements DomainRuntime {
       ...entity,
       state: entity.lifecycle,
     }
+  }
+
+  buildSpatialIndex(): void {
+    this.spatialBuckets.clear()
+    for (const [entityId, entity] of this.entities) {
+      if (entity.lifecycle === 'Disposed') {
+        continue
+      }
+      const key = this.toBucketKey(entity.position.x, entity.position.z)
+      const bucket = this.spatialBuckets.get(key)
+      if (bucket) {
+        bucket.add(entityId)
+      } else {
+        this.spatialBuckets.set(key, new Set([entityId]))
+      }
+    }
+    this.spatialDirty = false
+  }
+
+  queryVisible(bounds: SpatialBounds): bigint[] {
+    this.ensureSpatialIndex()
+    const candidates = this.collectBucketCandidates(bounds)
+    const visible: bigint[] = []
+    for (const entityId of candidates) {
+      const entity = this.entities.get(entityId)
+      if (!entity || entity.lifecycle === 'Disposed') {
+        continue
+      }
+      const { x, y, z } = entity.position
+      if (
+        x >= bounds.min.x &&
+        x <= bounds.max.x &&
+        y >= bounds.min.y &&
+        y <= bounds.max.y &&
+        z >= bounds.min.z &&
+        z <= bounds.max.z
+      ) {
+        visible.push(entityId)
+      }
+    }
+    return visible
+  }
+
+  pick(ray: SpatialRay): PickHit | null {
+    this.ensureSpatialIndex()
+    const maxDistance = Number.isFinite(ray.maxDistance) && (ray.maxDistance as number) > 0
+      ? (ray.maxDistance as number)
+      : 128
+    const directionLength = Math.hypot(ray.direction.x, ray.direction.y, ray.direction.z) || 1
+    const dx = ray.direction.x / directionLength
+    const dy = ray.direction.y / directionLength
+    const dz = ray.direction.z / directionLength
+    let bestHit: PickHit | null = null
+
+    const bounds: SpatialBounds = {
+      min: {
+        x: Math.min(ray.origin.x, ray.origin.x + dx * maxDistance) - 1,
+        y: Math.min(ray.origin.y, ray.origin.y + dy * maxDistance) - 1,
+        z: Math.min(ray.origin.z, ray.origin.z + dz * maxDistance) - 1,
+      },
+      max: {
+        x: Math.max(ray.origin.x, ray.origin.x + dx * maxDistance) + 1,
+        y: Math.max(ray.origin.y, ray.origin.y + dy * maxDistance) + 1,
+        z: Math.max(ray.origin.z, ray.origin.z + dz * maxDistance) + 1,
+      },
+    }
+
+    const candidates = this.collectBucketCandidates(bounds)
+    for (const entityId of candidates) {
+      const entity = this.entities.get(entityId)
+      if (!entity || entity.lifecycle === 'Disposed') {
+        continue
+      }
+      const vx = entity.position.x - ray.origin.x
+      const vy = entity.position.y - ray.origin.y
+      const vz = entity.position.z - ray.origin.z
+      const projected = vx * dx + vy * dy + vz * dz
+      if (projected < 0 || projected > maxDistance) {
+        continue
+      }
+
+      const closestPoint = {
+        x: ray.origin.x + dx * projected,
+        y: ray.origin.y + dy * projected,
+        z: ray.origin.z + dz * projected,
+      }
+      const error = Math.hypot(
+        entity.position.x - closestPoint.x,
+        entity.position.y - closestPoint.y,
+        entity.position.z - closestPoint.z,
+      )
+      if (error > 1.5) {
+        continue
+      }
+      if (!bestHit || projected < bestHit.distance) {
+        bestHit = {
+          entityId,
+          distance: projected,
+          position: entity.position,
+          entityType: entity.entityType,
+        }
+      }
+    }
+
+    return bestHit
   }
 
   readSnapshot(): WorldSnapshot {
@@ -661,6 +796,35 @@ export class WorldRuntime implements DomainRuntime {
         },
       })
     }
+  }
+
+  private ensureSpatialIndex(): void {
+    if (this.spatialDirty) {
+      this.buildSpatialIndex()
+    }
+  }
+
+  private collectBucketCandidates(bounds: SpatialBounds): Set<bigint> {
+    const candidates = new Set<bigint>()
+    const minCellX = Math.floor(bounds.min.x / this.spatialCellSize)
+    const maxCellX = Math.floor(bounds.max.x / this.spatialCellSize)
+    const minCellZ = Math.floor(bounds.min.z / this.spatialCellSize)
+    const maxCellZ = Math.floor(bounds.max.z / this.spatialCellSize)
+    for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
+      for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ += 1) {
+        const key = `${cellX}:${cellZ}`
+        const bucket = this.spatialBuckets.get(key)
+        if (!bucket) {
+          continue
+        }
+        bucket.forEach((entityId) => candidates.add(entityId))
+      }
+    }
+    return candidates
+  }
+
+  private toBucketKey(x: number, z: number): string {
+    return `${Math.floor(x / this.spatialCellSize)}:${Math.floor(z / this.spatialCellSize)}`
   }
 
   private emitEntitySnapshot(payload: EntitySnapshotPayload): void {
@@ -727,6 +891,7 @@ export class WorldRuntime implements DomainRuntime {
       child.parentId = undefined
       child.localOffset = { x: 0, y: 0, z: 0 }
       this.entities.set(entityId, child)
+      this.spatialDirty = true
       this.emitEntitySnapshot({
         event: 'ENTITY_UPDATE',
         entityId: Number(entityId),
@@ -765,6 +930,7 @@ export class WorldRuntime implements DomainRuntime {
       z: parent.position.z + localOffset.z,
     }
     this.entities.set(entityId, child)
+    this.spatialDirty = true
     this.emitEntitySnapshot({
       event: 'ENTITY_UPDATE',
       entityId: Number(entityId),
@@ -808,6 +974,7 @@ export class WorldRuntime implements DomainRuntime {
       entity.lastUpdatedAt = Date.now()
       entity.lastFrameNo = this.frameNo
       this.entities.set(id, entity)
+      this.spatialDirty = true
       this.emitEntitySnapshot({
         event: 'ENTITY_UPDATE',
         entityId: Number(id),
@@ -900,6 +1067,8 @@ export class WorldRuntime implements DomainRuntime {
     this.entities.clear()
     this.profileId = 'low'
     this.lastInput = { x: 0, y: 0, z: 0 }
+    this.spatialBuckets.clear()
+    this.spatialDirty = true
   }
 
   private readEntity(entityId: bigint): EntityPatch {

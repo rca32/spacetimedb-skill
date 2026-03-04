@@ -2,12 +2,14 @@ use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::services::nav::build_nav_grid;
 use crate::tables::v2::{
-    aoi_stream, client_frame, collision_proxy, combat_hit, combat_intent, motion_intent,
-    physics_state, server_correction,
+    aoi_stream, audio_event, client_frame, collision_proxy, combat_hit, combat_hit_event,
+    combat_intent, fx_event, motion_intent, physics_state, server_correction,
+    ui_notification_event,
 };
 use crate::tables::{
-    AoiStreamV2, ClientFrameV2, CollisionProxyV2, CombatHitV2, CombatIntentV2, MotionIntentV2,
-    PhysicsStateV2, ServerCorrectionV2,
+    AoiStreamV2, AudioEventV2, ClientFrameV2, CollisionProxyV2, CombatHitEventV2, CombatHitV2,
+    CombatIntentV2, FxEventV2, MotionIntentV2, PhysicsStateV2, ServerCorrectionV2,
+    UiNotificationEventV2,
 };
 
 const PHYSICS_DT_SECONDS: f32 = 1.0 / 60.0;
@@ -283,6 +285,44 @@ pub fn submit_combat_intent(
         crit,
         resolved_at: ctx.timestamp,
     });
+    ctx.db.combat_hit_event().insert(CombatHitEventV2 {
+        event_id: format!("combat-hit:{hit_id}"),
+        attacker: ctx.sender(),
+        target,
+        damage,
+        crit,
+        emitted_at: ctx.timestamp,
+    });
+    ctx.db.fx_event().insert(FxEventV2 {
+        event_id: format!("fx:{hit_id}"),
+        region_id,
+        dimension_id,
+        event_type: if crit {
+            "combat.crit".to_string()
+        } else {
+            "combat.hit".to_string()
+        },
+        payload_json: format!(
+            "{{\"hit_id\":\"{}\",\"skill_slot\":{},\"damage\":{},\"crit\":{}}}",
+            hit_id, skill_slot, damage, crit
+        ),
+        emitted_at: ctx.timestamp,
+    });
+    ctx.db.audio_event().insert(AudioEventV2 {
+        event_id: format!("audio:{hit_id}"),
+        region_id,
+        dimension_id,
+        event_type: if crit {
+            "combat.crit".to_string()
+        } else {
+            "combat.hit".to_string()
+        },
+        payload_json: format!(
+            "{{\"hit_id\":\"{}\",\"skill_slot\":{},\"damage\":{},\"crit\":{}}}",
+            hit_id, skill_slot, damage, crit
+        ),
+        emitted_at: ctx.timestamp,
+    });
 
     let aoi_key = format!("combat:{}", hit_id);
     let payload = damage.to_le_bytes().to_vec();
@@ -328,7 +368,7 @@ pub fn ack_server_correction(
         .server_correction()
         .correction_id()
         .update(ServerCorrectionV2 {
-            correction_id,
+            correction_id: correction_id.clone(),
             identity: current.identity,
             region_id: current.region_id,
             dimension_id: current.dimension_id,
@@ -344,6 +384,16 @@ pub fn ack_server_correction(
             acked_client_frame_no,
             acked_at: ctx.timestamp,
         });
+    ctx.db.ui_notification_event().insert(UiNotificationEventV2 {
+        event_id: format!("ui-notify:{}:{acked_client_frame_no}", correction_id),
+        identity: current.identity,
+        code: "server_correction_acked".to_string(),
+        payload_json: format!(
+            "{{\"correction_id\":\"{}\",\"acked_client_frame_no\":{}}}",
+            correction_id, acked_client_frame_no
+        ),
+        emitted_at: ctx.timestamp,
+    });
 
     Ok(())
 }
@@ -503,13 +553,23 @@ fn upsert_server_correction(
         .db
         .server_correction()
         .correction_id()
-        .find(correction_id)
+        .find(correction_id.clone())
         .is_some()
     {
         ctx.db.server_correction().correction_id().update(row);
     } else {
         ctx.db.server_correction().insert(row);
     }
+    ctx.db.ui_notification_event().insert(UiNotificationEventV2 {
+        event_id: format!("ui-notify:{}:issued", correction_id),
+        identity,
+        code: "server_correction_issued".to_string(),
+        payload_json: format!(
+            "{{\"correction_id\":\"{}\",\"reason\":\"{}\",\"region_id\":{},\"dimension_id\":{}}}",
+            correction_id, reason, region_id, dimension_id
+        ),
+        emitted_at: ctx.timestamp,
+    });
 }
 
 fn frame_key(identity: Identity, frame_no: u64) -> String {

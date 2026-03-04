@@ -9,6 +9,7 @@ export interface RuntimeEvent<T = Record<string, unknown>> {
     | 'UI_FOCUS_SET'
     | 'UI_FOCUS_RELEASE'
     | 'FX_EMIT'
+    | 'AUDIO_PLAY_REQUEST'
     | 'AUDIO_PLAY'
     | 'ASSERT_PASS'
     | 'ASSERT_FAIL'
