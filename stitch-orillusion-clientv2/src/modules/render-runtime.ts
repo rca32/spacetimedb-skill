@@ -104,7 +104,7 @@ export class RenderRuntime implements DomainRuntime {
 
     context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0)
 
-    const gradient = this.weatherGradient()
+    const gradient = this.weatherGradient(context, width, height)
     context.clearRect(0, 0, width, height)
     context.fillStyle = gradient
     context.fillRect(0, 0, width, height)
@@ -207,12 +207,19 @@ export class RenderRuntime implements DomainRuntime {
     }
   }
 
-  private weatherGradient(): string {
+  private weatherGradient(
+    context: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+  ): string | CanvasGradient {
     const palette = this.weather === 'storm' ? ['hsl(220 50% 22%)', 'hsl(250 35% 40%)'] : this.weather === 'rain' ? ['hsl(210 45% 34%)', 'hsl(228 40% 30%)'] : ['hsl(195 95% 62%)', 'hsl(180 95% 35%)']
     if (this.profile === 'low') {
       return palette[1]
     }
-    return `linear-gradient(140deg, ${palette[0]}, ${palette[1]})`
+    const gradient = context.createLinearGradient(0, 0, Math.max(1, width * 0.85), Math.max(1, height))
+    gradient.addColorStop(0, palette[0])
+    gradient.addColorStop(1, palette[1])
+    return gradient
   }
 
   private profileFromDeviceTier(tier: 'low' | 'mid' | 'high'): RenderProfileId {

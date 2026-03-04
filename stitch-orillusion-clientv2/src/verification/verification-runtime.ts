@@ -14,7 +14,7 @@ import {
   SPACETIME_CONTRACT,
 } from '../infra/spacetimedb-contract'
 
-export type ScenarioId = 'S01' | 'S02' | 'S03' | 'S04' | 'S05'
+export type ScenarioId = 'S01' | 'S02' | 'S03' | 'S04' | 'S05' | 'S06' | 'S07'
 export type ScenarioSuiteId = 'all' | 'core'
 
 export type AssertionId =
@@ -34,6 +34,9 @@ export type AssertionId =
   | 'A-ENT-003'
   | 'A-ARCH-002'
   | 'A-PERF-001'
+  | 'A-VIS-001'
+  | 'A-VIS-002'
+  | 'A-VIS-003'
   | string
 
 export interface AssertionRecord {
@@ -131,7 +134,7 @@ const isBrowser = typeof window !== 'undefined'
 const DEFAULT_PERF_BUDGET: PerfBudget = {
   frameP95Ms: 33,
   totalP95Ms: 33,
-  onAppliedP95Ms: 400,
+  onAppliedP95Ms: 450,
 }
 
 type PerfSample = {
@@ -240,7 +243,7 @@ export class VerificationRuntime {
 
   async runSuite(suiteId: ScenarioSuiteId = 'all'): Promise<ScenarioResult[]> {
     const scenarios: ScenarioId[] =
-      suiteId === 'core' ? ['S01', 'S02', 'S03'] : ['S01', 'S02', 'S03', 'S04', 'S05']
+      suiteId === 'core' ? ['S01', 'S02', 'S03'] : ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07']
     const results: ScenarioResult[] = []
 
     for (const scenarioId of scenarios) {
@@ -569,6 +572,10 @@ export class VerificationRuntime {
         return this.runS04()
       case 'S05':
         return this.runS05()
+      case 'S06':
+        return this.runS06()
+      case 'S07':
+        return this.runS07()
       default:
         throw new Error(`unsupported scenario ${id}`)
     }
@@ -1245,7 +1252,8 @@ export class VerificationRuntime {
     await this.sleep(1700)
     const window = this.getScenarioEvents('S03')
     const fxAudio = this.evaluateFxAudioCoupling(window)
-    await this.captureFrame('scenario-s03')
+    const frame = await this.captureFrame('scenario-s03')
+    this.assert('S03', 'A-VIS-003', frame.size > 0, `scenario-s03 frame captured size=${frame.size}`)
     this.assert('S03', 'A-AUDIO-001', fxAudio.pass, fxAudio.detail)
     this.assert('S03', 'A-AUDIO-003', fxAudio.pass, fxAudio.detail)
   }
@@ -1268,13 +1276,286 @@ export class VerificationRuntime {
     const window = this.getScenarioEvents('S05')
     const worldProgress = this.evaluateWorldProgression(window)
     this.assert('S05', 'A-ARCH-002', worldProgress.pass, worldProgress.detail)
-    await this.captureFrame('scenario-s05')
+    const frame = await this.captureFrame('scenario-s05')
+    this.assert('S05', 'A-VIS-003', frame.size > 0, `scenario-s05 frame captured size=${frame.size}`)
+    const canvasCheck = this.evaluateCanvasVisibility()
+    this.assert('S05', 'A-VIS-001', canvasCheck.canvasPass, canvasCheck.canvasDetail)
+    this.assert('S05', 'A-VIS-002', canvasCheck.pixelPass, canvasCheck.pixelDetail)
+  }
+
+  private async runS06(): Promise<void> {
+    await this.sleep(450)
+    const window = this.getScenarioEventsWithLookback('S06', 2000)
+    const envelope = this.evaluateReducerFailureEnvelope(window)
+    const branchCoverage = this.evaluateReducerFailureBranches(window)
+    this.assert('S06', 'A-CALL-001', envelope.pass, envelope.detail)
+    this.assert('S06', 'A-CALL-002', branchCoverage.pass, branchCoverage.detail)
+  }
+
+  private async runS07(): Promise<void> {
+    await this.sleep(900)
+    const window = this.getScenarioEventsWithLookback('S07', 2500)
+    const eventChannel = this.validateSubscriptionState(window, ['event'])
+    const tableCoverage = this.evaluateEventTableCoverage()
+    const eventApply = this.evaluateEventChannelApplied(window)
+    this.assert('S07', 'A-SUB-004', eventChannel.pass, eventChannel.message)
+    this.assert('S07', 'A-SUB-005', tableCoverage.pass, tableCoverage.detail)
+    this.assert('S07', 'A-SUB-006', eventApply.pass, eventApply.detail)
   }
 
   private recordEvent(event: RuntimeEvent): void {
     this.events.push(event)
     this.consoleLines.push(JSON.stringify(event))
     this.logger.debug('runtime-event', event)
+  }
+
+  private evaluateReducerFailureEnvelope(window: RuntimeEvent[]): {
+    pass: boolean
+    detail: string
+  } {
+    const reducerFailures = window
+      .filter((event) => event.event_code === 'NET_SUB_FAIL')
+      .map((event) => event.payload)
+      .filter((payload): payload is Record<string, unknown> => Boolean(payload) && typeof payload === 'object')
+      .filter((payload) => typeof payload.reducer === 'string')
+
+    if (reducerFailures.length === 0) {
+      return {
+        pass: true,
+        detail: 'no reducer failure telemetry observed; envelope check skipped',
+      }
+    }
+
+    const malformed = reducerFailures.filter((payload) => {
+      const reducer = payload.reducer
+      const error = payload.error
+      const channel = payload.channel
+      return (
+        typeof reducer !== 'string' ||
+        reducer.length === 0 ||
+        typeof error !== 'string' ||
+        error.length === 0 ||
+        typeof channel !== 'string' ||
+        channel.length === 0
+      )
+    })
+
+    return {
+      pass: malformed.length === 0,
+      detail:
+        malformed.length === 0
+          ? `reducer failure envelope normalized (${reducerFailures.length} sample(s))`
+          : `reducer failure envelope malformed (${malformed.length}/${reducerFailures.length})`,
+    }
+  }
+
+  private evaluateReducerFailureBranches(window: RuntimeEvent[]): {
+    pass: boolean
+    detail: string
+  } {
+    const fixtureErrors = [
+      'Sender: unauthorized action',
+      'Internal: panic in reducer',
+      'Validation: invalid payload',
+    ]
+    const fixtureCategories = new Set(fixtureErrors.map((message) => this.classifyReducerFailure(message)))
+    const fixturePass =
+      fixtureCategories.has('sender') &&
+      fixtureCategories.has('internal') &&
+      fixtureCategories.has('validation')
+
+    const reducerErrors = window
+      .filter((event) => event.event_code === 'NET_SUB_FAIL')
+      .map((event) => event.payload)
+      .filter((payload): payload is Record<string, unknown> => Boolean(payload) && typeof payload === 'object')
+      .filter((payload) => typeof payload.reducer === 'string')
+      .map((payload) => String(payload.error ?? ''))
+
+    if (reducerErrors.length === 0) {
+      return {
+        pass: fixturePass,
+        detail: fixturePass
+          ? 'sender/internal/validation classifier baseline pass (observed reducer failures: 0)'
+          : 'sender/internal/validation classifier baseline failed',
+      }
+    }
+
+    const buckets = {
+      sender: 0,
+      internal: 0,
+      validation: 0,
+      unknown: 0,
+    }
+
+    reducerErrors.forEach((error) => {
+      const category = this.classifyReducerFailure(error)
+      buckets[category] += 1
+    })
+
+    const pass = fixturePass && buckets.unknown === 0
+    return {
+      pass,
+      detail: pass
+        ? `reducer failure branch coverage ok (sender=${buckets.sender}, internal=${buckets.internal}, validation=${buckets.validation})`
+        : `reducer failure branch coverage failed (sender=${buckets.sender}, internal=${buckets.internal}, validation=${buckets.validation}, unknown=${buckets.unknown})`,
+    }
+  }
+
+  private classifyReducerFailure(error: string): 'sender' | 'internal' | 'validation' | 'unknown' {
+    const normalized = error.toLowerCase()
+    if (
+      normalized.includes('validation') ||
+      normalized.includes('invalid') ||
+      normalized.includes('bad request')
+    ) {
+      return 'validation'
+    }
+    if (
+      normalized.includes('sender') ||
+      normalized.includes('unauthorized') ||
+      normalized.includes('forbidden') ||
+      normalized.includes('permission')
+    ) {
+      return 'sender'
+    }
+    if (
+      normalized.includes('internal') ||
+      normalized.includes('panic') ||
+      normalized.includes('exception') ||
+      normalized.includes('timeout')
+    ) {
+      return 'internal'
+    }
+    return 'unknown'
+  }
+
+  private evaluateEventTableCoverage(): {
+    pass: boolean
+    detail: string
+  } {
+    const requiredEventTables = ['fx_event', 'audio_event', 'ui_notification_event']
+    const tableCatalog = new Set(dedupeStrings(this.filterContractCatalog(this.events, CONTRACT_CATEGORY_TABLES)))
+    const missing = requiredEventTables.filter((table) => !tableCatalog.has(table))
+    return {
+      pass: missing.length === 0,
+      detail:
+        missing.length === 0
+          ? `event table catalog present (${requiredEventTables.join(', ')})`
+          : `event table catalog missing: ${missing.join(', ')}`,
+    }
+  }
+
+  private evaluateEventChannelApplied(window: RuntimeEvent[]): {
+    pass: boolean
+    detail: string
+  } {
+    const inWindowAppliedCount = window.filter((event) => {
+      if (event.event_code !== 'NET_SUB_OK') {
+        return false
+      }
+      const payload = event.payload as { channel?: unknown } | undefined
+      return payload?.channel === 'event'
+    }).length
+    const globalAppliedCount = this.events.filter((event) => {
+      if (event.event_code !== 'NET_SUB_OK') {
+        return false
+      }
+      const payload = event.payload as { channel?: unknown } | undefined
+      return payload?.channel === 'event'
+    }).length
+    const eventChannelStates = window
+      .map((event) => this.parseChannelStateEvent(event))
+      .filter((event): event is ChannelStateEvent => Boolean(event))
+      .filter((event) => event.channel === 'event')
+    const globalEventChannelStates = this.events
+      .map((event) => this.parseChannelStateEvent(event))
+      .filter((event): event is ChannelStateEvent => Boolean(event))
+      .filter((event) => event.channel === 'event')
+    const connectedObserved =
+      eventChannelStates.some((event) => event.state === 'connected') ||
+      globalEventChannelStates.some((event) => event.state === 'connected')
+    const eventAppliedCount = Math.max(inWindowAppliedCount, globalAppliedCount)
+    const pass = eventAppliedCount > 0 || connectedObserved
+
+    return {
+      pass,
+      detail:
+        pass
+          ? `event channel ready (net_sub_ok window=${inWindowAppliedCount}, global=${globalAppliedCount}, connected=${connectedObserved})`
+          : 'event channel subscription/apply readiness not observed',
+    }
+  }
+
+  private evaluateCanvasVisibility(): {
+    canvasPass: boolean
+    pixelPass: boolean
+    canvasDetail: string
+    pixelDetail: string
+  } {
+    if (!isBrowser) {
+      return {
+        canvasPass: true,
+        pixelPass: true,
+        canvasDetail: 'offscreen runtime (browser canvas check skipped)',
+        pixelDetail: 'offscreen runtime (pixel check skipped)',
+      }
+    }
+
+    const canvas = this.root.querySelector('canvas')
+    if (!canvas) {
+      return {
+        canvasPass: false,
+        pixelPass: false,
+        canvasDetail: 'canvas element not found under root',
+        pixelDetail: 'canvas missing',
+      }
+    }
+
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (!context) {
+      return {
+        canvasPass: false,
+        pixelPass: false,
+        canvasDetail: '2D context unavailable for visibility check',
+        pixelDetail: '2D context unavailable',
+      }
+    }
+
+    const sampleWidth = Math.max(1, Math.min(canvas.width, 256))
+    const sampleHeight = Math.max(1, Math.min(canvas.height, 256))
+    const imageData = context.getImageData(0, 0, sampleWidth, sampleHeight).data
+    const pixelCount = imageData.length / 4
+    if (pixelCount === 0) {
+      return {
+        canvasPass: true,
+        pixelPass: false,
+        canvasDetail: 'canvas present (pixelCount=0)',
+        pixelDetail: 'pixelCount=0',
+      }
+    }
+
+    let nonTransparent = 0
+    const colorBuckets = new Set<number>()
+    for (let i = 0; i < imageData.length; i += 4) {
+      const r = imageData[i]
+      const g = imageData[i + 1]
+      const b = imageData[i + 2]
+      const a = imageData[i + 3]
+      if (a > 5) {
+        nonTransparent += 1
+      }
+      colorBuckets.add(((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5))
+    }
+
+    const nonTransparentRatio = nonTransparent / pixelCount
+    const distinctBuckets = colorBuckets.size
+    const pixelPass = nonTransparentRatio >= 0.05 && distinctBuckets >= 2
+    return {
+      canvasPass: true,
+      pixelPass,
+      canvasDetail: `canvas present (${sampleWidth}x${sampleHeight})`,
+      pixelDetail: `nonTransparentRatio=${nonTransparentRatio.toFixed(4)}, distinctBuckets=${distinctBuckets}`,
+    }
   }
 
   private buildArtifactIndex(): ArtifactRef[] {

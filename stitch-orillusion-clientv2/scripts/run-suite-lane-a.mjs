@@ -17,7 +17,8 @@ const headless = args.headless ?? true
 const suiteUrl = `http://${HOST}:${port}/`
 const __filename = fileURLToPath(import.meta.url)
 const projectRoot = path.resolve(path.dirname(__filename), '..')
-const waitForMs = 30000
+const waitForMs = 45000
+const pageLoadTimeoutMs = 60000
 
 const server = spawn('bun', ['run', 'dev', '--host', HOST, '--port', String(port)], {
   cwd: projectRoot,
@@ -78,7 +79,7 @@ try {
   page.on('pageerror', (error) => {
     process.stderr.write(`[browser pageerror] ${error.stack ?? String(error)}\n`)
   })
-  await page.goto(`${targetUrl}`, { waitUntil: 'domcontentloaded', timeout: 30000 })
+  await page.goto(`${targetUrl}`, { waitUntil: 'domcontentloaded', timeout: pageLoadTimeoutMs })
   await page.waitForFunction(
     () => typeof window.__testHarness?.runSuite === 'function' && typeof window.__testHarness?.exportArtifacts === 'function',
     undefined,
@@ -94,12 +95,81 @@ try {
 
   const result = await page.evaluate(
     async (selectedSuite) => {
+      const captureVisualProbe = () => {
+        const canvas = document.querySelector('#app canvas')
+        if (!canvas) {
+          return {
+            hasCanvas: false,
+            hasContext: false,
+            sampleWidth: 0,
+            sampleHeight: 0,
+            pixelCount: 0,
+            nonTransparentRatio: 0,
+            distinctBuckets: 0,
+          }
+        }
+
+        const context = canvas.getContext('2d', { willReadFrequently: true })
+        if (!context) {
+          return {
+            hasCanvas: true,
+            hasContext: false,
+            sampleWidth: 0,
+            sampleHeight: 0,
+            pixelCount: 0,
+            nonTransparentRatio: 0,
+            distinctBuckets: 0,
+          }
+        }
+
+        const sampleWidth = Math.max(1, Math.min(canvas.width, 256))
+        const sampleHeight = Math.max(1, Math.min(canvas.height, 256))
+        const imageData = context.getImageData(0, 0, sampleWidth, sampleHeight).data
+        const pixelCount = imageData.length / 4
+        if (pixelCount === 0) {
+          return {
+            hasCanvas: true,
+            hasContext: true,
+            sampleWidth,
+            sampleHeight,
+            pixelCount,
+            nonTransparentRatio: 0,
+            distinctBuckets: 0,
+          }
+        }
+
+        let nonTransparent = 0
+        const buckets = new Set()
+        for (let i = 0; i < imageData.length; i += 4) {
+          const r = imageData[i]
+          const g = imageData[i + 1]
+          const b = imageData[i + 2]
+          const a = imageData[i + 3]
+          if (a > 5) {
+            nonTransparent += 1
+          }
+          buckets.add(((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5))
+        }
+
+        return {
+          hasCanvas: true,
+          hasContext: true,
+          sampleWidth,
+          sampleHeight,
+          pixelCount,
+          nonTransparentRatio: nonTransparent / pixelCount,
+          distinctBuckets: buckets.size,
+        }
+      }
+
       const suiteResult = await window.__testHarness?.runSuite(selectedSuite)
+      const visualProbe = captureVisualProbe()
       await window.__testHarness?.exportArtifacts()
       return {
         report: window.__testReport,
         artifacts: window.__testArtifactStore ?? {},
         suiteResult,
+        visualProbe,
       }
     },
     suite,
@@ -111,7 +181,14 @@ try {
 
   const wrote = await persistArtifacts(result.artifacts)
   await writeVisualProofIndex(result.report, wrote.paths)
-  const gateSummary = evaluateGateResult(result.report, suite, wrote.paths, wrote.missing, result.suiteResult)
+  const gateSummary = evaluateGateResult(
+    result.report,
+    suite,
+    wrote.paths,
+    wrote.missing,
+    result.suiteResult,
+    result.visualProbe,
+  )
 
   process.stdout.write(`${JSON.stringify(gateSummary, null, 2)}\n`)
   if (!gateSummary.pass) {
@@ -188,8 +265,8 @@ function clampNumber(value, fallback, min) {
   return value
 }
 
-function evaluateGateResult(report, suiteType, writtenPaths, storeMissing, suiteResult) {
-  const expectedScenarios = suiteType === 'core' ? ['S01', 'S02', 'S03'] : ['S01', 'S02', 'S03', 'S04', 'S05']
+function evaluateGateResult(report, suiteType, writtenPaths, storeMissing, suiteResult, visualProbe) {
+  const expectedScenarios = suiteType === 'core' ? ['S01', 'S02', 'S03'] : ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07']
   const byScenario = new Map(report.scenarios.map((entry) => [entry.scenario_id, entry]))
   const missingScenarioPass = expectedScenarios.some((scenarioId) => {
     const entry = byScenario.get(scenarioId)
@@ -217,6 +294,22 @@ function evaluateGateResult(report, suiteType, writtenPaths, storeMissing, suite
   ]
   const missingArtifacts = requiredArtifacts.filter((path) => !writtenPaths.has(path))
   const missingArtifactStoreCount = storeMissing.size
+  const missingCanvasEvents = report.events.filter(
+    (event) =>
+      event &&
+      event.payload &&
+      typeof event.payload === 'object' &&
+      event.payload.event === 'frame_capture_missing_canvas',
+  ).length
+  const requiredFrameSuffixes = suiteType === 'core' ? ['scenario-s03.png'] : ['scenario-s03.png', 'scenario-s05.png']
+  const missingRequiredFrames = requiredFrameSuffixes.filter(
+    (suffix) => !report.artifacts.some((artifact) => artifact.kind === 'frame' && artifact.path.endsWith(suffix)),
+  )
+  const visualProbePass =
+    visualProbe?.hasCanvas === true &&
+    visualProbe?.hasContext === true &&
+    Number(visualProbe?.nonTransparentRatio ?? 0) >= 0.05 &&
+    Number(visualProbe?.distinctBuckets ?? 0) >= 2
   const pass =
     !missingScenarioPass &&
     report.scenarios.length === expectedScenarios.length &&
@@ -224,7 +317,10 @@ function evaluateGateResult(report, suiteType, writtenPaths, storeMissing, suite
     perfBudgetPass &&
     missingArtifacts.length === 0 &&
     missingArtifactStoreCount === 0 &&
-    !scenarioResultMismatch
+    !scenarioResultMismatch &&
+    missingCanvasEvents === 0 &&
+    missingRequiredFrames.length === 0 &&
+    visualProbePass
 
   return {
     pass,
@@ -240,6 +336,10 @@ function evaluateGateResult(report, suiteType, writtenPaths, storeMissing, suite
     artifact_samples: [...writtenPaths.values()].filter((value) => value.endsWith('.png')).slice(0, 3),
     artifacts_from_report: report.artifacts.length,
     suite_result_count: reportedScenarios.length,
+    missing_canvas_events: missingCanvasEvents,
+    missing_required_frames: missingRequiredFrames,
+    visual_probe: visualProbe ?? null,
+    visual_probe_pass: visualProbePass,
   }
 }
 

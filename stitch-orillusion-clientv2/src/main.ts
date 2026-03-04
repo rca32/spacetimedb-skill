@@ -5,8 +5,8 @@ import type { TestReport } from './verification/verification-runtime'
 declare global {
   interface Window {
     __testHarness?: {
-      startScenario: (scenarioId: 'S01' | 'S02' | 'S03' | 'S04' | 'S05') => Promise<void>
-      runScenario: (scenarioId: 'S01' | 'S02' | 'S03' | 'S04' | 'S05') => Promise<unknown>
+      startScenario: (scenarioId: 'S01' | 'S02' | 'S03' | 'S04' | 'S05' | 'S06' | 'S07') => Promise<void>
+      runScenario: (scenarioId: 'S01' | 'S02' | 'S03' | 'S04' | 'S05' | 'S06' | 'S07') => Promise<unknown>
       getReport: () => TestReport
       captureFrame: (tag: string) => Promise<{ path: string; kind: 'frame'; mime: string }>
       runSuite: (suiteId: 'all' | 'core') => Promise<unknown>

@@ -1,0 +1,177 @@
+[
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-CONTRACT-001",
+    "passed": true,
+    "detail": "contract tables match manifest",
+    "ts": 1772639575203
+  },
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-CONTRACT-002",
+    "passed": true,
+    "detail": "contract reducers match manifest",
+    "ts": 1772639575203
+  },
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-CONTRACT-003",
+    "passed": true,
+    "detail": "contract error code catalog matches",
+    "ts": 1772639575203
+  },
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-CONTRACT-004",
+    "passed": true,
+    "detail": "all required contract reducers can be invoked by net-sync probe events",
+    "ts": 1772639575204
+  },
+  {
+    "scenario_id": "S01",
+    "assertion_id": "A-SUB-001",
+    "passed": true,
+    "detail": "subscription state stream stable (20 channel-state samples, duplicate_connected=1)",
+    "ts": 1772639575204
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-SUB-002",
+    "passed": true,
+    "detail": "AOI swap/stable pairing complete (2 swaps, 14 stable)",
+    "ts": 1772639577407
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-SUB-003",
+    "passed": true,
+    "detail": "event-channel recovery observed for 3 fault(s), max recovery 289ms",
+    "ts": 1772639577408
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-ENT-001",
+    "passed": true,
+    "detail": "entity_spawn duplicates checked for 0 entities",
+    "ts": 1772639577408
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-ENT-002",
+    "passed": true,
+    "detail": "no ENTITY_* updates after despawn",
+    "ts": 1772639577408
+  },
+  {
+    "scenario_id": "S02",
+    "assertion_id": "A-ENT-003",
+    "passed": true,
+    "detail": "parent world transform delta max=0.0000 within 0.01 (48 checks)",
+    "ts": 1772639577409
+  },
+  {
+    "scenario_id": "S03",
+    "assertion_id": "A-VIS-003",
+    "passed": true,
+    "detail": "scenario-s03 frame captured size=497462",
+    "ts": 1772639579161
+  },
+  {
+    "scenario_id": "S03",
+    "assertion_id": "A-AUDIO-001",
+    "passed": true,
+    "detail": "fx/audio coupling observed (fx=2, audio=106, matched_fx=2)",
+    "ts": 1772639579162
+  },
+  {
+    "scenario_id": "S03",
+    "assertion_id": "A-AUDIO-003",
+    "passed": true,
+    "detail": "fx/audio coupling observed (fx=2, audio=106, matched_fx=2)",
+    "ts": 1772639579162
+  },
+  {
+    "scenario_id": "S04",
+    "assertion_id": "A-UI-001",
+    "passed": true,
+    "detail": "ui focus set/release observed (1772639579162 -> 1772639579223)",
+    "ts": 1772639579288
+  },
+  {
+    "scenario_id": "S04",
+    "assertion_id": "A-UI-002",
+    "passed": true,
+    "detail": "ui focus set/release observed (1772639579162 -> 1772639579223)",
+    "ts": 1772639579289
+  },
+  {
+    "scenario_id": "S05",
+    "assertion_id": "A-ARCH-002",
+    "passed": true,
+    "detail": "world progressed with weather change (delta=6.38s, weather_states=clear,windy,rain)",
+    "ts": 1772639585693
+  },
+  {
+    "scenario_id": "S05",
+    "assertion_id": "A-VIS-003",
+    "passed": true,
+    "detail": "scenario-s05 frame captured size=364882",
+    "ts": 1772639585726
+  },
+  {
+    "scenario_id": "S05",
+    "assertion_id": "A-VIS-001",
+    "passed": true,
+    "detail": "canvas present (256x256)",
+    "ts": 1772639585729
+  },
+  {
+    "scenario_id": "S05",
+    "assertion_id": "A-VIS-002",
+    "passed": true,
+    "detail": "nonTransparentRatio=1.0000, distinctBuckets=15",
+    "ts": 1772639585729
+  },
+  {
+    "scenario_id": "S06",
+    "assertion_id": "A-CALL-001",
+    "passed": true,
+    "detail": "no reducer failure telemetry observed; envelope check skipped",
+    "ts": 1772639586188
+  },
+  {
+    "scenario_id": "S06",
+    "assertion_id": "A-CALL-002",
+    "passed": true,
+    "detail": "sender/internal/validation classifier baseline pass (observed reducer failures: 0)",
+    "ts": 1772639586189
+  },
+  {
+    "scenario_id": "S07",
+    "assertion_id": "A-SUB-004",
+    "passed": true,
+    "detail": "subscription state stream stable (34 channel-state samples, duplicate_connected=4)",
+    "ts": 1772639587093
+  },
+  {
+    "scenario_id": "S07",
+    "assertion_id": "A-SUB-005",
+    "passed": true,
+    "detail": "event table catalog present (fx_event, audio_event, ui_notification_event)",
+    "ts": 1772639587094
+  },
+  {
+    "scenario_id": "S07",
+    "assertion_id": "A-SUB-006",
+    "passed": false,
+    "detail": "event channel subscription apply not observed in scenario window",
+    "ts": 1772639587094
+  },
+  {
+    "scenario_id": "S05",
+    "assertion_id": "A-PERF-001",
+    "passed": true,
+    "detail": "perf budget pass (frame_p95=0.30ms,total_p95=3.50ms,on_applied_p95=283.15ms)",
+    "ts": 1772639587097
+  }
+]

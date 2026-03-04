@@ -23,6 +23,10 @@
 
 ## 데이터/이벤트
 - 빌드/코드젠 규칙:
+  - 자산 동기화 규칙(필수):
+    1. `bun run assets:copy`
+    2. `bun run asset-copy verify --strict`
+    3. `public/props/kenney`, `public/audio/kenney` 비어있지 않음 확인
   - 기본:
     - `spacetime generate --lang typescript --out-dir stitch-orillusion-clientv2/src/module_bindings --module-path stitch-server/crates/game_server`
   - private 의존 시:
@@ -49,15 +53,19 @@
 - 서버/클라이언트 `contract_rev` 불일치.
 - codegen 옵션 불일치(`--include-private` 누락).
 - 컷오버 직후 이벤트 채널 미구독.
+- `S06/S07` 미실행 상태로 릴리스 승인.
+- blank frame/캔버스 누락을 배포 게이트가 차단하지 못함.
 
 ## 검증
 - 배포 전:
   - Gate-0 최신 pass
+  - 자산 동기화 게이트 pass (`assets:copy` + `verify --strict`)
+  - Lane A all pass (`S01~S07`, blank frame fail 0)
   - Lane B pass
   - 2.0 컴플라이언스 pass
 - 배포 후:
   - 5분 간격 헬스체크 12회
-  - `S01/S03/S04` 스모크
+  - `S01/S03/S04/S06/S07` 스모크
 
 ## 운영
 - 컷오버 윈도우는 90분 확보.

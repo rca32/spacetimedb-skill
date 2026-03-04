@@ -16,6 +16,10 @@
   - `RenderRuntime.applyWorldState(worldTime, weather): void`
   - `RenderRuntime.applyEntityState(entityView): void`
   - `RenderRuntime.frame(dtMs): void`
+- 렌더 부트스트랩 API:
+  - `RenderBootstrapRuntime.initEngine(canvasHost): Promise<void>`
+  - `RenderBootstrapRuntime.startMainView(scene, camera): void`
+  - `RenderBootstrapRuntime.captureFirstVisibleFrame(timeoutMs): Promise<FrameProof>`
 
 ## 데이터/이벤트
 - 상태 소스:
@@ -28,28 +32,42 @@
   - `onApplied` 이후 snapshot만 렌더 기준으로 사용
   - 동일 frame 내 이벤트는 렌더 큐에서 배치 처리
   - confirmed reads 지연을 고려해 스카이 전환 보간 `>= 300ms`
+- 부트 순서 규칙(필수):
+  1. `Engine3D.init` 완료
+  2. Scene/Camera/View attach
+  3. `startRenderView` 호출
+  4. first visible frame 캡처 (`<= 3000ms`)
 
 ## 실패 모드
 - 월드 시간 갱신 지연으로 프레임 단위 점프 발생.
 - 이벤트 광원 누적으로 광량 폭주.
 - 네트워크 지연을 렌더 지터로 그대로 노출.
+- 렌더 부트 순서 누락으로 빈 화면/검은 화면이 pass 처리됨.
+- canvas 존재만 확인하고 픽셀 유효성을 확인하지 않아 무효 프레임이 승인됨.
 
 ## 검증
 - assertion:
   - `A-RENDER-001` 프레임 드랍 구간에서 스카이 값 NaN 0건
   - `A-RENDER-002` 이벤트 광원 TTL 만료 누락 0건
   - `A-RENDER-003` 월드시간 보간 불연속 0건
+  - `A-RENDER-004` 부트 순서 위반 0건 (`init -> attach -> start -> first frame`)
+  - `A-RENDER-005` first frame 픽셀 유효성 fail 0건
+    - 비투명 픽셀 비율 `>= 5%`
+    - 단일 색상 평면(완전 단색) 프레임 0건
 - 계측:
   - 렌더 파이프라인 CPU p95 `< 8ms`
 
 ## 운영
 - 날씨/조명 파라미터 테이블 변경 시 시각 리그레션 스냅샷을 저장한다.
 - 렌더 변경은 Lane B 실GPU 검증을 필수로 요구한다.
+- Lane A에서도 first frame 유효성(assertion + artifact)을 fail-fast로 적용한다.
 
 ## 수용 기준
 - day-night/weather 전환에서 시각적 튐이 재현되지 않는다.
 - 이벤트 조명이 장시간 플레이에서 누적 오염을 만들지 않는다.
 - 네트워크 지연이 렌더 불안정으로 직접 전파되지 않는다.
+- first frame이 없는 실행은 pass로 승인되지 않는다.
+- 빈 화면/단색 화면은 자동으로 fail 처리된다.
 
 ## Cross-Refs
 - `03-spacetimedb-contract.md`

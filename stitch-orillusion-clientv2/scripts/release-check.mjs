@@ -48,14 +48,28 @@ async function findLatestReportPath() {
 }
 
 function evaluateReport(report) {
-  const expectedScenarios = ['S01', 'S02', 'S03', 'S04', 'S05']
+  const expectedScenarios = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07']
   const scenarioPassMap = new Map(report.scenarios.map((item) => [item.scenario_id, item.pass]))
   const missingScenarios = expectedScenarios.filter((scenarioId) => !scenarioPassMap.has(scenarioId))
   const failedScenarios = expectedScenarios.filter((scenarioId) => scenarioPassMap.get(scenarioId) === false)
   const assertionFailures = report.assertions.filter((item) => item.passed === false)
+  const visualAssertionFailures = assertionFailures.filter(
+    (item) => typeof item.assertion_id === 'string' && item.assertion_id.startsWith('A-VIS-'),
+  )
   const coverageIds = new Set((report.scenario_coverage ?? []).map((item) => item.scenario_id))
   const missingCoverage = expectedScenarios.filter((scenarioId) => !coverageIds.has(scenarioId))
   const perfBudgetPass = report.perf_budget?.pass === true
+  const missingCanvasEvents = (report.events ?? []).filter(
+    (event) =>
+      event &&
+      event.payload &&
+      typeof event.payload === 'object' &&
+      event.payload.event === 'frame_capture_missing_canvas',
+  ).length
+  const requiredFrameSuffixes = ['scenario-s03.png', 'scenario-s05.png']
+  const missingFrameArtifacts = requiredFrameSuffixes.filter(
+    (suffix) => !(report.artifacts ?? []).some((artifact) => artifact.kind === 'frame' && artifact.path.endsWith(suffix)),
+  )
 
   const reasons = []
   if (missingScenarios.length > 0) {
@@ -67,11 +81,20 @@ function evaluateReport(report) {
   if (assertionFailures.length > 0) {
     reasons.push(`assertion failures: ${assertionFailures.length}`)
   }
+  if (visualAssertionFailures.length > 0) {
+    reasons.push(`visual assertion failures: ${visualAssertionFailures.length}`)
+  }
   if (!perfBudgetPass) {
     reasons.push(`perf budget failed: ${(report.perf_budget?.reasons ?? ['unknown']).join('; ')}`)
   }
   if (missingCoverage.length > 0) {
     reasons.push(`missing scenario coverage: ${missingCoverage.join(', ')}`)
+  }
+  if (missingCanvasEvents > 0) {
+    reasons.push(`frame capture missing canvas events: ${missingCanvasEvents}`)
+  }
+  if (missingFrameArtifacts.length > 0) {
+    reasons.push(`missing frame artifacts: ${missingFrameArtifacts.join(', ')}`)
   }
 
   return {
@@ -79,8 +102,11 @@ function evaluateReport(report) {
     reasons,
     failed_scenarios: failedScenarios,
     assertion_failures: assertionFailures.length,
+    visual_assertion_failures: visualAssertionFailures.length,
     perf_budget_pass: perfBudgetPass,
     missing_coverage: missingCoverage,
+    missing_canvas_events: missingCanvasEvents,
+    missing_frame_artifacts: missingFrameArtifacts,
   }
 }
 
