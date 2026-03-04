@@ -1,7 +1,9 @@
 use crate::config::ClientConfig;
 use crate::diagnostics::StitchDiagnosticsPlugin;
 use crate::interaction::StitchInteractionPlugin;
-use crate::net::{NetCommandMessage, NetMessage, StitchNetPlugin, StreamSubscriptionSet};
+use crate::net::{
+    NetCommandMessage, NetMessage, ReducerDispatch, StitchNetPlugin, StreamSubscriptionSet,
+};
 use crate::sync::StitchSyncPlugin;
 use crate::ui::StitchUiPlugin;
 use crate::world::StitchWorldPlugin;
@@ -39,11 +41,15 @@ struct WorldReadyGate {
 }
 
 pub fn build_client_app(config: ClientConfig) -> App {
+    let asset_root = config.asset_root.clone();
     let mut app = App::new();
 
     app.insert_resource(config)
         .init_state::<ClientAppState>()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(bevy::asset::AssetPlugin {
+            file_path: asset_root,
+            ..default()
+        }))
         .add_plugins(StitchNetPlugin)
         .add_plugins(StitchSyncPlugin)
         .add_plugins(StitchWorldPlugin)
@@ -104,18 +110,24 @@ fn seed_required_world_subscriptions(mut gate: ResMut<WorldReadyGate>) {
 }
 
 fn react_to_connected(
+    config: Res<ClientConfig>,
     state: Res<State<ClientAppState>>,
     mut reader: MessageReader<NetMessage>,
     mut commands: MessageWriter<NetCommandMessage>,
     mut next_state: ResMut<NextState<ClientAppState>>,
+    mut gate: ResMut<WorldReadyGate>,
 ) {
     for message in reader.read() {
         if let NetMessage::Connected { .. } = message {
             if state.get() == &ClientAppState::Auth || state.get() == &ClientAppState::Recovering {
+                gate.applied.clear();
                 commands.write(NetCommandMessage::ApplySubscriptionSet(StreamSubscriptionSet {
                     key: "session-self".to_string(),
                     queries: vec!["SELECT * FROM session_state".to_string()],
                     required_for_world_ready: true,
+                }));
+                commands.write(NetCommandMessage::DispatchReducer(ReducerDispatch::SignIn {
+                    region_id: config.default_region_id,
                 }));
                 next_state.set(ClientAppState::WorldLoading);
             }
@@ -126,9 +138,11 @@ fn react_to_connected(
 fn react_to_disconnected(
     mut reader: MessageReader<NetMessage>,
     mut next_state: ResMut<NextState<ClientAppState>>,
+    mut gate: ResMut<WorldReadyGate>,
 ) {
     for message in reader.read() {
         if let NetMessage::Disconnected { .. } = message {
+            gate.applied.clear();
             next_state.set(ClientAppState::Recovering);
         }
     }
@@ -160,4 +174,3 @@ fn transition_to_in_world_when_ready(
         next_state.set(ClientAppState::InWorld);
     }
 }
-

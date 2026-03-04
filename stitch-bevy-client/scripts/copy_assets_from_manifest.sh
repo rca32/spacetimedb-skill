@@ -27,7 +27,12 @@ copy_from_manifest_asset() {
       continue
     fi
     local src="$REPO_ROOT/$source_path"
-    local dst="$REPO_ROOT/$target_path"
+    local dst
+    if [[ "$target_path" == bevy-client/assets/* ]]; then
+      dst="$REPO_ROOT/stitch-bevy-client/assets/${target_path#bevy-client/assets/}"
+    else
+      dst="$REPO_ROOT/$target_path"
+    fi
     mkdir -p "$(dirname "$dst")"
     cp -f "$src" "$dst"
   done
@@ -41,7 +46,12 @@ copy_from_manifest_generic() {
       continue
     fi
     local src="$REPO_ROOT/$source_path"
-    local dst="$REPO_ROOT/$target_path"
+    local dst
+    if [[ "$target_path" == bevy-client/assets/* ]]; then
+      dst="$REPO_ROOT/stitch-bevy-client/assets/${target_path#bevy-client/assets/}"
+    else
+      dst="$REPO_ROOT/$target_path"
+    fi
     mkdir -p "$(dirname "$dst")"
     cp -f "$src" "$dst"
   done
@@ -60,4 +70,3 @@ copy_from_manifest_generic "$CHAR_MANIFEST"
 copy_from_manifest_generic "$AUDIO_MANIFEST"
 
 echo "asset copy complete (include_optional=$INCLUDE_OPTIONAL)"
-

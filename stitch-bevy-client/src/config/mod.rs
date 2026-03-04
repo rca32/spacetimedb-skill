@@ -38,7 +38,7 @@ impl Default for ClientConfig {
             default_region_id: 1,
             default_dimension_id: 1,
             fixed_tick_hz: 20.0,
-            asset_root: "bevy-client/assets".to_string(),
+            asset_root: "assets".to_string(),
             quality_tier: QualityTier::Balanced,
             runtime_profile: RuntimeProfile::WebProdWebGpu,
         }
@@ -102,4 +102,3 @@ fn parse_runtime_profile(value: &str) -> RuntimeProfile {
         _ => RuntimeProfile::WebProdWebGpu,
     }
 }
-

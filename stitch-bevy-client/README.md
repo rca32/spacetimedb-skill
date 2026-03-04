@@ -14,7 +14,8 @@ Bevy(Web) 기반 Stitch 클라이언트 구현 프로젝트.
 ## 구성
 
 - `src/app`: 상태머신 + 시스템셋 + 플러그인 조립
-- `src/net`: Spacetime 연결/구독/리듀서 커맨드 경계
+- `src/net`: Spacetime Rust SDK 실연결 드라이버 + 구독/리듀서 커맨드 경계
+- `src/module_bindings`: `spacetime generate --lang rust`로 생성된 바인딩
 - `src/sync`: 예측/보정/네트워크 동기화 메트릭
 - `src/world`: AOI/월드 스트림 기초
 - `src/interaction`: 입력 -> intent dispatch
@@ -30,6 +31,12 @@ Bevy(Web) 기반 Stitch 클라이언트 구현 프로젝트.
 - `docs/manifests/bevy_character_copy_manifest.csv`
 - `docs/manifests/bevy_audio_copy_manifest.csv`
 - `docs/manifests/license_attribution_matrix.csv`
+
+## Spacetime Rust 바인딩 재생성
+
+```bash
+bash scripts/generate_spacetime_bindings.sh
+```
 
 복사:
 
@@ -48,4 +55,3 @@ bash scripts/copy_assets_from_manifest.sh --include-optional
 ```bash
 bash scripts/verify_manifest_integrity.sh
 ```
-

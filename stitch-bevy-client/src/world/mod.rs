@@ -1,5 +1,7 @@
+use crate::app::ClientAppState;
 use crate::config::ClientConfig;
-use crate::net::{NetCommandMessage, NetMessage, StreamSubscriptionSet};
+use crate::net::{NetCommandMessage, NetConnectionState, NetMessage, StreamSubscriptionSet};
+use bevy::gltf::GltfAssetLabel;
 use bevy::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -28,7 +30,8 @@ impl Plugin for StitchWorldPlugin {
         app.insert_resource(WorldMetrics::default())
             .add_systems(Startup, init_default_aoi_window)
             .add_systems(Update, apply_stream_deltas)
-            .add_systems(Update, ensure_aoi_subscription_once);
+            .add_systems(Update, ensure_aoi_subscription_once)
+            .add_systems(OnEnter(ClientAppState::InWorld), spawn_first_in_world_scene);
     }
 }
 
@@ -44,12 +47,19 @@ fn init_default_aoi_window(mut commands: Commands, config: Res<ClientConfig>) {
 }
 
 fn ensure_aoi_subscription_once(
-    mut has_applied: Local<bool>,
+    state: Res<State<ClientAppState>>,
+    net_state: Res<NetConnectionState>,
     mut writer: MessageWriter<NetCommandMessage>,
     aoi: Res<ActiveAoiWindow>,
     mut metrics: ResMut<WorldMetrics>,
 ) {
-    if *has_applied {
+    if state.get() != &ClientAppState::WorldLoading && state.get() != &ClientAppState::InWorld {
+        return;
+    }
+    if !net_state.is_connected {
+        return;
+    }
+    if net_state.active_subscriptions.contains_key("aoi-stream") {
         return;
     }
 
@@ -70,7 +80,6 @@ fn ensure_aoi_subscription_once(
     }));
 
     metrics.aoi_resubscribe_count += 1;
-    *has_applied = true;
 }
 
 fn apply_stream_deltas(mut reader: MessageReader<NetMessage>, mut metrics: ResMut<WorldMetrics>) {
@@ -83,3 +92,40 @@ fn apply_stream_deltas(mut reader: MessageReader<NetMessage>, mut metrics: ResMu
     }
 }
 
+fn spawn_first_in_world_scene(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 8.0, 14.0).looking_at(Vec3::new(0.0, 1.5, 0.0), Vec3::Y),
+    ));
+
+    commands.spawn((
+        DirectionalLight {
+            illuminance: 15_000.0,
+            shadows_enabled: false,
+            ..default()
+        },
+        Transform::from_xyz(8.0, 16.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    commands.spawn((
+        SceneRoot(
+            asset_server
+                .load(GltfAssetLabel::Scene(0).from_asset("environment/walls/wall.glb")),
+        ),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+
+    commands.spawn((
+        SceneRoot(
+            asset_server.load(
+                GltfAssetLabel::Scene(0).from_asset("environment/buildings/tower-square.glb"),
+            ),
+        ),
+        Transform::from_xyz(3.5, 0.0, -2.0),
+    ));
+
+    commands.spawn((
+        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("characters/player/xbot.glb"))),
+        Transform::from_xyz(0.0, 0.0, 2.5),
+    ));
+}

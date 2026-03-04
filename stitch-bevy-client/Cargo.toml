@@ -13,5 +13,5 @@ native-dev = ["bevy/3d", "bevy/ui", "bevy/dev"]
 anyhow = "1"
 bevy = { path = "../bevy", default-features = false }
 serde = { version = "1", features = ["derive"] }
+spacetimedb-sdk = "2.0.1"
 tracing = "0.1"
-

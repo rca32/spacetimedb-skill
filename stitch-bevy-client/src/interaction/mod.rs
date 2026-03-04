@@ -1,5 +1,6 @@
 use crate::app::ClientAppState;
-use crate::net::NetCommandMessage;
+use crate::config::ClientConfig;
+use crate::net::{NetCommandMessage, ReducerDispatch, SubmitMotionIntentPayload};
 use crate::sync::{PredictedMotionIntent, PredictionBuffer};
 use bevy::prelude::*;
 
@@ -17,6 +18,7 @@ impl Plugin for StitchInteractionPlugin {
 
 fn collect_locomotion_input(
     keyboard: Res<ButtonInput<KeyCode>>,
+    config: Res<ClientConfig>,
     state: Res<State<ClientAppState>>,
     mut tick: ResMut<LocalInputTick>,
     mut prediction: ResMut<PredictionBuffer>,
@@ -56,13 +58,16 @@ fn collect_locomotion_input(
         input_z,
     });
 
-    commands.write(NetCommandMessage::DispatchReducer {
-        reducer: "submit_motion_intent".to_string(),
-        payload: format!(
-            "{{\"request_id\":\"{}\",\"tick\":{},\"input_x\":{},\"input_z\":{}}}",
-            request_id, tick.0, input_x, input_z
-        ),
-        request_id: Some(request_id),
-    });
+    commands.write(NetCommandMessage::DispatchReducer(
+        ReducerDispatch::SubmitMotionIntent(SubmitMotionIntentPayload {
+            intent_id: request_id,
+            region_id: config.default_region_id,
+            dimension_id: config.default_dimension_id,
+            frame_no: tick.0 as u64,
+            input_x,
+            input_z,
+            requested_speed: 4.5,
+            jump: keyboard.pressed(KeyCode::Space),
+        }),
+    ));
 }
-
