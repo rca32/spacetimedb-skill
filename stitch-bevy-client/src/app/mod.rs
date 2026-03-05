@@ -434,7 +434,7 @@ fn build_required_subscription_sets(
         .unwrap_or_else(|| default_aoi_window_from_config(config));
 
     let aoi_query = format!(
-        "SELECT * FROM aoi_stream a WHERE a.region_id = {} AND a.dimension_id = {} AND a.chunk_x >= {} AND a.chunk_x <= {} AND a.chunk_y >= {} AND a.chunk_y <= {}",
+        "SELECT * FROM aoi_stream_v2 a WHERE a.region_id = {} AND a.dimension_id = {} AND a.chunk_x >= {} AND a.chunk_x <= {} AND a.chunk_y >= {} AND a.chunk_y <= {}",
         window.region_id,
         window.dimension_id,
         window.min_chunk_x,
@@ -467,7 +467,7 @@ fn build_required_subscription_sets(
         StreamSubscriptionSet {
             key: "physics-stream".to_string(),
             queries: vec![format!(
-                "SELECT * FROM physics_state p WHERE p.region_id = {} AND p.dimension_id = {}",
+                "SELECT * FROM physics_state_v2 p WHERE p.region_id = {} AND p.dimension_id = {}",
                 window.region_id, window.dimension_id
             )],
             required_for_world_ready: true,
@@ -484,14 +484,14 @@ fn build_correction_query(window: &AoiWindow, identity_hex: Option<&str>) -> Str
     if let Some(identity_hex) = identity_hex {
         if let Some(sanitized) = sanitize_identity_hex(identity_hex) {
             return format!(
-                "SELECT * FROM server_correction c WHERE c.identity = 0x{} AND c.region_id = {} AND c.dimension_id = {}",
+                "SELECT * FROM server_correction_v2 c WHERE c.identity = 0x{} AND c.region_id = {} AND c.dimension_id = {}",
                 sanitized, window.region_id, window.dimension_id
             );
         }
     }
 
     format!(
-        "SELECT * FROM server_correction c WHERE c.region_id = {} AND c.dimension_id = {}",
+        "SELECT * FROM server_correction_v2 c WHERE c.region_id = {} AND c.dimension_id = {}",
         window.region_id, window.dimension_id
     )
 }

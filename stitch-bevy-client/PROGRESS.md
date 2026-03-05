@@ -41,10 +41,31 @@ Last Updated: 2026-03-06
 - UI 런타임 상태에 마지막 correction reason/error/mode 및 reducer failure 반영
 - diagnostics snapshot 로그에 correction/reconcile/last reducer failure 지표 추가
 
+5. 운영 스키마 정합 hotfix (`src/app/mod.rs`)
+- 실서버 SQL 표면 기준으로 구독 쿼리 테이블명을 조정:
+  - `aoi_stream` -> `aoi_stream_v2`
+  - `physics_state` -> `physics_state_v2`
+  - `server_correction` -> `server_correction_v2`
+
 ## 검증 결과
 
-1. 실행 검증
-- 사용자 요청 기준으로 구현만 수행(검증 커맨드 미실행)
+1. 컴파일
+- `cargo check` 통과 (`stitch-bevy-client`)
+- 외부 크레이트 증분 캐시 경고 1건(`bevy_animation_macros`)만 관측, 빌드 실패 없음
+
+2. SpacetimeDB CLI 기반 correction 시나리오 점검
+- `submit_motion_intent` 호출로 `server_correction_v2`에 `terrain_missing` correction row 생성 확인
+- 동일 identity 연속 intent(`mi-seq-a`, `mi-seq-b`) 생성 및 correction 2건 누적 확인
+- `ack_server_correction` 호출 후 대상 correction의 `acknowledged=true`, `acked_client_frame_no` 갱신 확인
+
+3. SQL 표면/쿼리 호환성 확인
+- `aoi_stream`, `physics_state`, `server_correction` 직접 조회는 실패
+- `aoi_stream_v2`, `physics_state_v2`, `server_correction_v2` 조회 성공
+- 위 결과를 기준으로 클라이언트 subscription query를 v2 테이블명으로 hotfix 적용
+
+4. 운영 주의
+- `spacetime sql`, `spacetime call`은 CLI 경고대로 unstable 명령 표면임
+- `--server` 인자는 `127.0.0.1:3000` 형식 사용 시 정상 동작 (`ws://` 스킴은 현재 CLI에서 실패)
 
 ## 아직 미완료 항목
 
