@@ -11,7 +11,8 @@ pub mod world;
 pub use app::{build_client_app, ClientAppState, StitchSystemSet};
 pub use config::ClientConfig;
 pub use net::{
-    NetCommandMessage, NetMessage, ReducerDispatch, StreamSubscriptionSet, SubmitMotionIntentPayload,
+    NetCommandMessage, NetMessage, ReducerDispatch, StreamSubscriptionSet,
+    SubmitMotionIntentPayload,
 };
 pub use sync::{AuthoritativeCorrection, PredictedMotionIntent};
 pub use world::AoiWindow;

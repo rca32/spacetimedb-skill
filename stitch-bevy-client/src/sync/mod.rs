@@ -61,4 +61,3 @@ fn collect_network_sync_metrics(
         }
     }
 }
-

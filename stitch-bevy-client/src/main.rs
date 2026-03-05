@@ -4,4 +4,3 @@ fn main() {
     let config = ClientConfig::from_env();
     build_client_app(config).run();
 }
-

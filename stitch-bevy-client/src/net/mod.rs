@@ -1,12 +1,16 @@
 use crate::config::ClientConfig;
 use crate::module_bindings;
 use crate::module_bindings::account_bootstrap_reducer::account_bootstrap as AccountBootstrapReducerExt;
+use crate::module_bindings::aoi_stream_table::AoiStreamTableAccess;
+use crate::module_bindings::aoi_stream_v_2_type::AoiStreamV2;
+use crate::module_bindings::physics_state_table::PhysicsStateTableAccess;
 use crate::module_bindings::sign_in_reducer::sign_in as SignInReducerExt;
 use crate::module_bindings::submit_motion_intent_reducer::submit_motion_intent as SubmitMotionIntentReducerExt;
 use crate::module_bindings::sync_client_frame_reducer::sync_client_frame as SyncClientFrameReducerExt;
+use crate::module_bindings::transform_state_table::TransformStateTableAccess;
 use bevy::prelude::*;
 use spacetimedb_sdk::error::InternalError;
-use spacetimedb_sdk::DbContext;
+use spacetimedb_sdk::{DbContext, SubscriptionHandle as _, Table, TableWithPrimaryKey};
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::Mutex;
@@ -33,8 +37,12 @@ pub struct SubmitMotionIntentPayload {
 
 #[derive(Debug, Clone)]
 pub enum ReducerDispatch {
-    AccountBootstrap { display_name: String },
-    SignIn { region_id: u64 },
+    AccountBootstrap {
+        display_name: String,
+    },
+    SignIn {
+        region_id: u64,
+    },
     SyncClientFrame {
         frame_no: u64,
         region_id: u64,
@@ -46,11 +54,54 @@ pub enum ReducerDispatch {
 
 #[derive(Debug, Clone, Message)]
 pub enum NetMessage {
-    Connected { identity_hex: String },
-    Disconnected { reason: String },
-    SubscriptionApplied { key: String },
-    SubscriptionError { key: String, reason: String },
-    TransactionDelta { table: String },
+    Connected {
+        identity_hex: String,
+    },
+    Disconnected {
+        reason: String,
+    },
+    SubscriptionApplied {
+        key: String,
+    },
+    SubscriptionAppliedLatency {
+        key: String,
+        latency_ms: u64,
+    },
+    SubscriptionError {
+        key: String,
+        reason: String,
+    },
+    SubscriptionRetryScheduled {
+        key: String,
+        attempt: u32,
+        next_retry_ms: u64,
+    },
+    SubscriptionApplyTimeout {
+        key: String,
+        elapsed_ms: u64,
+    },
+    ReconnectAttemptScheduled {
+        attempt: u32,
+        next_retry_ms: u64,
+    },
+    TransactionDelta {
+        table: String,
+    },
+    AoiStreamUpsert {
+        stream_key: String,
+        entity_key: String,
+        region_id: u64,
+        dimension_id: u32,
+        chunk_x: i32,
+        chunk_y: i32,
+        entity_type: u8,
+        pos_x: f32,
+        pos_y: f32,
+        pos_z: f32,
+    },
+    AoiStreamDelete {
+        stream_key: String,
+    },
     ReducerResult {
         reducer: String,
         ok: bool,
@@ -152,6 +203,7 @@ fn process_net_commands(
 
                 match builder.build() {
                     Ok(connection) => {
+                        register_stream_callbacks(&connection, runtime.event_tx.clone());
                         runtime.join_handle = Some(connection.run_threaded());
                         runtime.connection = Some(connection);
                     }
@@ -205,10 +257,14 @@ fn process_net_commands(
                 let query_refs: Vec<&str> = set.queries.iter().map(String::as_str).collect();
                 let handle = builder.subscribe(query_refs);
 
-                runtime
-                    .subscription_handles
-                    .insert(set.key.clone(), handle);
-                state.active_subscriptions.insert(set.key.clone(), set.clone());
+                if let Some(previous) = runtime.subscription_handles.remove(&set.key) {
+                    let _ = previous.unsubscribe();
+                }
+
+                runtime.subscription_handles.insert(set.key.clone(), handle);
+                state
+                    .active_subscriptions
+                    .insert(set.key.clone(), set.clone());
             }
             NetCommandMessage::DispatchReducer(dispatch) => {
                 let Some(connection) = runtime.connection.as_ref() else {
@@ -253,6 +309,12 @@ fn drain_driver_events(
                 state.identity_hex = None;
                 state.active_subscriptions.clear();
                 runtime.subscription_handles.clear();
+                if let Some(connection) = runtime.connection.take() {
+                    let _ = connection.disconnect();
+                }
+                if let Some(handle) = runtime.join_handle.take() {
+                    let _ = handle.join();
+                }
             }
             NetMessage::SubscriptionError { key, .. } => {
                 state.active_subscriptions.remove(key);
@@ -318,9 +380,11 @@ fn dispatch_typed_reducer(
         ReducerDispatch::SignIn { region_id } => {
             let sender = sender.clone();
             let region_id = *region_id;
-            let _ = connection.reducers.sign_in_then(region_id, move |_ctx, result| {
-                emit_reducer_result(&sender, "sign_in", Some("sign-in".to_string()), result);
-            });
+            let _ = connection
+                .reducers
+                .sign_in_then(region_id, move |_ctx, result| {
+                    emit_reducer_result(&sender, "sign_in", Some("sign-in".to_string()), result);
+                });
         }
         ReducerDispatch::SyncClientFrame {
             frame_no,
@@ -368,4 +432,115 @@ fn dispatch_typed_reducer(
             );
         }
     }
+}
+
+fn register_stream_callbacks(
+    connection: &module_bindings::DbConnection,
+    sender: Sender<NetMessage>,
+) {
+    let aoi_sender_insert = sender.clone();
+    connection.db.aoi_stream().on_insert(move |_ctx, row| {
+        let _ = aoi_sender_insert.send(NetMessage::TransactionDelta {
+            table: "aoi_stream".to_string(),
+        });
+        emit_aoi_upsert(&aoi_sender_insert, row);
+    });
+
+    let aoi_sender_update = sender.clone();
+    connection
+        .db
+        .aoi_stream()
+        .on_update(move |_ctx, _old, new| {
+            let _ = aoi_sender_update.send(NetMessage::TransactionDelta {
+                table: "aoi_stream".to_string(),
+            });
+            emit_aoi_upsert(&aoi_sender_update, new);
+        });
+
+    let aoi_sender_delete = sender.clone();
+    connection.db.aoi_stream().on_delete(move |_ctx, row| {
+        let _ = aoi_sender_delete.send(NetMessage::TransactionDelta {
+            table: "aoi_stream".to_string(),
+        });
+        let _ = aoi_sender_delete.send(NetMessage::AoiStreamDelete {
+            stream_key: row.stream_key.clone(),
+        });
+    });
+
+    let transform_sender = sender.clone();
+    connection
+        .db
+        .transform_state()
+        .on_insert(move |_ctx, _row| {
+            let _ = transform_sender.send(NetMessage::TransactionDelta {
+                table: "transform_state".to_string(),
+            });
+        });
+
+    let transform_sender = sender.clone();
+    connection
+        .db
+        .transform_state()
+        .on_update(move |_ctx, _old, _new| {
+            let _ = transform_sender.send(NetMessage::TransactionDelta {
+                table: "transform_state".to_string(),
+            });
+        });
+
+    let transform_sender = sender.clone();
+    connection
+        .db
+        .transform_state()
+        .on_delete(move |_ctx, _row| {
+            let _ = transform_sender.send(NetMessage::TransactionDelta {
+                table: "transform_state".to_string(),
+            });
+        });
+
+    let physics_sender = sender.clone();
+    connection.db.physics_state().on_insert(move |_ctx, _row| {
+        let _ = physics_sender.send(NetMessage::TransactionDelta {
+            table: "physics_state".to_string(),
+        });
+    });
+
+    let physics_sender = sender.clone();
+    connection
+        .db
+        .physics_state()
+        .on_update(move |_ctx, _old, _new| {
+            let _ = physics_sender.send(NetMessage::TransactionDelta {
+                table: "physics_state".to_string(),
+            });
+        });
+
+    connection.db.physics_state().on_delete(move |_ctx, _row| {
+        let _ = sender.send(NetMessage::TransactionDelta {
+            table: "physics_state".to_string(),
+        });
+    });
+}
+
+fn emit_aoi_upsert(sender: &Sender<NetMessage>, row: &AoiStreamV2) {
+    let (pos_x, pos_y, pos_z) = vec3_from_slice(&row.position);
+    let _ = sender.send(NetMessage::AoiStreamUpsert {
+        stream_key: row.stream_key.clone(),
+        entity_key: row.entity_key.clone(),
+        region_id: row.region_id,
+        dimension_id: row.dimension_id,
+        chunk_x: row.chunk_x,
+        chunk_y: row.chunk_y,
+        entity_type: row.entity_type,
+        pos_x,
+        pos_y,
+        pos_z,
+    });
+}
+
+fn vec3_from_slice(values: &[f32]) -> (f32, f32, f32) {
+    (
+        values.first().copied().unwrap_or(0.0),
+        values.get(1).copied().unwrap_or(0.0),
+        values.get(2).copied().unwrap_or(0.0),
+    )
 }

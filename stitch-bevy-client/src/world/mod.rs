@@ -1,8 +1,9 @@
 use crate::app::ClientAppState;
 use crate::config::ClientConfig;
-use crate::net::{NetCommandMessage, NetConnectionState, NetMessage, StreamSubscriptionSet};
+use crate::net::NetMessage;
 use bevy::gltf::GltfAssetLabel;
 use bevy::prelude::*;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub struct AoiWindow {
@@ -17,10 +18,47 @@ pub struct AoiWindow {
 #[derive(Resource)]
 pub struct ActiveAoiWindow(pub AoiWindow);
 
+#[derive(Debug, Clone)]
+struct AoiStreamEntry {
+    stream_key: String,
+    entity_key: String,
+    region_id: u64,
+    dimension_id: u32,
+    chunk_x: i32,
+    chunk_y: i32,
+    entity_type: u8,
+    pos_x: f32,
+    pos_y: f32,
+    pos_z: f32,
+}
+
+#[derive(Resource, Default)]
+struct AoiMirror {
+    entries: HashMap<String, AoiStreamEntry>,
+}
+
+#[derive(Resource, Default)]
+struct PendingAoiChanges {
+    upserts: HashSet<String>,
+    deletes: HashSet<String>,
+}
+
+#[derive(Resource, Default)]
+struct AoiProxyEntities {
+    by_stream_key: HashMap<String, Entity>,
+}
+
+#[derive(Component)]
+struct AoiProxy;
+
+#[derive(Component)]
+struct WorldBootstrapEntity;
+
 #[derive(Resource, Default)]
 pub struct WorldMetrics {
     pub aoi_resubscribe_count: u64,
     pub stream_delta_count: u64,
+    pub active_proxy_count: u64,
 }
 
 pub struct StitchWorldPlugin;
@@ -28,10 +66,21 @@ pub struct StitchWorldPlugin;
 impl Plugin for StitchWorldPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(WorldMetrics::default())
+            .insert_resource(AoiMirror::default())
+            .insert_resource(PendingAoiChanges::default())
+            .insert_resource(AoiProxyEntities::default())
             .add_systems(Startup, init_default_aoi_window)
-            .add_systems(Update, apply_stream_deltas)
-            .add_systems(Update, ensure_aoi_subscription_once)
-            .add_systems(OnEnter(ClientAppState::InWorld), spawn_first_in_world_scene);
+            .add_systems(Update, ingest_aoi_stream_events)
+            .add_systems(Update, materialize_aoi_proxies)
+            .add_systems(OnEnter(ClientAppState::InWorld), spawn_first_in_world_scene)
+            .add_systems(
+                OnExit(ClientAppState::InWorld),
+                cleanup_scene_and_stream_state,
+            )
+            .add_systems(
+                OnEnter(ClientAppState::Recovering),
+                cleanup_scene_and_stream_state,
+            );
     }
 }
 
@@ -46,49 +95,126 @@ fn init_default_aoi_window(mut commands: Commands, config: Res<ClientConfig>) {
     }));
 }
 
-fn ensure_aoi_subscription_once(
-    state: Res<State<ClientAppState>>,
-    net_state: Res<NetConnectionState>,
-    mut writer: MessageWriter<NetCommandMessage>,
-    aoi: Res<ActiveAoiWindow>,
+fn ingest_aoi_stream_events(
+    mut reader: MessageReader<NetMessage>,
+    mut mirror: ResMut<AoiMirror>,
+    mut pending: ResMut<PendingAoiChanges>,
     mut metrics: ResMut<WorldMetrics>,
 ) {
-    if state.get() != &ClientAppState::WorldLoading && state.get() != &ClientAppState::InWorld {
-        return;
+    for message in reader.read() {
+        match message {
+            NetMessage::TransactionDelta { table } if table == "aoi_stream" => {
+                metrics.stream_delta_count = metrics.stream_delta_count.saturating_add(1);
+            }
+            NetMessage::AoiStreamUpsert {
+                stream_key,
+                entity_key,
+                region_id,
+                dimension_id,
+                chunk_x,
+                chunk_y,
+                entity_type,
+                pos_x,
+                pos_y,
+                pos_z,
+            } => {
+                mirror.entries.insert(
+                    stream_key.clone(),
+                    AoiStreamEntry {
+                        stream_key: stream_key.clone(),
+                        entity_key: entity_key.clone(),
+                        region_id: *region_id,
+                        dimension_id: *dimension_id,
+                        chunk_x: *chunk_x,
+                        chunk_y: *chunk_y,
+                        entity_type: *entity_type,
+                        pos_x: *pos_x,
+                        pos_y: *pos_y,
+                        pos_z: *pos_z,
+                    },
+                );
+                pending.deletes.remove(stream_key);
+                pending.upserts.insert(stream_key.clone());
+            }
+            NetMessage::AoiStreamDelete { stream_key } => {
+                mirror.entries.remove(stream_key);
+                pending.upserts.remove(stream_key);
+                pending.deletes.insert(stream_key.clone());
+            }
+            _ => {}
+        }
     }
-    if !net_state.is_connected {
-        return;
-    }
-    if net_state.active_subscriptions.contains_key("aoi-stream") {
-        return;
-    }
-
-    let query = format!(
-        "SELECT * FROM aoi_stream a WHERE a.region_id = {} AND a.dimension_id = {} AND a.chunk_x >= {} AND a.chunk_x <= {} AND a.chunk_y >= {} AND a.chunk_y <= {}",
-        aoi.0.region_id,
-        aoi.0.dimension_id,
-        aoi.0.min_chunk_x,
-        aoi.0.max_chunk_x,
-        aoi.0.min_chunk_y,
-        aoi.0.max_chunk_y
-    );
-
-    writer.write(NetCommandMessage::ApplySubscriptionSet(StreamSubscriptionSet {
-        key: "aoi-stream".to_string(),
-        queries: vec![query],
-        required_for_world_ready: true,
-    }));
-
-    metrics.aoi_resubscribe_count += 1;
 }
 
-fn apply_stream_deltas(mut reader: MessageReader<NetMessage>, mut metrics: ResMut<WorldMetrics>) {
-    for message in reader.read() {
-        if let NetMessage::TransactionDelta { table } = message {
-            if table == "aoi_stream" {
-                metrics.stream_delta_count += 1;
-            }
+fn materialize_aoi_proxies(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mirror: Res<AoiMirror>,
+    mut pending: ResMut<PendingAoiChanges>,
+    mut proxies: ResMut<AoiProxyEntities>,
+    mut metrics: ResMut<WorldMetrics>,
+) {
+    if pending.upserts.is_empty() && pending.deletes.is_empty() {
+        metrics.active_proxy_count = proxies.by_stream_key.len() as u64;
+        return;
+    }
+
+    let mut delete_keys = Vec::with_capacity(pending.deletes.len());
+    delete_keys.extend(pending.deletes.drain());
+
+    for stream_key in delete_keys {
+        if let Some(entity) = proxies.by_stream_key.remove(&stream_key) {
+            commands.entity(entity).despawn();
         }
+    }
+
+    let mut upsert_keys = Vec::with_capacity(pending.upserts.len());
+    upsert_keys.extend(pending.upserts.drain());
+
+    for stream_key in upsert_keys {
+        let Some(entry) = mirror.entries.get(&stream_key) else {
+            continue;
+        };
+
+        let transform = Transform::from_xyz(entry.pos_x, entry.pos_y, entry.pos_z);
+
+        if let Some(entity) = proxies.by_stream_key.get(&stream_key).copied() {
+            commands.entity(entity).insert(transform);
+            continue;
+        }
+
+        let size = if entry.chunk_x.abs() <= 1 && entry.chunk_y.abs() <= 1 {
+            0.8
+        } else {
+            0.55
+        };
+
+        let entity = commands
+            .spawn((
+                Mesh3d(meshes.add(Cuboid::new(size, size * 1.6, size))),
+                MeshMaterial3d(materials.add(debug_proxy_color(entry.entity_type))),
+                transform,
+                AoiProxy,
+                Name::new(format!(
+                    "aoi-proxy/{}/{}/{}/{}",
+                    entry.region_id, entry.dimension_id, entry.stream_key, entry.entity_key
+                )),
+            ))
+            .id();
+
+        proxies.by_stream_key.insert(stream_key, entity);
+    }
+
+    metrics.active_proxy_count = proxies.by_stream_key.len() as u64;
+}
+
+fn debug_proxy_color(entity_type: u8) -> Color {
+    match entity_type {
+        0 => Color::srgb(0.35, 0.78, 0.95),
+        1 => Color::srgb(0.95, 0.45, 0.30),
+        2 => Color::srgb(0.32, 0.82, 0.42),
+        _ => Color::srgb(0.82, 0.82, 0.82),
     }
 }
 
@@ -96,23 +222,25 @@ fn spawn_first_in_world_scene(mut commands: Commands, asset_server: Res<AssetSer
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.0, 8.0, 14.0).looking_at(Vec3::new(0.0, 1.5, 0.0), Vec3::Y),
+        WorldBootstrapEntity,
     ));
 
     commands.spawn((
         DirectionalLight {
             illuminance: 15_000.0,
-            shadows_enabled: false,
+            shadow_maps_enabled: false,
             ..default()
         },
         Transform::from_xyz(8.0, 16.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
+        WorldBootstrapEntity,
     ));
 
     commands.spawn((
         SceneRoot(
-            asset_server
-                .load(GltfAssetLabel::Scene(0).from_asset("environment/walls/wall.glb")),
+            asset_server.load(GltfAssetLabel::Scene(0).from_asset("environment/walls/wall.glb")),
         ),
         Transform::from_xyz(0.0, 0.0, 0.0),
+        WorldBootstrapEntity,
     ));
 
     commands.spawn((
@@ -122,10 +250,33 @@ fn spawn_first_in_world_scene(mut commands: Commands, asset_server: Res<AssetSer
             ),
         ),
         Transform::from_xyz(3.5, 0.0, -2.0),
+        WorldBootstrapEntity,
     ));
 
     commands.spawn((
-        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("characters/player/xbot.glb"))),
+        SceneRoot(
+            asset_server.load(GltfAssetLabel::Scene(0).from_asset("characters/player/xbot.glb")),
+        ),
         Transform::from_xyz(0.0, 0.0, 2.5),
+        WorldBootstrapEntity,
     ));
+}
+
+fn cleanup_scene_and_stream_state(
+    mut commands: Commands,
+    scene_entities: Query<Entity, Or<(With<WorldBootstrapEntity>, With<AoiProxy>)>>,
+    mut mirror: ResMut<AoiMirror>,
+    mut pending: ResMut<PendingAoiChanges>,
+    mut proxies: ResMut<AoiProxyEntities>,
+    mut metrics: ResMut<WorldMetrics>,
+) {
+    for entity in scene_entities.iter() {
+        commands.entity(entity).despawn();
+    }
+
+    mirror.entries.clear();
+    pending.upserts.clear();
+    pending.deletes.clear();
+    proxies.by_stream_key.clear();
+    metrics.active_proxy_count = 0;
 }
