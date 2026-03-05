@@ -14,37 +14,14 @@ Bevy Web 클라이언트에서 서버 권위 모델을 유지한 상태로 다�
 ## 기준선 상태 (완료)
 
 1. 실 SpacetimeDB Rust 드라이버 연결 완료 (`src/net/mod.rs`)
-2. 필수 구독 4키 월드 게이트 완료 (`session-self`, `aoi-stream`, `position-stream`, `physics-stream`)
+2. 필수 구독 5키 월드 게이트 완료 (`session-self`, `aoi-stream`, `position-stream`, `physics-stream`, `correction-self`)
 3. subscription timeout/retry/reconnect backoff 완료 (`src/app/mod.rs`)
 4. AOI stream -> ECS debug proxy 스폰/업데이트/디스폰 완료 (`src/world/mod.rs`)
 5. UI/diagnostics 상태 리소스 확장 완료 (`src/ui/mod.rs`, `src/diagnostics/mod.rs`)
+6. P1-2 authoritative correction + replay/reconcile + ack 루프 1차 완료 (`src/sync/mod.rs`, `src/net/mod.rs`, `src/interaction/mod.rs`)
+7. reducer 실패 reason 구조화 및 metrics 반영 완료 (`src/net/mod.rs`, `src/sync/mod.rs`, `src/ui/mod.rs`)
 
 ## 다음 우선순위 백로그
-
-## P1-2 - authoritative correction + reconcile (최우선)
-
-1. correction 수신 파이프라인
-- 대상: `src/net/mod.rs`, `src/sync/mod.rs`
-- 작업:
-- `server_correction` 스트림 이벤트를 typed 메시지/리소스로 반영
-- self identity 기준 correction 필터링
-- DoD:
-- correction 이벤트가 sync 계층에서 누락 없이 수집됨
-
-2. prediction/replay/reconcile
-- 대상: `src/sync/mod.rs`, `src/interaction/mod.rs`
-- 작업:
-- `PredictionBuffer`에 frame/request_id 기준 히스토리 보관
-- authoritative 좌표와 오차 비교 후 blend/snap 임계값 적용
-- DoD:
-- correction 수신 시 움직임 불연속(과도한 점프)이 완화됨
-
-3. reducer 실패 원인 구조화
-- 대상: `src/net/mod.rs`, `src/sync/mod.rs`
-- 작업:
-- reducer 실패 시 reason/message를 진단 리소스에 구조화 저장
-- DoD:
-- 실패 이벤트에서 request_id/reducer/reason 추적 가능
 
 ## P1-3 - self avatar 파이프라인
 
@@ -90,10 +67,10 @@ Bevy Web 클라이언트에서 서버 권위 모델을 유지한 상태로 다�
 - AOI 경계 이동 시 proxy 엔티티 스폰/업데이트/디스폰 일관성 확인
 
 4. correction/reconcile (다음 단계)
-- 강제 correction 주입 후 오차 수렴 및 프레임 안정성 확인
+- 강제 correction 주입 후 blend/snap 분기, replay 재적용, ack dispatch 확인
 
 ## 작업 순서 권장
 
-1. P1-2 correction/reconcile 완료
-2. P1-3 self avatar + camera 결합
-3. P3 HUD/Recovering UX 마감
+1. P1-3 self avatar + camera 결합
+2. P3 HUD/Recovering UX 마감
+3. correction/reconcile 자동화 시나리오 정착(테스트/CI)

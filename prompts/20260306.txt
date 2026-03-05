@@ -1,0 +1,13 @@
+[반드시 참조]
+stitch-bevy-client/PROGRESS.md
+stitch-bevy-client/PLAN.md
+
+[완료후 반드시 갱신]
+stitch-bevy-client/PROGRESS.md
+stitch-bevy-client/PLAN.md
+
+[stitch-bevy-client rfc]
+docs/*
+
+docs 밑에 상세하게 정의된 stitch-bevy-client 개발 관련 문서에 따라서
+다음 단계 개발 계획을 세우고 구현 해죠.

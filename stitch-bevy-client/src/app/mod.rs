@@ -154,7 +154,7 @@ fn react_to_connected(
     mut recovery: ResMut<RecoveryState>,
 ) {
     for message in reader.read() {
-        if let NetMessage::Connected { .. } = message {
+        if let NetMessage::Connected { identity_hex } = message {
             if state.get() != &ClientAppState::Auth && state.get() != &ClientAppState::Recovering {
                 continue;
             }
@@ -171,8 +171,11 @@ fn react_to_connected(
             recovery.last_disconnect_reason = None;
 
             let now = time.elapsed_secs_f64();
-            let subscriptions =
-                build_required_subscription_sets(&config, aoi.as_deref().map(|window| &window.0));
+            let subscriptions = build_required_subscription_sets(
+                &config,
+                aoi.as_deref().map(|window| &window.0),
+                Some(identity_hex.as_str()),
+            );
             for set in subscriptions {
                 let key = set.key.clone();
                 net_commands.write(NetCommandMessage::ApplySubscriptionSet(set));
@@ -306,8 +309,11 @@ fn retry_required_subscriptions(
     }
 
     let now = time.elapsed_secs_f64();
-    let required_sets =
-        build_required_subscription_sets(&config, aoi.as_deref().map(|window| &window.0));
+    let required_sets = build_required_subscription_sets(
+        &config,
+        aoi.as_deref().map(|window| &window.0),
+        net_state.identity_hex.as_deref(),
+    );
 
     for set in required_sets {
         let key = set.key.clone();
@@ -414,12 +420,14 @@ fn required_subscription_keys() -> &'static [&'static str] {
         "aoi-stream",
         "position-stream",
         "physics-stream",
+        "correction-self",
     ]
 }
 
 fn build_required_subscription_sets(
     config: &ClientConfig,
     active_window: Option<&AoiWindow>,
+    identity_hex: Option<&str>,
 ) -> Vec<StreamSubscriptionSet> {
     let window = active_window
         .cloned()
@@ -434,6 +442,8 @@ fn build_required_subscription_sets(
         window.min_chunk_y,
         window.max_chunk_y
     );
+
+    let correction_query = build_correction_query(&window, identity_hex);
 
     vec![
         StreamSubscriptionSet {
@@ -462,7 +472,45 @@ fn build_required_subscription_sets(
             )],
             required_for_world_ready: true,
         },
+        StreamSubscriptionSet {
+            key: "correction-self".to_string(),
+            queries: vec![correction_query],
+            required_for_world_ready: true,
+        },
     ]
+}
+
+fn build_correction_query(window: &AoiWindow, identity_hex: Option<&str>) -> String {
+    if let Some(identity_hex) = identity_hex {
+        if let Some(sanitized) = sanitize_identity_hex(identity_hex) {
+            return format!(
+                "SELECT * FROM server_correction c WHERE c.identity = 0x{} AND c.region_id = {} AND c.dimension_id = {}",
+                sanitized, window.region_id, window.dimension_id
+            );
+        }
+    }
+
+    format!(
+        "SELECT * FROM server_correction c WHERE c.region_id = {} AND c.dimension_id = {}",
+        window.region_id, window.dimension_id
+    )
+}
+
+fn sanitize_identity_hex(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    let no_prefix = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed);
+
+    if no_prefix.is_empty() {
+        return None;
+    }
+    if !no_prefix.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return None;
+    }
+
+    Some(no_prefix.to_ascii_lowercase())
 }
 
 fn default_aoi_window_from_config(config: &ClientConfig) -> AoiWindow {

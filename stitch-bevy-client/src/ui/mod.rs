@@ -1,5 +1,6 @@
 use crate::app::{ClientAppState, RecoveryState, WorldReadyGate};
 use crate::net::NetMessage;
+use crate::sync::ReconcileState;
 use bevy::prelude::*;
 
 #[derive(Resource, Default)]
@@ -13,6 +14,10 @@ pub struct UiRuntimeState {
     pub recovering_attempt: u32,
     pub last_reconnect_event: Option<String>,
     pub last_subscription_latency_ms: Option<u64>,
+    pub last_correction_reason: Option<String>,
+    pub last_correction_error_m: Option<f32>,
+    pub last_reconcile_mode: Option<String>,
+    pub last_reducer_failure: Option<String>,
 }
 
 pub struct StitchUiPlugin;
@@ -72,6 +77,21 @@ fn reduce_ui_state_from_net_messages(
             NetMessage::SubscriptionAppliedLatency { latency_ms, .. } => {
                 ui_state.last_subscription_latency_ms = Some(*latency_ms);
             }
+            NetMessage::ReducerResult {
+                reducer,
+                ok,
+                request_id,
+                reason,
+            } => {
+                if !ok {
+                    let reason_text = reason.clone().unwrap_or_else(|| "unknown".to_string());
+                    ui_state.last_reducer_failure = Some(format!(
+                        "{reducer} request_id={} reason={reason_text}",
+                        request_id.as_deref().unwrap_or("none")
+                    ));
+                    ui_state.last_error = ui_state.last_reducer_failure.clone();
+                }
+            }
             _ => {}
         }
     }
@@ -81,6 +101,7 @@ fn sync_ui_runtime_status(
     state: Res<State<ClientAppState>>,
     gate: Res<WorldReadyGate>,
     recovery: Res<RecoveryState>,
+    reconcile: Res<ReconcileState>,
     mut ui_state: ResMut<UiRuntimeState>,
 ) {
     ui_state.required_subscription_total = gate.required.len() as u32;
@@ -91,4 +112,8 @@ fn sync_ui_runtime_status(
     if let Some(error) = &gate.last_error {
         ui_state.last_error = Some(error.clone());
     }
+
+    ui_state.last_correction_reason = reconcile.last_reason.clone();
+    ui_state.last_correction_error_m = reconcile.last_error_m;
+    ui_state.last_reconcile_mode = reconcile.last_mode.clone();
 }

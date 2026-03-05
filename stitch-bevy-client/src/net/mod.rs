@@ -1,9 +1,12 @@
 use crate::config::ClientConfig;
 use crate::module_bindings;
+use crate::module_bindings::ack_server_correction_reducer::ack_server_correction as AckServerCorrectionReducerExt;
 use crate::module_bindings::account_bootstrap_reducer::account_bootstrap as AccountBootstrapReducerExt;
 use crate::module_bindings::aoi_stream_table::AoiStreamTableAccess;
 use crate::module_bindings::aoi_stream_v_2_type::AoiStreamV2;
 use crate::module_bindings::physics_state_table::PhysicsStateTableAccess;
+use crate::module_bindings::server_correction_table::ServerCorrectionTableAccess;
+use crate::module_bindings::server_correction_v_2_type::ServerCorrectionV2;
 use crate::module_bindings::sign_in_reducer::sign_in as SignInReducerExt;
 use crate::module_bindings::submit_motion_intent_reducer::submit_motion_intent as SubmitMotionIntentReducerExt;
 use crate::module_bindings::sync_client_frame_reducer::sync_client_frame as SyncClientFrameReducerExt;
@@ -50,6 +53,10 @@ pub enum ReducerDispatch {
         client_time_ms: u64,
     },
     SubmitMotionIntent(SubmitMotionIntentPayload),
+    AckServerCorrection {
+        correction_id: String,
+        acked_client_frame_no: u64,
+    },
 }
 
 #[derive(Debug, Clone, Message)]
@@ -102,10 +109,26 @@ pub enum NetMessage {
     AoiStreamDelete {
         stream_key: String,
     },
+    ServerCorrectionUpsert {
+        correction_id: String,
+        identity_hex: String,
+        region_id: u64,
+        dimension_id: u32,
+        reason: String,
+        server_x: f32,
+        server_y: f32,
+        server_z: f32,
+        velocity_x: f32,
+        velocity_y: f32,
+        velocity_z: f32,
+        acknowledged: bool,
+        acked_client_frame_no: u64,
+    },
     ReducerResult {
         reducer: String,
         ok: bool,
         request_id: Option<String>,
+        reason: Option<String>,
     },
 }
 
@@ -272,6 +295,7 @@ fn process_net_commands(
                         reducer: reducer_name(dispatch).to_string(),
                         ok: false,
                         request_id: reducer_request_id(dispatch),
+                        reason: Some("not connected".to_string()),
                     });
                     continue;
                 };
@@ -332,6 +356,7 @@ fn reducer_name(dispatch: &ReducerDispatch) -> &'static str {
         ReducerDispatch::SignIn { .. } => "sign_in",
         ReducerDispatch::SyncClientFrame { .. } => "sync_client_frame",
         ReducerDispatch::SubmitMotionIntent(_) => "submit_motion_intent",
+        ReducerDispatch::AckServerCorrection { .. } => "ack_server_correction",
     }
 }
 
@@ -339,6 +364,7 @@ fn reducer_request_id(dispatch: &ReducerDispatch) -> Option<String> {
     match dispatch {
         ReducerDispatch::SubmitMotionIntent(payload) => Some(payload.intent_id.clone()),
         ReducerDispatch::SyncClientFrame { frame_no, .. } => Some(format!("frame-{frame_no}")),
+        ReducerDispatch::AckServerCorrection { correction_id, .. } => Some(correction_id.clone()),
         _ => None,
     }
 }
@@ -350,10 +376,16 @@ fn emit_reducer_result(
     result: Result<Result<(), String>, InternalError>,
 ) {
     let ok = matches!(result, Ok(Ok(())));
+    let reason = match result {
+        Ok(Ok(())) => None,
+        Ok(Err(message)) => Some(message),
+        Err(error) => Some(format!("{error:?}")),
+    };
     let _ = sender.send(NetMessage::ReducerResult {
         reducer: reducer.to_string(),
         ok,
         request_id,
+        reason,
     });
 }
 
@@ -426,6 +458,25 @@ fn dispatch_typed_reducer(
                         &sender,
                         "submit_motion_intent",
                         Some(request_id.clone()),
+                        result,
+                    );
+                },
+            );
+        }
+        ReducerDispatch::AckServerCorrection {
+            correction_id,
+            acked_client_frame_no,
+        } => {
+            let sender = sender.clone();
+            let correction_id = correction_id.clone();
+            let _ = connection.reducers.ack_server_correction_then(
+                correction_id.clone(),
+                *acked_client_frame_no,
+                move |_ctx, result| {
+                    emit_reducer_result(
+                        &sender,
+                        "ack_server_correction",
+                        Some(correction_id.clone()),
                         result,
                     );
                 },
@@ -514,11 +565,31 @@ fn register_stream_callbacks(
             });
         });
 
+    let physics_sender_delete = sender.clone();
     connection.db.physics_state().on_delete(move |_ctx, _row| {
-        let _ = sender.send(NetMessage::TransactionDelta {
+        let _ = physics_sender_delete.send(NetMessage::TransactionDelta {
             table: "physics_state".to_string(),
         });
     });
+
+    let correction_sender_insert = sender.clone();
+    connection.db.server_correction().on_insert(move |_ctx, row| {
+        let _ = correction_sender_insert.send(NetMessage::TransactionDelta {
+            table: "server_correction".to_string(),
+        });
+        emit_server_correction(&correction_sender_insert, row);
+    });
+
+    let correction_sender_update = sender.clone();
+    connection
+        .db
+        .server_correction()
+        .on_update(move |_ctx, _old, row| {
+            let _ = correction_sender_update.send(NetMessage::TransactionDelta {
+                table: "server_correction".to_string(),
+            });
+            emit_server_correction(&correction_sender_update, row);
+        });
 }
 
 fn emit_aoi_upsert(sender: &Sender<NetMessage>, row: &AoiStreamV2) {
@@ -534,6 +605,24 @@ fn emit_aoi_upsert(sender: &Sender<NetMessage>, row: &AoiStreamV2) {
         pos_x,
         pos_y,
         pos_z,
+    });
+}
+
+fn emit_server_correction(sender: &Sender<NetMessage>, row: &ServerCorrectionV2) {
+    let _ = sender.send(NetMessage::ServerCorrectionUpsert {
+        correction_id: row.correction_id.clone(),
+        identity_hex: format!("{:?}", row.identity),
+        region_id: row.region_id,
+        dimension_id: row.dimension_id,
+        reason: row.reason.clone(),
+        server_x: row.server_x,
+        server_y: row.server_y,
+        server_z: row.server_z,
+        velocity_x: row.velocity_x,
+        velocity_y: row.velocity_y,
+        velocity_z: row.velocity_z,
+        acknowledged: row.acknowledged,
+        acked_client_frame_no: row.acked_client_frame_no,
     });
 }
 

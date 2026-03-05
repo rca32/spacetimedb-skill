@@ -77,12 +77,19 @@ fn print_diagnostics_snapshot(
 
     info!(
         target: "stitch_bevy_client",
-        "diag snapshot net_total={} disconnects={} tx_delta={} reducer_results={} reducer_failures={} required_subs={}/{} sub_retries={} sub_timeouts={} reconnect_attempts={} reconnect_backoff_pending={}ms apply_latency={}ms active_proxies={} gate_retries={} gate_timeouts={}",
+        "diag snapshot net_total={} disconnects={} tx_delta={} reducer_results={} reducer_failures={} correction_received={} reconcile_blend={} reconcile_snap={} last_reducer_failure={} required_subs={}/{} sub_retries={} sub_timeouts={} reconnect_attempts={} reconnect_backoff_pending={}ms apply_latency={}ms active_proxies={} gate_retries={} gate_timeouts={}",
         diagnostics.total_net_messages,
         diagnostics.total_disconnects,
         sync_metrics.transaction_delta_count,
         sync_metrics.reducer_result_count,
         sync_metrics.failed_reducer_count,
+        sync_metrics.correction_received_count,
+        sync_metrics.reconcile_blend_count,
+        sync_metrics.reconcile_snap_count,
+        sync_metrics
+            .last_reducer_failure
+            .as_deref()
+            .unwrap_or("none"),
         gate.applied.len(),
         gate.required.len(),
         diagnostics.subscription_retry_scheduled_count,
