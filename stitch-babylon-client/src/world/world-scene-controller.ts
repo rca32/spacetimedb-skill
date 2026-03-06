@@ -483,6 +483,7 @@ export class WorldSceneController {
     for (const mesh of root.getChildMeshes()) {
       mesh.metadata = metadata
       mesh.isPickable = true
+      mesh.renderingGroupId = metadata.kind === 'npc' ? 1 : 0
     }
   }
 

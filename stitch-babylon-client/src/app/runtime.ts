@@ -656,19 +656,27 @@ export class BabylonClientRuntime {
     }
 
     let pickedEntity = world.resolvePick(pickInfo.pickedMesh ?? null)
-    if (pickedEntity?.kind === 'chunk' && this.scene) {
+    if ((pickedEntity?.kind === 'chunk' || pickedEntity?.kind === 'resource' || pickedEntity?.kind === 'player') && this.scene) {
       const preferredPick = this.scene.pick(
         this.scene.pointerX,
         this.scene.pointerY,
         (mesh) => {
           const entity = world.resolvePick(mesh)
-          return entity !== null && entity.kind !== 'chunk'
+          return entity !== null && (entity.kind === 'npc' || entity.kind === 'player' || entity.kind === 'resource' || entity.kind === 'building' || entity.kind === 'project')
         },
         false,
         this.camera ?? undefined,
       )
       if (preferredPick?.hit) {
-        pickedEntity = world.resolvePick(preferredPick.pickedMesh ?? null) ?? pickedEntity
+        const resolved = world.resolvePick(preferredPick.pickedMesh ?? null)
+        if (resolved) {
+          const rank = { npc: 5, player: 4, resource: 3, building: 2, project: 1, chunk: 0 } as const
+          const currentRank = rank[pickedEntity.kind]
+          const nextRank = rank[resolved.kind]
+          if (nextRank >= currentRank) {
+            pickedEntity = resolved
+          }
+        }
       }
     }
     if (this.buildModeEnabled && pickInfo.pickedPoint) {
