@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "babylonjs-engine": {
+      "source": "freshtechbro/claudedesignskills",
+      "sourceType": "github",
+      "computedHash": "eb58751a5f852eb9fc6dead37bff30c06aa8bed98f2e6e84e076a9f77944d9c7"
+    }
+  }
+}
