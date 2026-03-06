@@ -1,0 +1,21 @@
+char_id,bundle,source_pack,source_path,target_path,license,role
+chr_0001,core,threejs_examples,assetdirectory/characters/humanoid/opensource/xbot.glb,bevy-client/assets/characters/player/xbot.glb,review_required,player placeholder with animation
+chr_0002,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-a.glb,bevy-client/assets/characters/npc/blocky/character-a.glb,CC0,npc variant
+chr_0003,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-b.glb,bevy-client/assets/characters/npc/blocky/character-b.glb,CC0,npc variant
+chr_0004,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-c.glb,bevy-client/assets/characters/npc/blocky/character-c.glb,CC0,npc variant
+chr_0005,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-d.glb,bevy-client/assets/characters/npc/blocky/character-d.glb,CC0,npc variant
+chr_0006,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-e.glb,bevy-client/assets/characters/npc/blocky/character-e.glb,CC0,npc variant
+chr_0007,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-f.glb,bevy-client/assets/characters/npc/blocky/character-f.glb,CC0,npc variant
+chr_0008,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-g.glb,bevy-client/assets/characters/npc/blocky/character-g.glb,CC0,npc variant
+chr_0009,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-h.glb,bevy-client/assets/characters/npc/blocky/character-h.glb,CC0,npc variant
+chr_0010,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-i.glb,bevy-client/assets/characters/npc/blocky/character-i.glb,CC0,npc variant
+chr_0011,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-j.glb,bevy-client/assets/characters/npc/blocky/character-j.glb,CC0,npc variant
+chr_0012,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-k.glb,bevy-client/assets/characters/npc/blocky/character-k.glb,CC0,npc variant
+chr_0013,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-l.glb,bevy-client/assets/characters/npc/blocky/character-l.glb,CC0,npc variant
+chr_0014,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-m.glb,bevy-client/assets/characters/npc/blocky/character-m.glb,CC0,npc variant
+chr_0015,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-n.glb,bevy-client/assets/characters/npc/blocky/character-n.glb,CC0,npc variant
+chr_0016,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-o.glb,bevy-client/assets/characters/npc/blocky/character-o.glb,CC0,npc variant
+chr_0017,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-p.glb,bevy-client/assets/characters/npc/blocky/character-p.glb,CC0,npc variant
+chr_0018,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-q.glb,bevy-client/assets/characters/npc/blocky/character-q.glb,CC0,npc variant
+chr_0019,core,kenney_blocky,assetdirectory/pack/kenney/blocky-characters/Models/GLB format/character-r.glb,bevy-client/assets/characters/npc/blocky/character-r.glb,CC0,npc variant
+chr_0020,optional,threejs_examples,assetdirectory/characters/humanoid/opensource/RobotExpressive.glb,bevy-client/assets/characters/npc/robot/RobotExpressive.glb,review_required,emote rich optional npc

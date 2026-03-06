@@ -1,0 +1,130 @@
+:root {
+  color-scheme: dark;
+  font-family: "IBM Plex Sans", "Noto Sans KR", sans-serif;
+  background:
+    radial-gradient(circle at top, rgba(193, 151, 77, 0.28), transparent 42%),
+    linear-gradient(180deg, #120f0b 0%, #19130e 48%, #0c0f14 100%);
+  color: #f4ead7;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: transparent;
+}
+
+#app {
+  position: relative;
+}
+
+.app-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.render-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  outline: none;
+}
+
+.dom-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dialogue-panel,
+.status-chip {
+  pointer-events: auto;
+}
+
+.dialogue-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: min(360px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid rgba(244, 234, 215, 0.18);
+  border-radius: 16px;
+  background: rgba(20, 15, 12, 0.84);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.dialogue-panel h2,
+.dialogue-panel h3,
+.dialogue-panel p {
+  margin: 0 0 8px;
+}
+
+.dialogue-panel form {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dialogue-panel textarea {
+  resize: vertical;
+  min-height: 72px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(244, 234, 215, 0.14);
+  background: rgba(9, 11, 16, 0.8);
+  color: inherit;
+  font: inherit;
+}
+
+.dialogue-panel button {
+  justify-self: start;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #d6aa56, #7e5d2b);
+  color: #130f09;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.status-strip {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.status-chip {
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: rgba(14, 16, 22, 0.72);
+  border: 1px solid rgba(244, 234, 215, 0.12);
+  font-size: 13px;
+}
+
+.fatal-panel {
+  position: absolute;
+  inset: 24px;
+  margin: 0;
+  padding: 24px;
+  overflow: auto;
+  border-radius: 16px;
+  background: rgba(15, 8, 10, 0.9);
+  color: #ffe6e6;
+}
