@@ -440,6 +440,7 @@ export class WorldSceneController {
       entityKey: 'self',
       label: 'local player',
     })
+    mesh.isPickable = false
   }
 
   private getChunkMaterial(chunk: TerrainChunkSnapshot, ring: number): StandardMaterial {
@@ -513,7 +514,7 @@ export class WorldSceneController {
     }
 
     for (const mesh of modelRoot.getChildMeshes(false)) {
-      mesh.isPickable = true
+      mesh.isPickable = metadata.entityKey !== 'self'
       mesh.metadata = metadata
     }
     root.metadata = metadata

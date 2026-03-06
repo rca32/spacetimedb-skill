@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 
@@ -63,6 +63,7 @@ for (const manifestName of [
     await mkdir(dirname(target), { recursive: true })
     await copyFile(source, target)
     copied.push(stripBevyPrefix(targetPath))
+    await copyAdjacentTextures(source, target, copied, warnings)
 
     const sourcePack = normalizeSourcePack(row.source_pack ?? '', targetPath)
     const licenseRow = licenseByPack.get(sourcePack)
@@ -100,6 +101,22 @@ for (const warning of warnings) {
 
 function stripBevyPrefix(value) {
   return value.replace(/^bevy-client[\\/]/, '')
+}
+
+async function copyAdjacentTextures(source, target, copied, warnings) {
+  const sourceDir = dirname(source)
+  const sourceTexturesDir = join(sourceDir, 'Textures')
+  const targetTexturesDir = join(dirname(target), 'Textures')
+
+  try {
+    await cp(sourceTexturesDir, targetTexturesDir, { recursive: true, force: true })
+    copied.push(join(stripBevyPrefix(dirname(target)).replace(/\\/g, '/'), 'Textures'))
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return
+    }
+    warnings.push(`failed to copy adjacent textures for ${target}: ${String(error)}`)
+  }
 }
 
 function normalizePackName(value) {

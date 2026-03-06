@@ -26,7 +26,7 @@ import { MirrorStore, type MirrorSnapshot } from '../world/mirror-store'
 import { WorldSceneController, type PickedWorldEntity } from '../world/world-scene-controller'
 
 const NETWORK_TICK_MS = 100
-const BUILDING_DEF_FALLBACK = 1n
+const BUILDING_DEF_FALLBACK = 1001n
 const RUN_SPEED = 5.8
 const WALK_SPEED = 3.25
 const SERVER_BLEND_DISTANCE = 0.45
@@ -655,7 +655,22 @@ export class BabylonClientRuntime {
       return
     }
 
-    const pickedEntity = world.resolvePick(pickInfo.pickedMesh ?? null)
+    let pickedEntity = world.resolvePick(pickInfo.pickedMesh ?? null)
+    if (pickedEntity?.kind === 'chunk' && this.scene) {
+      const preferredPick = this.scene.pick(
+        this.scene.pointerX,
+        this.scene.pointerY,
+        (mesh) => {
+          const entity = world.resolvePick(mesh)
+          return entity !== null && entity.kind !== 'chunk'
+        },
+        false,
+        this.camera ?? undefined,
+      )
+      if (preferredPick?.hit) {
+        pickedEntity = world.resolvePick(preferredPick.pickedMesh ?? null) ?? pickedEntity
+      }
+    }
     if (this.buildModeEnabled && pickInfo.pickedPoint) {
       const hex = worldToHex(pickInfo.pickedPoint.x, pickInfo.pickedPoint.z, this.activeDimensionId)
       this.previewHexX = hex.q
