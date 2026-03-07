@@ -39,7 +39,7 @@ const AOI_RADIUS_CHUNKS = 2
 const DEFAULT_CHUNK_SIZE = 32
 const NETWORK_TICK_MS = 100
 const PLAYER_FEET_OFFSET_Y = 0.9
-const DEFAULT_BUILDING_DEF_ID = 1n
+const DEFAULT_BUILDING_DEF_ID = 1001n
 const ENABLE_MOVEMENT_DUST_FX = false
 const CAMERA_DEFAULT_DISTANCE = 2.1
 const CAMERA_DEFAULT_PITCH_DEGREES = 10
@@ -92,6 +92,8 @@ export class OrillusionClientRuntime {
   private panelMessage = ''
   private panelMessageExpiresAtMs = 0
   private suppressAuthoritativeUntilMs = 0
+  private lastServerPositionSummary = '-'
+  private lastCorrectionSummary = '-'
 
   private buildModeEnabled = false
   private selectedBuildingDefId = DEFAULT_BUILDING_DEF_ID
@@ -906,6 +908,7 @@ export class OrillusionClientRuntime {
         continue
       }
 
+      this.lastServerPositionSummary = `${Number(position[0] ?? 0).toFixed(2)}, ${Number(position[1] ?? 0).toFixed(2)}, ${Number(position[2] ?? 0).toFixed(2)} @f${serverFrameNo}`
       this.applyAuthoritativeXZ(position)
       this.lastAppliedAuthoritativeFrameNo = serverFrameNo
       break
@@ -929,23 +932,35 @@ export class OrillusionClientRuntime {
       if (!correctionId || row.acknowledged === true || this.seenCorrectionIds.has(correctionId)) {
         continue
       }
-      this.seenCorrectionIds.add(correctionId)
+
+      const reason = String(row.reason ?? 'unknown')
 
       const position = [
         toF32Number(row.serverX),
         toF32Number(row.serverY),
         toF32Number(row.serverZ),
       ]
-      if (this.player && Number.isFinite(position[0]) && Number.isFinite(position[1]) && Number.isFinite(position[2])) {
-        if (!isLocallyMoving) {
-          this.applyAuthoritativeXZ(position)
-        }
+      const canApply =
+        this.player &&
+        Number.isFinite(position[0]) &&
+        Number.isFinite(position[1]) &&
+        Number.isFinite(position[2])
+
+      if (!canApply || isLocallyMoving) {
+        this.lastCorrectionSummary = `${reason}${isLocallyMoving ? ' (deferred)' : ' (invalid_position)'}`
+        continue
       }
 
-      this.net.dispatchReducer('ack_server_correction', {
+      this.lastServerPositionSummary = `${position[0].toFixed(2)}, ${position[1].toFixed(2)}, ${position[2].toFixed(2)}`
+      this.applyAuthoritativeXZ(position)
+      const acked = this.net.dispatchReducer('ack_server_correction', {
         correctionId,
         ackedClientFrameNo: BigInt(this.frameNo),
       })
+      if (acked) {
+        this.seenCorrectionIds.add(correctionId)
+        this.lastCorrectionSummary = `${reason} (${correctionId})`
+      }
     }
   }
 
@@ -984,6 +999,8 @@ export class OrillusionClientRuntime {
       `<div>build valid/reason: ${this.previewIsValid ? 'valid' : 'invalid'} / ${this.previewReason}</div>`,
       `<div>build checked_at: ${this.previewCheckedAt}</div>`,
       `<div>pos: ${position ? `${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}` : '-'}</div>`,
+      `<div>server pos: ${this.lastServerPositionSummary}</div>`,
+      `<div>last correction: ${this.lastCorrectionSummary}</div>`,
       '<div>move: WASD / run: Shift / look: LMB,RMB drag / zoom: wheel</div>',
       '<div>build: click world -> preview / Q,E rotate / Enter place</div>',
       `<div>npc: T 대화 / Y 거래 / U 퀘스트 / Enter 대화 입력</div>`,

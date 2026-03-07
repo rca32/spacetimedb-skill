@@ -28,4 +28,4 @@ python .agents/skills/daily-prompt-scaffold/scripts/new_prompt_task.py --task-na
 
 ## Script
 
-- `scripts/new_prompt_task.py`: Create the main prompt file and `_plan.md`, `_progress.md`, `_workbook.md` companions.
+- `scripts/new_prompt_task.py`: Create the main prompt file and `_progress.md`, `_workbook.md` companions.

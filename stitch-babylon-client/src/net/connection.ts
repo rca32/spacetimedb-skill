@@ -2,6 +2,7 @@ import type { AppConfig } from '../infra/config'
 import type { Logger } from '../infra/logger'
 import { TokenStore } from '../infra/token-store'
 import { DbConnection } from '../module_bindings'
+import type { Identity } from 'spacetimedb'
 import { NetEventQueue } from './events'
 import { SubscriptionSetRegistry } from './subscriptions'
 
@@ -137,11 +138,12 @@ export class SpacetimeConnectionController {
     try {
       DbConnection.builder()
         .withUri(this.config.spacetimeUri)
-        .withModuleName(this.config.spacetimeModuleName)
+        .withDatabaseName(this.config.spacetimeModuleName)
         .withToken(token)
-        .onConnect((connection, identity, nextToken) => {
+        .onConnect((connection: DbConnection, identity: Identity, nextToken: string) => {
           this.connection = connection
-          this.identityHex = identity.toHexString().replace(/^0x/, '')
+          const identityHex = identity.toHexString().replace(/^0x/, '')
+          this.identityHex = identityHex
           this.reconnectRetryCount = 0
           this.reconnectAtMs = null
           this.tokenStore.save(nextToken)
@@ -149,15 +151,15 @@ export class SpacetimeConnectionController {
             onApplied: (key) => this.events.push({ kind: 'subscription-applied', key }),
             onError: (key, error) => this.events.push({ kind: 'subscription-error', key, reason: error.message }),
           })
-          this.events.push({ kind: 'connected', identityHex: this.identityHex })
+          this.events.push({ kind: 'connected', identityHex })
         })
-        .onConnectError((context, error) => {
+        .onConnectError((context: { isActive: boolean }, error: Error) => {
           this.connection = null
           this.identityHex = null
           this.events.push({ kind: 'connect-error', reason: error.message })
           this.scheduleReconnect(context.isActive)
         })
-        .onDisconnect((context, error) => {
+        .onDisconnect((context: { isActive: boolean }, error?: Error) => {
           this.connection = null
           this.identityHex = null
           this.events.push({ kind: 'disconnected', reason: error?.message ?? 'connection closed' })

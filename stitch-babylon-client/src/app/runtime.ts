@@ -20,6 +20,7 @@ import {
   worldToHex,
 } from '../net/aoi'
 import { SpacetimeConnectionController } from '../net/connection'
+import { SERVER_TABLES } from '../net/server-contract'
 import type { AoiWindow, ClientAppState, PresenterState, QualityTier } from '../runtime/types'
 import { HudOverlayController } from '../ui/hud-overlay-controller'
 import { MirrorStore, type MirrorSnapshot } from '../world/mirror-store'
@@ -400,7 +401,7 @@ export class BabylonClientRuntime {
       return
     }
 
-    const input = this.readIntent()
+    const input = this.readIntentWorld()
     const motionIntentId = this.makeRequestId('mi')
     this.net.dispatchReducer('sync_client_frame', {
       frameNo: BigInt(this.frameNo),
@@ -428,26 +429,12 @@ export class BabylonClientRuntime {
     if (this.state !== 'InWorld' && this.state !== 'WorldLoading') {
       return
     }
-    const camera = this.camera
-    if (!camera) {
-      return
-    }
-
-    const input = this.readIntent()
+    const input = this.readIntentWorld()
     if (input.x === 0 && input.z === 0) {
       return
     }
-
-    const yaw = camera.alpha + Math.PI / 2
-    const forward = new Vector3(Math.sin(yaw), 0, Math.cos(yaw))
-    const right = new Vector3(Math.cos(yaw), 0, -Math.sin(yaw))
-    const direction = forward.scale(input.z).add(right.scale(input.x))
-    if (direction.lengthSquared() <= 0.0001) {
-      return
-    }
-    direction.normalize()
     const speed = input.sprint ? RUN_SPEED : WALK_SPEED
-    this.localPlayerPosition.addInPlace(direction.scale(speed * dtSeconds))
+    this.localPlayerPosition.addInPlace(new Vector3(input.x, 0, input.z).scale(speed * dtSeconds))
     this.localPlayerPosition.y = 0.9
   }
 
@@ -458,6 +445,31 @@ export class BabylonClientRuntime {
       x,
       z,
       sprint: this.pressedKeys.has('shift'),
+    }
+  }
+
+  private readIntentWorld(): { x: number; z: number; sprint: boolean } {
+    const input = this.readIntent()
+    if (input.x === 0 && input.z === 0) {
+      return input
+    }
+    const camera = this.camera
+    if (!camera) {
+      return input
+    }
+
+    const yaw = camera.alpha + Math.PI / 2
+    const forward = new Vector3(Math.sin(yaw), 0, Math.cos(yaw))
+    const right = new Vector3(Math.cos(yaw), 0, -Math.sin(yaw))
+    const direction = forward.scale(input.z).add(right.scale(input.x))
+    if (direction.lengthSquared() <= 0.0001) {
+      return { x: 0, z: 0, sprint: input.sprint }
+    }
+    direction.normalize()
+    return {
+      x: direction.x,
+      z: direction.z,
+      sprint: input.sprint,
     }
   }
 
@@ -551,7 +563,7 @@ export class BabylonClientRuntime {
       return
     }
 
-    const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>).buildingDef
+    const table = (connection.db as Record<string, { iter: () => Iterable<Record<string, unknown>> }>)[SERVER_TABLES.buildingDef]
     if (!table) {
       return
     }

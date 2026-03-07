@@ -45,8 +45,6 @@ def main() -> None:
     base_name = f"{args.date}_{safe_task_name}"
 
     main_content = (
-        f"[작업진행:작업 계획 기록]\n"
-        f"prompts/{base_name}_plan.md\n\n"
         f"[작업진행:작업 진행 기록]\n"
         f"prompts/{base_name}_progress.md\n\n"
         f"[작업로그:작업후 기록]\n"
@@ -58,10 +56,7 @@ def main() -> None:
     )
 
     files = {
-        prompts_dir / f"{base_name}.md": main_content,
-        prompts_dir / f"{base_name}_plan.md": f"# {base_name} plan\n",
-        prompts_dir / f"{base_name}_progress.md": f"# {base_name} progress\n",
-        prompts_dir / f"{base_name}_workbook.md": f"# {base_name} workbook\n",
+        prompts_dir / f"{base_name}.md": main_content
     }
 
     for path, content in files.items():

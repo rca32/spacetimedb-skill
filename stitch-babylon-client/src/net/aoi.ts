@@ -1,4 +1,5 @@
 import type { AoiWindow } from '../runtime/types'
+import { SERVER_TABLES } from './server-contract'
 
 export const DEFAULT_CHUNK_SIZE = 32
 export const AOI_RADIUS_CHUNKS = 2
@@ -62,26 +63,26 @@ export function shouldRecomputeAoi(previous: AoiWindow | null, next: AoiWindow):
 
 export function buildSessionQueries(input: SessionQueryInput): string[] {
   return [
-    `SELECT * FROM physics_state_v2 WHERE entity_id = 0x${input.identityHex}`,
-    `SELECT * FROM server_correction_v2 WHERE identity = 0x${input.identityHex} AND region_id = ${input.regionId.toString()} AND dimension_id = ${input.dimensionId}`,
-    `SELECT * FROM player_session_view WHERE identity = 0x${input.identityHex}`,
-    `SELECT * FROM building_preview_feedback_view WHERE identity = 0x${input.identityHex}`,
-    `SELECT * FROM npc_interaction_log WHERE caller_identity = 0x${input.identityHex}`,
-    'SELECT * FROM npc_ai_status_view',
+    `SELECT * FROM ${SERVER_TABLES.physicsState} WHERE entity_id = 0x${input.identityHex}`,
+    `SELECT * FROM ${SERVER_TABLES.serverCorrection} WHERE identity = 0x${input.identityHex} AND region_id = ${input.regionId.toString()} AND dimension_id = ${input.dimensionId}`,
+    `SELECT * FROM ${SERVER_TABLES.playerSessionView} WHERE identity = 0x${input.identityHex}`,
+    `SELECT * FROM ${SERVER_TABLES.buildingPreviewFeedbackView} WHERE identity = 0x${input.identityHex}`,
+    `SELECT * FROM ${SERVER_TABLES.npcInteractionLog} WHERE caller_identity = 0x${input.identityHex}`,
+    `SELECT * FROM ${SERVER_TABLES.npcAiStatusView}`,
   ]
 }
 
 export function buildInventoryQueries(input: SessionQueryInput): string[] {
   return [
-    `SELECT * FROM player_inventory_container_view WHERE owner_identity = 0x${input.identityHex}`,
-    `SELECT * FROM player_inventory_slot_view WHERE owner_identity = 0x${input.identityHex}`,
-    `SELECT * FROM player_inventory_item_view WHERE owner_identity = 0x${input.identityHex}`,
-    `SELECT * FROM player_wallet_view WHERE identity = 0x${input.identityHex}`,
+    `SELECT * FROM ${SERVER_TABLES.playerInventoryContainerView} WHERE owner_identity = 0x${input.identityHex}`,
+    `SELECT * FROM ${SERVER_TABLES.playerInventorySlotView} WHERE owner_identity = 0x${input.identityHex}`,
+    `SELECT * FROM ${SERVER_TABLES.playerInventoryItemView} WHERE owner_identity = 0x${input.identityHex}`,
+    `SELECT * FROM ${SERVER_TABLES.playerWalletView} WHERE identity = 0x${input.identityHex}`,
   ]
 }
 
 export function buildCombatQueries(regionId: bigint, dimensionId: number): string[] {
-  return [`SELECT * FROM combat_hit_v2 WHERE region_id = ${regionId.toString()} AND dimension_id = ${dimensionId}`]
+  return [`SELECT * FROM ${SERVER_TABLES.combatHit} WHERE region_id = ${regionId.toString()} AND dimension_id = ${dimensionId}`]
 }
 
 export function buildAoiQueries(window: AoiWindow, includeFootprintOverlay: boolean): string[] {
@@ -93,20 +94,20 @@ export function buildAoiQueries(window: AoiWindow, includeFootprintOverlay: bool
   const dimension = window.dimensionId
 
   const queries = [
-    'SELECT * FROM world_gen_params',
-    `SELECT * FROM aoi_stream_v2 WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${window.minChunkX} AND chunk_x <= ${window.maxChunkX} AND chunk_y >= ${window.minChunkY} AND chunk_y <= ${window.maxChunkY}`,
-    `SELECT * FROM terrain_chunk_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${window.minChunkX} AND chunk_x <= ${window.maxChunkX} AND chunk_y >= ${window.minChunkY} AND chunk_y <= ${window.maxChunkY}`,
-    `SELECT * FROM terrain_chunk_payload WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${window.minChunkX} AND chunk_x <= ${window.maxChunkX} AND chunk_y >= ${window.minChunkY} AND chunk_y <= ${window.maxChunkY}`,
-    `SELECT * FROM resource_node WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
-    `SELECT * FROM building_state WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
-    `SELECT * FROM project_site_state WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
-    `SELECT * FROM npc_state_stream WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
-    `SELECT * FROM transform_state WHERE region_id = ${region} AND dimension_id = ${dimension}`,
+    `SELECT * FROM ${SERVER_TABLES.worldGenParams}`,
+    `SELECT * FROM ${SERVER_TABLES.aoiStream} WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${window.minChunkX} AND chunk_x <= ${window.maxChunkX} AND chunk_y >= ${window.minChunkY} AND chunk_y <= ${window.maxChunkY}`,
+    `SELECT * FROM ${SERVER_TABLES.terrainChunkStream} WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${window.minChunkX} AND chunk_x <= ${window.maxChunkX} AND chunk_y >= ${window.minChunkY} AND chunk_y <= ${window.maxChunkY}`,
+    `SELECT * FROM ${SERVER_TABLES.terrainChunkPayload} WHERE region_id = ${region} AND dimension_id = ${dimension} AND chunk_x >= ${window.minChunkX} AND chunk_x <= ${window.maxChunkX} AND chunk_y >= ${window.minChunkY} AND chunk_y <= ${window.maxChunkY}`,
+    `SELECT * FROM ${SERVER_TABLES.resourceNode} WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
+    `SELECT * FROM ${SERVER_TABLES.buildingState} WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
+    `SELECT * FROM ${SERVER_TABLES.projectSiteState} WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
+    `SELECT * FROM ${SERVER_TABLES.npcStateStream} WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
+    `SELECT * FROM ${SERVER_TABLES.transformState} WHERE region_id = ${region} AND dimension_id = ${dimension}`,
   ]
 
   if (includeFootprintOverlay) {
     queries.push(
-      `SELECT * FROM building_footprint WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
+      `SELECT * FROM ${SERVER_TABLES.buildingFootprint} WHERE region_id = ${region} AND dimension_id = ${dimension} AND hex_x >= ${minHexX} AND hex_x <= ${maxHexX} AND hex_z >= ${minHexZ} AND hex_z <= ${maxHexZ}`,
     )
   }
 

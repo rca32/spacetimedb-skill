@@ -104,6 +104,34 @@ REPEAT=3 bash scripts/cli_regression_suite.sh --db stitch-server --server 127.0.
 Detailed scenario and failure diagnosis checklist:
 - `stitch-server/docs/cli-regression-suite.md`
 
+## Babylon / V2 Action Regression
+
+Run the Babylon-facing server contract suite:
+
+```bash
+cd /home/rca32/workspaces/spacetimedb-skill/stitch-server
+bash scripts/cli_regression_babylon_actions.sh --db stitch-server --server 127.0.0.1:3000 --repeat 1
+```
+
+Dry run:
+
+```bash
+bash scripts/cli_regression_babylon_actions.sh --dry-run --repeat 1
+```
+
+This suite verifies the Babylon client action contract around:
+
+- `sync_client_frame`
+- `submit_motion_intent`
+- `ack_server_correction`
+- `building_validate_preview`
+- `submit_combat_intent`
+- `npc_talk`
+
+Key SQL/table assertions cover `motion_intent`, `physics_state`, `aoi_stream`, `server_correction`, `ui_notification_event`, `building_preview_feedback_view`, `combat_hit`, `combat_hit_event`, `fx_event`, `audio_event`, and `npc_interaction_log`.
+
+If `bash` cannot find the CLI on Windows, set `SPACETIME_BIN` to your `spacetime.exe` path before running the script.
+
 ## Multi-Identity / Security / Load Regression
 
 Run extended regression flow (SEC-001~003 + load probes):

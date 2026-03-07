@@ -15,6 +15,7 @@
     "spacetimedb": "1.11.3"
   },
   "devDependencies": {
+    "playwright": "^1.58.2",
     "typescript": "^5.7.2",
     "vite": "^6.1.0"
   }

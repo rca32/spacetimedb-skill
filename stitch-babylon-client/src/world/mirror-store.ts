@@ -1,4 +1,5 @@
 import type { AuthoritativeCorrection } from '../runtime/types'
+import { SERVER_TABLES } from '../net/server-contract'
 
 export interface SessionSnapshot {
   identityHex: string
@@ -227,7 +228,7 @@ function readSession(db: Record<string, { iter: () => Iterable<Record<string, un
   if (!identityHex) {
     return null
   }
-  for (const row of readTableRows(db, 'playerSessionView')) {
+  for (const row of readTableRows(db, SERVER_TABLES.playerSessionView)) {
     const rowIdentity = toIdentityHex(row.identity)
     if (rowIdentity !== identityHex) {
       continue
@@ -243,7 +244,7 @@ function readSession(db: Record<string, { iter: () => Iterable<Record<string, un
 
 function readPhysics(db: Record<string, { iter: () => Iterable<Record<string, unknown>> }>) {
   const result = new Map<string, PhysicsSnapshot>()
-  for (const row of readTableRows(db, 'physicsStateV2')) {
+  for (const row of readTableRows(db, SERVER_TABLES.physicsState)) {
     const identityHex = toIdentityHex(row.entityId)
     if (!identityHex) {
       continue
@@ -265,7 +266,7 @@ function readPhysics(db: Record<string, { iter: () => Iterable<Record<string, un
 
 function readTransforms(db: Record<string, { iter: () => Iterable<Record<string, unknown>> }>) {
   const result = new Map<string, TransformSnapshot>()
-  for (const row of readTableRows(db, 'transformState')) {
+  for (const row of readTableRows(db, SERVER_TABLES.transformState)) {
     const identityHex = toIdentityHex(row.entityId)
     if (!identityHex) {
       continue
@@ -284,7 +285,7 @@ function readTransforms(db: Record<string, { iter: () => Iterable<Record<string,
 
 function readTerrainChunks(db: Record<string, { iter: () => Iterable<Record<string, unknown>> }>) {
   const result = new Map<string, TerrainChunkSnapshot>()
-  for (const row of readTableRows(db, 'terrainChunkStream')) {
+  for (const row of readTableRows(db, SERVER_TABLES.terrainChunkStream)) {
     const chunkKey = String(row.chunkKey ?? '')
     if (!chunkKey) {
       continue
@@ -304,7 +305,7 @@ function readTerrainChunks(db: Record<string, { iter: () => Iterable<Record<stri
 
 function readResources(db: Record<string, { iter: () => Iterable<Record<string, unknown>> }>) {
   const result = new Map<string, ResourceSnapshot>()
-  for (const row of readTableRows(db, 'resourceNode')) {
+  for (const row of readTableRows(db, SERVER_TABLES.resourceNode)) {
     const entityId = toU64BigInt(row.entityId, 0n)
     if (entityId <= 0n) {
       continue
@@ -327,7 +328,7 @@ function readResources(db: Record<string, { iter: () => Iterable<Record<string, 
 
 function readBuildings(db: Record<string, { iter: () => Iterable<Record<string, unknown>> }>) {
   const result = new Map<string, BuildingSnapshot>()
-  for (const row of readTableRows(db, 'buildingState')) {
+  for (const row of readTableRows(db, SERVER_TABLES.buildingState)) {
     const entityId = toU64BigInt(row.entityId, 0n)
     if (entityId <= 0n) {
       continue
@@ -346,7 +347,7 @@ function readBuildings(db: Record<string, { iter: () => Iterable<Record<string, 
 
 function readProjects(db: Record<string, { iter: () => Iterable<Record<string, unknown>> }>) {
   const result = new Map<string, ProjectSnapshot>()
-  for (const row of readTableRows(db, 'projectSiteState')) {
+  for (const row of readTableRows(db, SERVER_TABLES.projectSiteState)) {
     const entityId = toU64BigInt(row.entityId, 0n)
     if (entityId <= 0n) {
       continue
@@ -366,7 +367,7 @@ function readProjects(db: Record<string, { iter: () => Iterable<Record<string, u
 
 function readNpcs(db: Record<string, { iter: () => Iterable<Record<string, unknown>> }>) {
   const result = new Map<string, NpcSnapshot>()
-  for (const row of readTableRows(db, 'npcStateStream')) {
+  for (const row of readTableRows(db, SERVER_TABLES.npcStateStream)) {
     const npcId = toU64BigInt(row.npcId, 0n)
     if (npcId <= 0n) {
       continue
@@ -394,7 +395,7 @@ function readPreview(
     return null
   }
   let latest: PreviewSnapshot | null = null
-  for (const row of readTableRows(db, 'buildingPreviewFeedbackView')) {
+  for (const row of readTableRows(db, SERVER_TABLES.buildingPreviewFeedbackView)) {
     if (toIdentityHex(row.identity) !== identityHex) {
       continue
     }
@@ -422,7 +423,7 @@ function readCorrections(
   if (!identityHex) {
     return result
   }
-  for (const row of readTableRows(db, 'serverCorrectionV2')) {
+  for (const row of readTableRows(db, SERVER_TABLES.serverCorrection)) {
     if (toIdentityHex(row.identity) !== identityHex || toBoolean(row.acknowledged)) {
       continue
     }
@@ -440,7 +441,7 @@ function readCorrections(
 }
 
 function readCombatHits(db: Record<string, { iter: () => Iterable<Record<string, unknown>> }>) {
-  return readTableRows(db, 'combatHitV2').map((row) => ({
+  return readTableRows(db, SERVER_TABLES.combatHit).map((row) => ({
     hitId: String(row.hitId ?? ''),
     attackerHex: toIdentityHex(row.attacker) ?? '',
     targetHex: toIdentityHex(row.target) ?? '',
@@ -458,7 +459,7 @@ function readNpcLogs(
   if (!identityHex) {
     return result
   }
-  for (const row of readTableRows(db, 'npcInteractionLog')) {
+  for (const row of readTableRows(db, SERVER_TABLES.npcInteractionLog)) {
     if (toIdentityHex(row.callerIdentity) !== identityHex) {
       continue
     }
@@ -482,7 +483,7 @@ function readInventoryItems(
   if (!identityHex) {
     return result
   }
-  for (const row of readTableRows(db, 'playerInventoryItemView')) {
+  for (const row of readTableRows(db, SERVER_TABLES.playerInventoryItemView)) {
     if (toIdentityHex(row.ownerIdentity) !== identityHex) {
       continue
     }
@@ -503,7 +504,7 @@ function readWalletBalance(
   if (!identityHex) {
     return null
   }
-  for (const row of readTableRows(db, 'playerWalletView')) {
+  for (const row of readTableRows(db, SERVER_TABLES.playerWalletView)) {
     if (toIdentityHex(row.identity) !== identityHex) {
       continue
     }
@@ -513,7 +514,7 @@ function readWalletBalance(
 }
 
 function readNpcAiEnabled(db: Record<string, { iter: () => Iterable<Record<string, unknown>> }>) {
-  for (const row of readTableRows(db, 'npcAiStatusView')) {
+  for (const row of readTableRows(db, SERVER_TABLES.npcAiStatusView)) {
     if (toU32Number(row.statusKey) !== 1) {
       continue
     }
@@ -523,7 +524,7 @@ function readNpcAiEnabled(db: Record<string, { iter: () => Iterable<Record<strin
 }
 
 function readFootprints(db: Record<string, { iter: () => Iterable<Record<string, unknown>> }>) {
-  return readTableRows(db, 'buildingFootprint').map((row) => ({
+  return readTableRows(db, SERVER_TABLES.buildingFootprint).map((row) => ({
     tileKey: String(row.tileKey ?? ''),
     buildingEntityId: toU64BigInt(row.buildingEntityId, 0n),
     regionId: toU64BigInt(row.regionId, 1n),
@@ -536,7 +537,7 @@ function readFootprints(db: Record<string, { iter: () => Iterable<Record<string,
 }
 
 function readChunkSize(db: Record<string, { iter: () => Iterable<Record<string, unknown>> }>) {
-  for (const row of readTableRows(db, 'worldGenParams')) {
+  for (const row of readTableRows(db, SERVER_TABLES.worldGenParams)) {
     return Math.max(1, toU64Number(row.terrainChunkSize))
   }
   return 32

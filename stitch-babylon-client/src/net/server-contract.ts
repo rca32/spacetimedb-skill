@@ -1,0 +1,46 @@
+export const SERVER_TABLES = {
+  aoiStream: 'aoi_stream',
+  audioEvent: 'audio_event',
+  buildingDef: 'building_def',
+  buildingFootprint: 'building_footprint',
+  buildingPreviewFeedbackView: 'building_preview_feedback_view',
+  buildingState: 'building_state',
+  clientFrame: 'client_frame',
+  collisionProxy: 'collision_proxy',
+  combatHit: 'combat_hit',
+  combatHitEvent: 'combat_hit_event',
+  combatIntent: 'combat_intent',
+  fxEvent: 'fx_event',
+  motionIntent: 'motion_intent',
+  npcAiStatusView: 'npc_ai_status_view',
+  npcInteractionLog: 'npc_interaction_log',
+  npcStateStream: 'npc_state_stream',
+  physicsState: 'physics_state',
+  playerInventoryContainerView: 'player_inventory_container_view',
+  playerInventoryItemView: 'player_inventory_item_view',
+  playerInventorySlotView: 'player_inventory_slot_view',
+  playerSessionView: 'player_session_view',
+  playerWalletView: 'player_wallet_view',
+  projectSiteState: 'project_site_state',
+  resourceNode: 'resource_node',
+  serverCorrection: 'server_correction',
+  terrainChunkPayload: 'terrain_chunk_payload',
+  terrainChunkStream: 'terrain_chunk_stream',
+  transformState: 'transform_state',
+  uiNotificationEvent: 'ui_notification_event',
+  worldGenParams: 'world_gen_params',
+} as const
+
+export const SERVER_REDUCERS = {
+  ackServerCorrection: 'ack_server_correction',
+  buildingPlaceFromPreview: 'building_place_from_preview',
+  buildingValidatePreview: 'building_validate_preview',
+  npcTalk: 'npc_talk',
+  signIn: 'sign_in',
+  submitCombatIntent: 'submit_combat_intent',
+  submitMotionIntent: 'submit_motion_intent',
+  syncClientFrame: 'sync_client_frame',
+} as const
+
+export type ServerTableName = (typeof SERVER_TABLES)[keyof typeof SERVER_TABLES]
+export type ServerReducerName = (typeof SERVER_REDUCERS)[keyof typeof SERVER_REDUCERS]
