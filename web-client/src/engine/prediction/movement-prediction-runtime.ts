@@ -295,8 +295,10 @@ export class MovementPredictionRuntime {
         try {
           this.reducerGateway.invoke(
             "ack_server_correction",
-            correctionId,
-            this.lastPublishedFrameNo
+            {
+              correctionId,
+              ackedClientFrameNo: BigInt(this.lastPublishedFrameNo)
+            }
           );
         } catch (error) {
           const message =
@@ -321,10 +323,12 @@ export class MovementPredictionRuntime {
     try {
       this.reducerGateway.invoke(
         "sync_client_frame",
-        frameNo,
-        session.regionId,
-        session.dimensionId,
-        Math.floor(now)
+        {
+          frameNo: BigInt(frameNo),
+          regionId: BigInt(session.regionId),
+          dimensionId: session.dimensionId,
+          clientTimeMs: BigInt(Math.floor(now))
+        }
       );
     } catch (error) {
       const message =
@@ -347,14 +351,16 @@ export class MovementPredictionRuntime {
     try {
       this.reducerGateway.invoke(
         "submit_motion_intent",
-        intentId,
-        session.regionId,
-        session.dimensionId,
-        frameNo,
-        direction.x,
-        direction.z,
-        speed,
-        false
+        {
+          intentId,
+          regionId: BigInt(session.regionId),
+          dimensionId: session.dimensionId,
+          frameNo: BigInt(frameNo),
+          inputX: direction.x,
+          inputZ: direction.z,
+          requestedSpeed: speed,
+          jump: false
+        }
       );
     } catch (error) {
       const message =
