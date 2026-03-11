@@ -2,6 +2,7 @@ import { Container, Graphics, Text } from "pixi.js";
 
 import type { AuthoritativeStore } from "../state/authoritative-store";
 import type { EventLogStore } from "../state/event-log-store";
+import { readBoolean, readField, readNumber } from "../shared/row-access";
 import { decodeTerrainPayload } from "./terrain-payload-decoder";
 import type { MovementPredictionRuntime } from "../prediction/movement-prediction-runtime";
 import type { SeedAssetHandles } from "../assets/seed-asset-runtime";
@@ -29,10 +30,6 @@ function biomeColor(biomeId: number): number {
   return palette[Math.abs(biomeId) % palette.length] ?? 0x3b5c73;
 }
 
-function toNumber(value: unknown, fallback = 0): number {
-  return typeof value === "number" ? value : fallback;
-}
-
 function toVector3(value: unknown): [number, number, number] {
   if (Array.isArray(value) && value.length >= 3) {
     return [
@@ -46,9 +43,9 @@ function toVector3(value: unknown): [number, number, number] {
 }
 
 function toChunkLabel(row: Record<string, unknown>, payloadBytes: number | null): string {
-  const chunkX = toNumber(row.chunk_x);
-  const chunkY = toNumber(row.chunk_y);
-  const biomeId = toNumber(row.biome_id);
+  const chunkX = readNumber(row, 0, "chunkX", "chunk_x");
+  const chunkY = readNumber(row, 0, "chunkY", "chunk_y");
+  const biomeId = readNumber(row, 0, "biomeId", "biome_id");
   const payload = payloadBytes != null ? ` ${payloadBytes}b` : "";
   return `${chunkX},${chunkY} b${biomeId}${payload}`;
 }
@@ -111,22 +108,28 @@ export class WorldRenderer {
     const payloadByChunk = new Map<string, number>();
     const decodedPayloadByChunk = new Map<string, ReturnType<typeof decodeTerrainPayload>>();
     for (const row of payloadRows) {
-      const key = String(row.chunk_key ?? "");
-      const payload = row.cell_payload_bytes;
-      const payloadBytes = Array.isArray(payload) ? payload.length : 0;
+      const key = String(readField(row, "chunkKey", "chunk_key") ?? "");
+      const payload = readField(row, "cellPayloadBytes", "cell_payload_bytes");
+      const payloadBytes =
+        payload instanceof Uint8Array
+          ? payload.byteLength
+          : Array.isArray(payload)
+            ? payload.length
+            : 0;
       payloadByChunk.set(key, payloadBytes);
       decodedPayloadByChunk.set(key, decodeTerrainPayload(row));
     }
 
     for (const row of chunkFallbackRows) {
-      const chunkX = toNumber(row.chunk_x);
-      const chunkY = toNumber(row.chunk_y);
+      const chunkX = readNumber(row, 0, "chunkX", "chunk_x");
+      const chunkY = readNumber(row, 0, "chunkY", "chunk_y");
       const x = chunkX * CHUNK_SIZE;
       const y = chunkY * CHUNK_SIZE;
-      const color = biomeColor(toNumber(row.biome_id));
-      const payloadBytes = payloadByChunk.get(String(row.chunk_key ?? "")) ?? null;
+      const color = biomeColor(readNumber(row, 0, "biomeId", "biome_id"));
+      const chunkKey = String(readField(row, "chunkKey", "chunk_key") ?? "");
+      const payloadBytes = payloadByChunk.get(chunkKey) ?? null;
       const decodedPayload =
-        decodedPayloadByChunk.get(String(row.chunk_key ?? "")) ?? null;
+        decodedPayloadByChunk.get(chunkKey) ?? null;
 
       const tile = new Graphics()
         .rect(x, y, CHUNK_SIZE - 4, CHUNK_SIZE - 4)
@@ -171,9 +174,13 @@ export class WorldRenderer {
     }
 
     for (const row of resourceRows) {
-      const x = toNumber(row.chunk_x) * CHUNK_SIZE + toNumber(row.hex_x) * HEX_SIZE;
-      const y = toNumber(row.chunk_y) * CHUNK_SIZE + toNumber(row.hex_z) * HEX_SIZE;
-      const amount = toNumber(row.amount);
+      const x =
+        readNumber(row, 0, "chunkX", "chunk_x") * CHUNK_SIZE +
+        readNumber(row, 0, "hexX", "hex_x") * HEX_SIZE;
+      const y =
+        readNumber(row, 0, "chunkY", "chunk_y") * CHUNK_SIZE +
+        readNumber(row, 0, "hexZ", "hex_z") * HEX_SIZE;
+      const amount = readNumber(row, 0, "amount");
 
       const node = new Graphics()
         .circle(x + 24, y + 24, 6)
@@ -188,10 +195,10 @@ export class WorldRenderer {
     }
 
     for (const row of buildingRows) {
-      const x = toNumber(row.hex_x) * HEX_SIZE;
-      const y = toNumber(row.hex_z) * HEX_SIZE;
-      const progress = toNumber(row.build_progress);
-      const required = toNumber(row.build_required);
+      const x = readNumber(row, 0, "hexX", "hex_x") * HEX_SIZE;
+      const y = readNumber(row, 0, "hexZ", "hex_z") * HEX_SIZE;
+      const progress = readNumber(row, 0, "buildProgress", "build_progress");
+      const required = readNumber(row, 0, "buildRequired", "build_required");
 
       const building = new Graphics()
         .roundRect(x + 12, y + 12, 20, 20, 5)
@@ -206,16 +213,16 @@ export class WorldRenderer {
     }
 
     for (const row of npcRows) {
-      const x = toNumber(row.hex_x) * HEX_SIZE;
-      const y = toNumber(row.hex_z) * HEX_SIZE;
-      const traveling = Boolean(row.traveling);
+      const x = readNumber(row, 0, "hexX", "hex_x") * HEX_SIZE;
+      const y = readNumber(row, 0, "hexZ", "hex_z") * HEX_SIZE;
+      const traveling = readBoolean(row, false, "traveling");
 
       const npc = new Graphics()
         .circle(x + 18, y + 18, 8)
         .fill({ color: traveling ? 0xffd36f : 0xff88b5, alpha: 0.95 });
 
       const label = new Text({
-        text: `NPC ${toNumber(row.npc_id)}`,
+        text: `NPC ${readNumber(row, 0, "npcId", "npc_id")}`,
         style: { fill: 0xffebf3, fontSize: 10 }
       });
       label.position.set(x + 30, y + 12);

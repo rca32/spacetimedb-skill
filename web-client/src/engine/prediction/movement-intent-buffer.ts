@@ -31,6 +31,15 @@ export class MovementIntentBuffer {
     }
   }
 
+  acknowledgeIntent(intentId: string): void {
+    const acknowledged = this.intents.find((intent) => intent.intentId === intentId);
+    if (!acknowledged) {
+      return;
+    }
+
+    this.acknowledgeThrough(acknowledged.frameNo);
+  }
+
   getPending(): readonly MovementIntent[] {
     return this.intents;
   }

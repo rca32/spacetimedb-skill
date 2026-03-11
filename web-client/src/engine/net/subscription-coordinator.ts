@@ -8,51 +8,70 @@ interface SubscriptionGroup {
   queries: string[];
 }
 
-const BOOTSTRAP_GROUPS: SubscriptionGroup[] = [
-  {
-    name: "session",
-    tables: ["player_session_view"],
-    queries: ["SELECT * FROM player_session_view"]
-  },
-  {
-    name: "world",
-    tables: [
-      "terrain_chunk",
-      "terrain_chunk_stream",
-      "terrain_chunk_payload",
-      "transform_state",
-      "resource_node",
-      "building_state",
-      "claim_state",
-      "npc_state"
-    ],
-    queries: [
-      "SELECT * FROM terrain_chunk",
-      "SELECT * FROM terrain_chunk_stream",
-      "SELECT * FROM terrain_chunk_payload",
-      "SELECT * FROM transform_state",
-      "SELECT * FROM resource_node",
-      "SELECT * FROM building_state",
-      "SELECT * FROM claim_state",
-      "SELECT * FROM npc_state"
-    ]
-  },
-  {
-    name: "personal",
-    tables: [
-      "player_inventory_container_view",
-      "player_inventory_slot_view",
-      "player_inventory_item_view",
-      "player_wallet_view"
-    ],
-    queries: [
-      "SELECT * FROM player_inventory_container_view",
-      "SELECT * FROM player_inventory_slot_view",
-      "SELECT * FROM player_inventory_item_view",
-      "SELECT * FROM player_wallet_view"
-    ]
-  }
-];
+function buildBootstrapGroups(identityHex: string | null): SubscriptionGroup[] {
+  const sessionFilter = identityHex ? ` WHERE identity = 0x${identityHex}` : "";
+  const ownerFilter = identityHex ? ` WHERE owner_identity = 0x${identityHex}` : "";
+  const entityFilter = identityHex ? ` WHERE entity_id = 0x${identityHex}` : "";
+
+  return [
+    {
+      name: "session",
+      tables: ["player_session_view"],
+      queries: [`SELECT * FROM player_session_view${sessionFilter}`]
+    },
+    {
+      name: "world",
+      tables: [
+        "terrain_chunk",
+        "terrain_chunk_stream",
+        "terrain_chunk_payload",
+        "transform_state",
+        "resource_node",
+        "building_state",
+        "claim_state",
+        "npc_state"
+      ],
+      queries: [
+        "SELECT * FROM terrain_chunk",
+        "SELECT * FROM terrain_chunk_stream",
+        "SELECT * FROM terrain_chunk_payload",
+        "SELECT * FROM transform_state",
+        "SELECT * FROM resource_node",
+        "SELECT * FROM building_state",
+        "SELECT * FROM claim_state",
+        "SELECT * FROM npc_state"
+      ]
+    },
+    {
+      name: "personal",
+      tables: [
+        "player_inventory_container_view",
+        "player_inventory_slot_view",
+        "player_inventory_item_view",
+        "player_wallet_view"
+      ],
+      queries: [
+        `SELECT * FROM player_inventory_container_view${ownerFilter}`,
+        `SELECT * FROM player_inventory_slot_view${ownerFilter}`,
+        `SELECT * FROM player_inventory_item_view${ownerFilter}`,
+        `SELECT * FROM player_wallet_view${sessionFilter}`
+      ]
+    },
+    {
+      name: "movement",
+      tables: [
+        "physics_state",
+        "player_movement_feedback_view",
+        "server_correction"
+      ],
+      queries: [
+        `SELECT * FROM physics_state${entityFilter}`,
+        `SELECT * FROM player_movement_feedback_view${sessionFilter}`,
+        `SELECT * FROM server_correction${sessionFilter}`
+      ]
+    }
+  ];
+}
 
 function toHandleName(table: string): string {
   return table.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase());
@@ -70,8 +89,8 @@ export class SubscriptionCoordinator {
     private readonly eventLog: EventLogStore
   ) {}
 
-  attachBootstrapSubscriptions(connection: DbConnectionLike): void {
-    for (const group of BOOTSTRAP_GROUPS) {
+  attachBootstrapSubscriptions(connection: DbConnectionLike, identityHex: string | null): void {
+    for (const group of buildBootstrapGroups(identityHex)) {
       connection
         .subscriptionBuilder()
         .onApplied((ctx) => {

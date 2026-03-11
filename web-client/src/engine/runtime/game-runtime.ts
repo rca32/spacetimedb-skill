@@ -36,7 +36,8 @@ export class GameRuntime {
   );
   private readonly movementPrediction = new MovementPredictionRuntime(
     this.authoritativeStore,
-    this.eventLog
+    this.eventLog,
+    this.reducerGateway
   );
   private readonly seedAssetRuntime = new SeedAssetRuntime(this.eventLog);
   private readonly debugHud: DebugHud;
@@ -113,6 +114,8 @@ export class GameRuntime {
     }
 
     try {
+      let localIdentityHex: string | null = null;
+
       this.debugHud.setRuntimeStatus({
         label: "connecting",
         tone: "info"
@@ -127,6 +130,8 @@ export class GameRuntime {
         },
         {
           onConnect: (_connection, identity) => {
+            localIdentityHex = identity;
+            this.movementPrediction.setLocalIdentityHex(identity);
             this.eventLog.push("info", `connected as ${identity}`);
           },
           onConnectError: (error) => {
@@ -142,7 +147,7 @@ export class GameRuntime {
         }
       );
 
-      this.subscriptionCoordinator.attachBootstrapSubscriptions(connection);
+      this.subscriptionCoordinator.attachBootstrapSubscriptions(connection, localIdentityHex);
       this.debugHud.setRuntimeStatus({
         label: "connected",
         tone: "info"

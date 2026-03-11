@@ -1,4 +1,5 @@
 import { DbConnection } from "../../module_bindings";
+import { normalizeIdentityHex } from "../shared/row-access";
 
 export interface SpacetimeConnectionConfig {
   uri: string;
@@ -46,9 +47,7 @@ export class SpacetimeClient {
         .withConfirmedReads(config.confirmedReads)
         .onConnect((connection, identity, token) => {
           const normalizedIdentity =
-            typeof identity === "string"
-              ? identity
-              : identity.toHexString?.() ?? "unknown";
+            normalizeIdentityHex(identity) ?? "unknown";
 
           this.connection = connection as DbConnectionLike;
           listeners.onConnect?.(this.connection, normalizedIdentity, token);

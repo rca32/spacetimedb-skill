@@ -1,8 +1,5 @@
 import type { AuthoritativeStore } from "../../engine/state/authoritative-store";
-
-function toNumber(value: unknown, fallback = 0): number {
-  return typeof value === "number" ? value : fallback;
-}
+import { readBoolean, readField, readNumber } from "../../engine/shared/row-access";
 
 function toText(value: unknown, fallback = "-"): string {
   if (value == null) {
@@ -71,15 +68,18 @@ export class InventoryHud {
     const itemByInstanceId = new Map<string, Record<string, unknown>>();
 
     for (const item of items) {
-      itemByInstanceId.set(String(item.item_instance_id), item);
+      itemByInstanceId.set(
+        String(readField(item, "itemInstanceId", "item_instance_id")),
+        item
+      );
     }
 
     this.sessionLine.textContent = session
-      ? `region ${toNumber(session.region_id)} / dimension ${toNumber(session.dimension_id)}`
+      ? `region ${readNumber(session, 0, "regionId", "region_id")} / dimension ${readNumber(session, 0, "dimensionId", "dimension_id")}`
       : "session pending";
 
     this.walletLine.textContent = wallet
-      ? `wallet ${toNumber(wallet.balance)}`
+      ? `wallet ${readNumber(wallet, 0, "balance")}`
       : "wallet pending";
 
     this.containerList.replaceChildren(
@@ -88,10 +88,10 @@ export class InventoryHud {
           ? containers.map((container) => {
               const row = document.createElement("li");
               row.textContent =
-                `container ${toNumber(container.container_id)} ` +
-                `slots=${toNumber(container.slot_count)} ` +
-                `itemVol=${toNumber(container.item_pocket_volume)} ` +
-                `cargoVol=${toNumber(container.cargo_pocket_volume)}`;
+                `container ${readNumber(container, 0, "containerId", "container_id")} ` +
+                `slots=${readNumber(container, 0, "slotCount", "slot_count")} ` +
+                `itemVol=${readNumber(container, 0, "itemPocketVolume", "item_pocket_volume")} ` +
+                `cargoVol=${readNumber(container, 0, "cargoPocketVolume", "cargo_pocket_volume")}`;
               return row;
             })
           : [this.listItem("No inventory containers yet.")]
@@ -101,8 +101,10 @@ export class InventoryHud {
     const visibleSlots = [...slots]
       .sort(
         (left, right) =>
-          toNumber(left.container_id) - toNumber(right.container_id) ||
-          toNumber(left.slot_index) - toNumber(right.slot_index)
+          readNumber(left, 0, "containerId", "container_id") -
+            readNumber(right, 0, "containerId", "container_id") ||
+          readNumber(left, 0, "slotIndex", "slot_index") -
+            readNumber(right, 0, "slotIndex", "slot_index")
       )
       .slice(0, 10);
 
@@ -110,16 +112,18 @@ export class InventoryHud {
       ...(
         visibleSlots.length > 0
           ? visibleSlots.map((slot) => {
-              const item = itemByInstanceId.get(String(slot.item_instance_id));
+              const item = itemByInstanceId.get(
+                String(readField(slot, "itemInstanceId", "item_instance_id"))
+              );
               const row = document.createElement("li");
               row.textContent =
-                `c${toNumber(slot.container_id)}:` +
-                `${toNumber(slot.slot_index)} ` +
-                `${slot.locked ? "[locked] " : ""}` +
-                `item=${toText(slot.item_instance_id)} ` +
-                `qty=${toNumber(item?.quantity)} ` +
-                `def=${toNumber(item?.item_def_id)} ` +
-                `dur=${toNumber(item?.durability)}`;
+                `c${readNumber(slot, 0, "containerId", "container_id")}:` +
+                `${readNumber(slot, 0, "slotIndex", "slot_index")} ` +
+                `${readBoolean(slot, false, "locked") ? "[locked] " : ""}` +
+                `item=${toText(readField(slot, "itemInstanceId", "item_instance_id"))} ` +
+                `qty=${item ? readNumber(item, 0, "quantity") : 0} ` +
+                `def=${item ? readNumber(item, 0, "itemDefId", "item_def_id") : 0} ` +
+                `dur=${item ? readNumber(item, 0, "durability") : 0}`;
               return row;
             })
           : [this.listItem("No inventory slots yet.")]

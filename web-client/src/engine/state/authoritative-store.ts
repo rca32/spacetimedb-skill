@@ -1,3 +1,5 @@
+import { readField } from "../shared/row-access";
+
 export interface TableSnapshot {
   table: string;
   rowCount: number;
@@ -6,47 +8,46 @@ export interface TableSnapshot {
 type StoreListener = (tables: readonly TableSnapshot[]) => void;
 
 const PRIMARY_KEY_CANDIDATES = [
-  "chunk_key",
-  "request_key",
-  "identity",
-  "entity_id",
-  "npc_id",
-  "item_instance_id",
-  "container_id",
-  "message_id",
-  "guild_id",
-  "party_id",
-  "npc_id",
-  "claim_id",
-  "channel_id",
-  "slot_key",
-  "view_key"
+  ["chunkKey", "chunk_key"],
+  ["requestKey", "request_key"],
+  ["identity"],
+  ["entityId", "entity_id"],
+  ["npcId", "npc_id"],
+  ["itemInstanceId", "item_instance_id"],
+  ["containerId", "container_id"],
+  ["messageId", "message_id"],
+  ["guildId", "guild_id"],
+  ["partyId", "party_id"],
+  ["claimId", "claim_id"],
+  ["channelId", "channel_id"],
+  ["slotKey", "slot_key"],
+  ["viewKey", "view_key"]
 ] as const;
 
 function inferRowKey(row: Record<string, unknown>): string {
-  for (const candidate of PRIMARY_KEY_CANDIDATES) {
-    const value = row[candidate];
+  for (const candidates of PRIMARY_KEY_CANDIDATES) {
+    const value = readField(row, ...candidates);
     if (value != null) {
-      return `${candidate}:${String(value)}`;
+      return `${candidates[0]}:${String(value)}`;
     }
   }
 
   const chunkKey =
-    row.region_id != null &&
-    row.dimension_id != null &&
-    row.chunk_x != null &&
-    row.chunk_y != null;
+    readField(row, "regionId", "region_id") != null &&
+    readField(row, "dimensionId", "dimension_id") != null &&
+    readField(row, "chunkX", "chunk_x") != null &&
+    readField(row, "chunkY", "chunk_y") != null;
 
   if (chunkKey) {
-    return `chunk:${row.region_id}:${row.dimension_id}:${row.chunk_x}:${row.chunk_y}`;
+    return `chunk:${String(readField(row, "regionId", "region_id"))}:${String(readField(row, "dimensionId", "dimension_id"))}:${String(readField(row, "chunkX", "chunk_x"))}:${String(readField(row, "chunkY", "chunk_y"))}`;
   }
 
   const slotKey =
-    row.container_id != null &&
-    row.slot_index != null;
+    readField(row, "containerId", "container_id") != null &&
+    readField(row, "slotIndex", "slot_index") != null;
 
   if (slotKey) {
-    return `slot:${row.container_id}:${row.slot_index}`;
+    return `slot:${String(readField(row, "containerId", "container_id"))}:${String(readField(row, "slotIndex", "slot_index"))}`;
   }
 
   return JSON.stringify(row);

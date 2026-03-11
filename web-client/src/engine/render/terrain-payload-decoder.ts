@@ -1,3 +1,5 @@
+import { readField, readNumber } from "../shared/row-access";
+
 export interface DecodedTerrainCell {
   index: number;
   height: number;
@@ -25,12 +27,12 @@ function toByteArray(value: unknown): Uint8Array {
 }
 
 export function decodeTerrainPayload(row: Record<string, unknown>): DecodedTerrainChunk {
-  const version =
-    typeof row.cell_payload_version === "number" ? row.cell_payload_version : 0;
-  const declaredCellCount =
-    typeof row.cell_count === "number" ? row.cell_count : 0;
-  const inlinePayload = Array.isArray(row.cell_payload)
-    ? row.cell_payload.filter((item): item is number => typeof item === "number")
+  const version = readNumber(row, 0, "cellPayloadVersion", "cell_payload_version");
+  const declaredCellCount = readNumber(row, 0, "cellCount", "cell_count");
+  const inlinePayload = Array.isArray(readField(row, "cellPayload", "cell_payload"))
+    ? (readField(row, "cellPayload", "cell_payload") as unknown[]).filter(
+        (item): item is number => typeof item === "number"
+      )
     : null;
 
   if (inlinePayload && inlinePayload.length > 0) {
@@ -45,7 +47,7 @@ export function decodeTerrainPayload(row: Record<string, unknown>): DecodedTerra
     };
   }
 
-  const bytes = toByteArray(row.cell_payload_bytes);
+  const bytes = toByteArray(readField(row, "cellPayloadBytes", "cell_payload_bytes"));
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const cellCount = Math.min(
     declaredCellCount > 0 ? declaredCellCount : Math.floor(bytes.byteLength / 2),

@@ -1,6 +1,12 @@
 import type { EventLogStore } from "../state/event-log-store";
 import type { SpacetimeClient } from "./spacetime-client";
 
+const QUIET_REDUCERS = new Set([
+  "sync_client_frame",
+  "submit_motion_intent",
+  "ack_server_correction"
+]);
+
 function toReducerHandleName(reducerName: string): string {
   return reducerName.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase());
 }
@@ -24,7 +30,13 @@ export class ReducerGateway {
       throw new Error(`Reducer "${reducerName}" is not available on the current connection.`);
     }
 
-    this.eventLog.push("info", `reducer invoked: ${reducerName}`);
+    if (!QUIET_REDUCERS.has(reducerName)) {
+      this.eventLog.push("info", `reducer invoked: ${reducerName}`);
+    }
     return reducer(...args);
+  }
+
+  isConnected(): boolean {
+    return this.client.getConnection() != null;
   }
 }
