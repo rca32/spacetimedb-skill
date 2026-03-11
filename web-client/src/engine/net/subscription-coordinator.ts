@@ -112,6 +112,9 @@ function buildWorldGroup(
     return {
       name: WORLD_GROUP_NAME,
       tables: [
+        "biome_gen_def",
+        "resource_gen_def",
+        "building_def",
         "terrain_chunk_stream",
         "terrain_chunk_payload",
         "transform_state",
@@ -121,6 +124,9 @@ function buildWorldGroup(
         "npc_state_stream"
       ],
       queries: [
+        "SELECT * FROM biome_gen_def",
+        "SELECT * FROM resource_gen_def",
+        "SELECT * FROM building_def",
         `SELECT * FROM terrain_chunk_stream tc WHERE ${regionDimensionClause("tc")}`,
         `SELECT * FROM terrain_chunk_payload tcp WHERE ${regionDimensionClause("tcp")}`,
         `SELECT * FROM transform_state ts WHERE ${regionDimensionClause("ts")}`,
@@ -150,6 +156,9 @@ function buildWorldGroup(
   return {
     name: WORLD_GROUP_NAME,
     tables: [
+      "biome_gen_def",
+      "resource_gen_def",
+      "building_def",
       "terrain_chunk_stream",
       "terrain_chunk_payload",
       "transform_state",
@@ -159,6 +168,9 @@ function buildWorldGroup(
       "npc_state_stream"
     ],
     queries: [
+      "SELECT * FROM biome_gen_def",
+      "SELECT * FROM resource_gen_def",
+      "SELECT * FROM building_def",
       `SELECT * FROM terrain_chunk_stream tc WHERE ${regionDimensionClause("tc")} AND ${chunkBoundsClause("tc")}`,
       `SELECT * FROM terrain_chunk_payload tcp WHERE ${regionDimensionClause("tcp")} AND ${chunkBoundsClause("tcp")}`,
       `SELECT * FROM transform_state ts WHERE ${regionDimensionClause("ts")}`,

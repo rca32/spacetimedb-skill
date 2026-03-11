@@ -1,8 +1,20 @@
 import { Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
 
-import type { SeedAssetHandles } from "../assets/seed-asset-runtime";
+import type {
+  BuildingTextureGroup,
+  ResourceTextureGroup,
+  SeedAssetHandles,
+  TerrainTextureGroup
+} from "../assets/seed-asset-runtime";
 import type { MovementPredictionRuntime } from "../prediction/movement-prediction-runtime";
-import { readBoolean, readField, readNumber } from "../shared/row-access";
+import { findClaimCoverage, toClaimCoverage } from "../shared/claim-coverage";
+import {
+  normalizeIdentityHex,
+  readBoolean,
+  readField,
+  readNumber,
+  readString
+} from "../shared/row-access";
 import type { InteractionStore } from "../state/interaction-store";
 import type { AuthoritativeStore } from "../state/authoritative-store";
 import type { EventLogStore } from "../state/event-log-store";
@@ -11,6 +23,23 @@ import { decodeTerrainPayload } from "./terrain-payload-decoder";
 const CHUNK_SIZE = 96;
 const HEX_SIZE = 12;
 const PAYLOAD_GRID_COLUMNS = 8;
+const PREVIEW_REASON_NO_BUILD_PERMISSION = "no_build_permission_in_claim";
+
+interface WorldVisualMetadata {
+  terrainGroups: Map<number, TerrainTextureGroup>;
+  resourceGroups: Map<number, ResourceTextureGroup>;
+  buildingGroupsByDefId: Map<number, BuildingTextureGroup>;
+  buildingGroupsBySignature: Map<string, BuildingTextureGroup>;
+  buildingGroupsByRequiredItemDefId: Map<number, BuildingTextureGroup>;
+}
+
+const TERRAIN_NAME_MATCHERS: readonly (readonly [RegExp, TerrainTextureGroup])[] = [
+  [/\bocean\b|\bsea\b|\bcoast\b/, "ocean"],
+  [/\blake\b|\briver\b|\bwater\b|\bswamp\b|\bmarsh\b/, "lake"],
+  [/\bforest\b|\bwood\b|\bjungle\b/, "forest"],
+  [/\bdesert\b|\bdune\b|\bsand\b/, "desert"],
+  [/\btundra\b|\bsnow\b|\bice\b|\bfrost\b/, "tundra"]
+];
 
 function clearContainer(container: Container): void {
   const children = container.removeChildren();
@@ -96,66 +125,142 @@ function payloadCellColor(height: number, water: boolean): number {
   return 0xc5bf8f;
 }
 
-function pickTerrainTexture(
-  seedAssets: SeedAssetHandles,
-  row: Record<string, unknown>
-): Texture | undefined {
+function findGroupByName<T extends string>(
+  value: string,
+  matchers: readonly (readonly [RegExp, T])[],
+  fallback: T
+): T {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return fallback;
+  }
+
+  for (const [pattern, group] of matchers) {
+    if (pattern.test(normalized)) {
+      return group;
+    }
+  }
+
+  return fallback;
+}
+
+function toBuildingSignature(requiredItemDefId: number, buildRequired: number): string {
+  return `${requiredItemDefId}:${buildRequired}`;
+}
+
+function pickTerrainGroupFallback(row: Record<string, unknown>): TerrainTextureGroup {
   const biomeId = readNumber(row, 0, "biomeId", "biome_id");
-  const chunkX = readNumber(row, 0, "chunkX", "chunk_x");
-  const chunkY = readNumber(row, 0, "chunkY", "chunk_y");
-  const seed = readNumber(row, 0, "seed");
   const waterRatio = readNumber(
     row,
     0,
     "waterRatioPermille",
     "water_ratio_permille"
   );
-  const textureSeed = hashNumbers(chunkX, chunkY, biomeId, seed);
 
   if (waterRatio >= 820 || biomeId === 5) {
-    return pickFromPool(seedAssets.terrainTextures.ocean, textureSeed);
+    return "ocean";
   }
 
   if (waterRatio >= 350 || biomeId === 4) {
-    return pickFromPool(seedAssets.terrainTextures.lake, textureSeed);
+    return "lake";
   }
 
   switch (biomeId) {
     case 1:
-      return pickFromPool(seedAssets.terrainTextures.forest, textureSeed);
+      return "forest";
     case 2:
-      return pickFromPool(seedAssets.terrainTextures.desert, textureSeed);
+      return "desert";
     case 3:
-      return pickFromPool(seedAssets.terrainTextures.tundra, textureSeed);
+      return "tundra";
     default:
-      return pickFromPool(seedAssets.terrainTextures.plains, textureSeed);
+      return "plains";
   }
+}
+
+function pickResourceGroupFallback(row: Record<string, unknown>): ResourceTextureGroup {
+  switch (readNumber(row, 0, "resourceType", "resource_type")) {
+    case 1:
+      return "wood";
+    case 2:
+      return "ore";
+    case 3:
+    default:
+      return "fiber";
+  }
+}
+
+function pickBuildingGroupFallback(
+  requiredItemDefId: number,
+  buildRequired: number
+): BuildingTextureGroup {
+  return requiredItemDefId % 3 === 0 || buildRequired >= 12 ? "tower" : "house";
+}
+
+function pickTerrainTexture(
+  seedAssets: SeedAssetHandles,
+  row: Record<string, unknown>,
+  metadata: WorldVisualMetadata
+): Texture | undefined {
+  const biomeId = readNumber(row, 0, "biomeId", "biome_id");
+  const chunkX = readNumber(row, 0, "chunkX", "chunk_x");
+  const chunkY = readNumber(row, 0, "chunkY", "chunk_y");
+  const seed = readNumber(row, 0, "seed");
+  const textureSeed = hashNumbers(chunkX, chunkY, biomeId, seed);
+  const terrainGroup =
+    metadata.terrainGroups.get(biomeId) ?? pickTerrainGroupFallback(row);
+
+  return pickFromPool(seedAssets.terrainTextures[terrainGroup], textureSeed);
+}
+
+function classifyResourceGroupFromDef(row: Record<string, unknown>): ResourceTextureGroup {
+  const minWaterDepth = readNumber(row, 0, "minWaterDepth", "min_water_depth");
+  const maxWaterDepth = readNumber(row, 0, "maxWaterDepth", "max_water_depth");
+  const minElevation = readNumber(row, 0, "minElevation", "min_elevation");
+  const noiseThreshold = readNumber(
+    row,
+    0,
+    "noiseThresholdPermille",
+    "noise_threshold_permille"
+  );
+
+  if (minWaterDepth > 0 || maxWaterDepth > 0) {
+    return "fiber";
+  }
+
+  if (minElevation >= 10 || noiseThreshold >= 600) {
+    return "ore";
+  }
+
+  return "wood";
 }
 
 function pickResourceTexture(
   seedAssets: SeedAssetHandles,
-  row: Record<string, unknown>
+  row: Record<string, unknown>,
+  metadata: WorldVisualMetadata
 ): Texture | undefined {
   const resourceType = readNumber(row, 0, "resourceType", "resource_type");
   const entityId = readNumber(row, 0, "entityId", "entity_id");
   const clumpId = readNumber(row, 0, "clumpId", "clump_id");
   const depleted = readBoolean(row, false, "isDepleted", "is_depleted");
   const textureSeed = hashNumbers(entityId, clumpId, resourceType, depleted ? 1 : 0);
+  const resourceGroup =
+    metadata.resourceGroups.get(resourceType) ?? pickResourceGroupFallback(row);
 
-  switch (resourceType) {
-    case 1:
-      return pickFromPool(seedAssets.resourceTextures.wood, textureSeed);
-    case 2:
-      return pickFromPool(seedAssets.resourceTextures.ore, textureSeed);
-    case 3:
-    default:
-      return pickFromPool(seedAssets.resourceTextures.fiber, textureSeed);
-  }
+  return pickFromPool(seedAssets.resourceTextures[resourceGroup], textureSeed);
+}
+
+function classifyBuildingGroupFromDef(row: Record<string, unknown>): BuildingTextureGroup {
+  const footprintRadius = readNumber(row, 0, "footprintRadius", "footprint_radius");
+  const buildRequired = readNumber(row, 0, "buildRequired", "build_required");
+
+  return footprintRadius >= 2 || buildRequired >= 12 ? "tower" : "house";
 }
 
 function pickBuildingTexture(
   seedAssets: SeedAssetHandles,
-  row: Record<string, unknown>
+  row: Record<string, unknown>,
+  metadata: WorldVisualMetadata
 ): Texture | undefined {
   const entityId = readNumber(row, 0, "entityId", "entity_id");
   const state = readNumber(row, 0, "state");
@@ -173,19 +278,91 @@ function pickBuildingTexture(
     return pickFromPool(seedAssets.buildingTextures.site, textureSeed);
   }
 
-  return requiredItemDefId % 3 === 0 || required >= 12
-    ? pickFromPool(seedAssets.buildingTextures.tower, textureSeed)
-    : pickFromPool(seedAssets.buildingTextures.house, textureSeed);
+  const buildingGroup =
+    metadata.buildingGroupsBySignature.get(
+      toBuildingSignature(requiredItemDefId, required)
+    ) ??
+    metadata.buildingGroupsByRequiredItemDefId.get(requiredItemDefId) ??
+    pickBuildingGroupFallback(requiredItemDefId, required);
+
+  return pickFromPool(seedAssets.buildingTextures[buildingGroup], textureSeed);
 }
 
 function pickPreviewTexture(
   seedAssets: SeedAssetHandles,
-  buildingDefId: number
+  buildingDefId: number,
+  metadata: WorldVisualMetadata
 ): Texture | undefined {
   const textureSeed = hashNumbers(buildingDefId, buildingDefId * 17);
-  return buildingDefId % 3 === 0
-    ? pickFromPool(seedAssets.buildingTextures.tower, textureSeed)
-    : pickFromPool(seedAssets.buildingTextures.house, textureSeed);
+  const buildingGroup =
+    metadata.buildingGroupsByDefId.get(buildingDefId) ??
+    pickBuildingGroupFallback(buildingDefId, buildingDefId);
+
+  return pickFromPool(seedAssets.buildingTextures[buildingGroup], textureSeed);
+}
+
+function readWorldVisualMetadata(
+  authoritativeStore: AuthoritativeStore
+): WorldVisualMetadata {
+  const terrainGroups = new Map<number, TerrainTextureGroup>();
+  for (const row of authoritativeStore.getRows("biome_gen_def")) {
+    const biomeId = readNumber(row, -1, "biomeId", "biome_id");
+    if (biomeId < 0) {
+      continue;
+    }
+
+    const biomeName = readString(row, "", "name");
+    const terrainGroup = findGroupByName(
+      biomeName,
+      TERRAIN_NAME_MATCHERS,
+      "plains"
+    );
+    terrainGroups.set(biomeId, terrainGroup);
+  }
+
+  const resourceGroups = new Map<number, ResourceTextureGroup>();
+  for (const row of authoritativeStore.getRows("resource_gen_def")) {
+    const resourceType = readNumber(row, -1, "resourceType", "resource_type");
+    if (resourceType < 0) {
+      continue;
+    }
+
+    resourceGroups.set(resourceType, classifyResourceGroupFromDef(row));
+  }
+
+  const buildingGroupsByDefId = new Map<number, BuildingTextureGroup>();
+  const buildingGroupsBySignature = new Map<string, BuildingTextureGroup>();
+  const buildingGroupsByRequiredItemDefId = new Map<number, BuildingTextureGroup>();
+  for (const row of authoritativeStore.getRows("building_def")) {
+    const buildingDefId = readNumber(row, -1, "buildingDefId", "building_def_id");
+    const requiredItemDefId = readNumber(
+      row,
+      -1,
+      "requiredItemDefId",
+      "required_item_def_id"
+    );
+    const buildRequired = readNumber(row, 0, "buildRequired", "build_required");
+    const buildingGroup = classifyBuildingGroupFromDef(row);
+
+    if (buildingDefId >= 0) {
+      buildingGroupsByDefId.set(buildingDefId, buildingGroup);
+    }
+    if (requiredItemDefId >= 0) {
+      buildingGroupsByRequiredItemDefId.set(requiredItemDefId, buildingGroup);
+      buildingGroupsBySignature.set(
+        toBuildingSignature(requiredItemDefId, buildRequired),
+        buildingGroup
+      );
+    }
+  }
+
+  return {
+    terrainGroups,
+    resourceGroups,
+    buildingGroupsByDefId,
+    buildingGroupsBySignature,
+    buildingGroupsByRequiredItemDefId
+  };
 }
 
 export class WorldRenderer {
@@ -231,7 +408,23 @@ export class WorldRenderer {
     const transformRows = this.authoritativeStore.getRows("transform_state");
     const resourceRows = this.authoritativeStore.getRows("resource_node");
     const buildingRows = this.authoritativeStore.getRows("building_state");
+    const claimRows = this.authoritativeStore.getRows("claim_state");
     const npcRows = this.authoritativeStore.getRows("npc_state_stream");
+    const visualMetadata = readWorldVisualMetadata(this.authoritativeStore);
+    const localIdentityHex = normalizeIdentityHex(
+      this.authoritativeStore.getRows("player_session_view")[0]?.identity
+    );
+    const preview = this.interactionStore.getBuildingPreview();
+    const previewClaim =
+      preview.enabled && preview.regionId != null && preview.dimensionId != null
+        ? findClaimCoverage(
+            claimRows,
+            preview.regionId,
+            preview.dimensionId,
+            preview.hexX,
+            preview.hexZ
+          )
+        : null;
 
     const payloadByChunk = new Map<string, number>();
     const decodedPayloadByChunk = new Map<string, ReturnType<typeof decodeTerrainPayload>>();
@@ -258,7 +451,7 @@ export class WorldRenderer {
       const decodedPayload = decodedPayloadByChunk.get(chunkKey) ?? null;
 
       const texturedTile = createSeedSprite(
-        pickTerrainTexture(this.seedAssets, row),
+        pickTerrainTexture(this.seedAssets, row, visualMetadata),
         x,
         y,
         CHUNK_SIZE - 4,
@@ -321,7 +514,7 @@ export class WorldRenderer {
       const depleted = readBoolean(row, false, "isDepleted", "is_depleted");
 
       const nodeSprite = createSeedSprite(
-        pickResourceTexture(this.seedAssets, row),
+        pickResourceTexture(this.seedAssets, row, visualMetadata),
         x + 24,
         y + 24,
         20,
@@ -353,7 +546,7 @@ export class WorldRenderer {
       const required = readNumber(row, 0, "buildRequired", "build_required");
 
       const buildingSprite = createSeedSprite(
-        pickBuildingTexture(this.seedAssets, row),
+        pickBuildingTexture(this.seedAssets, row, visualMetadata),
         x + 22,
         y + 22,
         28,
@@ -375,6 +568,55 @@ export class WorldRenderer {
       });
       label.position.set(x + 36, y + 14);
       this.overlayRoot.addChild(label);
+    }
+
+    for (const row of claimRows) {
+      const claim = toClaimCoverage(row);
+      const ownsClaim =
+        claim.ownerIdentityHex != null && claim.ownerIdentityHex === localIdentityHex;
+      const focusedClaim = previewClaim?.claimId === claim.claimId;
+      const blockedClaim =
+        focusedClaim &&
+        preview.reasonCode === PREVIEW_REASON_NO_BUILD_PERMISSION &&
+        !ownsClaim;
+      const claimColor = blockedClaim
+        ? 0xff6f7c
+        : ownsClaim
+          ? 0x5fd9a6
+          : focusedClaim
+            ? 0xffd36f
+            : 0x6aa9d8;
+
+      const claimGraphic = new Graphics()
+        .circle(
+          claim.centerX * HEX_SIZE,
+          claim.centerZ * HEX_SIZE,
+          Math.max(claim.radius * HEX_SIZE, 8)
+        )
+        .fill({ color: claimColor, alpha: focusedClaim ? 0.1 : 0.05 })
+        .stroke({
+          width: focusedClaim ? 2.4 : 1.25,
+          color: claimColor,
+          alpha: focusedClaim ? 0.85 : 0.38
+        });
+      this.overlayRoot.addChild(claimGraphic);
+
+      const centerMarker = new Graphics()
+        .circle(claim.centerX * HEX_SIZE, claim.centerZ * HEX_SIZE, focusedClaim ? 4 : 3)
+        .fill({ color: claimColor, alpha: 0.95 });
+      this.overlayRoot.addChild(centerMarker);
+
+      if (focusedClaim) {
+        const claimLabel = new Text({
+          text: `claim ${claim.claimId} r${claim.radius} ${ownsClaim ? "owner" : blockedClaim ? "blocked" : "foreign"}`,
+          style: { fill: 0xf4fbff, fontSize: 10 }
+        });
+        claimLabel.position.set(
+          claim.centerX * HEX_SIZE + 10,
+          claim.centerZ * HEX_SIZE - Math.max(claim.radius * HEX_SIZE, 8) - 14
+        );
+        this.overlayRoot.addChild(claimLabel);
+      }
     }
 
     const npcFallbackRows =
@@ -433,12 +675,11 @@ export class WorldRenderer {
       }
     }
 
-    const preview = this.interactionStore.getBuildingPreview();
     if (preview.enabled) {
       const x = preview.hexX * HEX_SIZE;
       const y = preview.hexZ * HEX_SIZE;
       const previewSprite = createSeedSprite(
-        pickPreviewTexture(this.seedAssets, preview.buildingDefId),
+        pickPreviewTexture(this.seedAssets, preview.buildingDefId, visualMetadata),
         x + 20,
         y + 20,
         28,
@@ -498,6 +739,7 @@ export class WorldRenderer {
       chunkFallbackRows.length,
       resourceRows.length,
       buildingRows.length,
+      claimRows.length,
       npcFallbackRows.length,
       transformRows.length,
       preview.enabled ? 1 : 0,
@@ -508,7 +750,7 @@ export class WorldRenderer {
       this.lastRenderSummary = summary;
       this.eventLog.push(
         "info",
-        `world renderer sync: chunks=${chunkFallbackRows.length}, resources=${resourceRows.length}, buildings=${buildingRows.length}, npcs=${npcFallbackRows.length}, transforms=${transformRows.length}`
+        `world renderer sync: chunks=${chunkFallbackRows.length}, resources=${resourceRows.length}, buildings=${buildingRows.length}, claims=${claimRows.length}, npcs=${npcFallbackRows.length}, transforms=${transformRows.length}`
       );
     }
   }

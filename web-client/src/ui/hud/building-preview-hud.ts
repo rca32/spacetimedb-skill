@@ -1,8 +1,14 @@
 import type { ReducerGateway } from "../../engine/net/reducer-gateway";
+import { findClaimCoverage } from "../../engine/shared/claim-coverage";
 import type { AuthoritativeStore } from "../../engine/state/authoritative-store";
 import type { EventLogStore } from "../../engine/state/event-log-store";
 import type { InteractionStore } from "../../engine/state/interaction-store";
-import { readField, readNumber, readString } from "../../engine/shared/row-access";
+import {
+  normalizeIdentityHex,
+  readField,
+  readNumber,
+  readString
+} from "../../engine/shared/row-access";
 
 const HEX_RENDER_SCALE = 12;
 
@@ -70,6 +76,7 @@ export class BuildingPreviewHud {
     actions.className = "hud-actions";
     actions.append(
       this.button("anchor self", () => this.anchorSelf()),
+      this.button("pointer target", () => this.enablePointerTargeting()),
       this.button("validate", () => this.validatePreview()),
       this.button("place", () => this.placePreview()),
       this.button("cancel", () => this.cancelPreview()),
@@ -105,6 +112,18 @@ export class BuildingPreviewHud {
   private render(): void {
     const preview = this.interactionStore.getBuildingPreview();
     const session = this.readSessionContext();
+    const claim = this.readPreviewClaim();
+    const localIdentityHex = this.readLocalIdentityHex();
+    const ownsClaim =
+      claim != null && claim.ownerIdentityHex != null && claim.ownerIdentityHex === localIdentityHex;
+    const permissionSummary =
+      claim == null
+        ? "open terrain"
+        : preview.reasonCode === "no_build_permission_in_claim"
+          ? "blocked by claim permission"
+          : ownsClaim
+            ? "claim owner"
+            : "claim visible, validate permission";
 
     this.defInput.value = String(preview.buildingDefId);
     this.hexXInput.value = String(preview.hexX);
@@ -112,7 +131,7 @@ export class BuildingPreviewHud {
     this.facingInput.value = String(preview.facing);
 
     this.statusLine.textContent = preview.enabled
-      ? `preview ${preview.isValid == null ? "pending" : preview.isValid ? "valid" : "invalid"}`
+      ? `preview ${preview.targeting ? "pointer-targeting" : preview.isValid == null ? "pending" : preview.isValid ? "valid" : "invalid"}`
       : "preview idle";
 
     this.sessionLine.textContent = session
@@ -123,8 +142,33 @@ export class BuildingPreviewHud {
       this.item(`request ${preview.requestId ?? "-"}`),
       this.item(`reason ${preview.reasonCode}`),
       this.item(`target ${preview.hexX}, ${preview.hexZ}`),
-      this.item(`targeting ${preview.targeting}`)
+      this.item(`targeting ${preview.targeting}`),
+      this.item(`claim ${claim ? `${claim.claimId} r${claim.radius}` : "-"}`),
+      this.item(`permission ${permissionSummary}`)
     );
+  }
+
+  private enablePointerTargeting(): void {
+    const session = this.readSessionContext();
+    if (!session) {
+      this.eventLog.push("warn", "pointer targeting requires an active session row");
+      return;
+    }
+
+    const preview = this.interactionStore.getBuildingPreview();
+    if (!preview.enabled) {
+      this.anchorSelf();
+      return;
+    }
+
+    this.interactionStore.updateBuildingPreview({
+      enabled: true,
+      targeting: true,
+      regionId: session.regionId,
+      dimensionId: session.dimensionId,
+      isValid: null,
+      reasonCode: "pointer_targeting"
+    });
   }
 
   private syncFeedbackIntoPreview(): void {
@@ -307,6 +351,31 @@ export class BuildingPreviewHud {
       regionId: readNumber(session, 0, "regionId", "region_id"),
       dimensionId: readNumber(session, 0, "dimensionId", "dimension_id")
     };
+  }
+
+  private readLocalIdentityHex(): string | null {
+    return normalizeIdentityHex(
+      this.authoritativeStore.getRows("player_session_view")[0]?.identity
+    );
+  }
+
+  private readPreviewClaim() {
+    const preview = this.interactionStore.getBuildingPreview();
+    if (
+      !preview.enabled ||
+      preview.regionId == null ||
+      preview.dimensionId == null
+    ) {
+      return null;
+    }
+
+    return findClaimCoverage(
+      this.authoritativeStore.getRows("claim_state"),
+      preview.regionId,
+      preview.dimensionId,
+      preview.hexX,
+      preview.hexZ
+    );
   }
 
   private readSelfHexAnchor(): { hexX: number; hexZ: number } | null {

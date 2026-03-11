@@ -2,18 +2,20 @@ import { Assets, Texture } from "pixi.js";
 
 import type { EventLogStore } from "../state/event-log-store";
 
-type TerrainTextureGroup =
+export type TerrainTextureGroup =
   | "plains"
   | "forest"
   | "desert"
   | "tundra"
   | "lake"
   | "ocean";
+export type BuildingTextureGroup = "site" | "house" | "tower";
+export type ResourceTextureGroup = "wood" | "ore" | "fiber";
 
 export interface SeedAssetHandles {
   terrainTextures: Record<TerrainTextureGroup, Texture[]>;
-  buildingTextures: Record<"site" | "house" | "tower", Texture[]>;
-  resourceTextures: Record<"wood" | "ore" | "fiber", Texture[]>;
+  buildingTextures: Record<BuildingTextureGroup, Texture[]>;
+  resourceTextures: Record<ResourceTextureGroup, Texture[]>;
   actorTextures: Record<"player" | "npc" | "npcTravel", Texture>;
   promptTexture?: Texture;
 }

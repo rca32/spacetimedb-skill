@@ -17,6 +17,8 @@ import { MovementPredictionRuntime } from "../prediction/movement-prediction-run
 import { MovementHud } from "../../ui/hud/movement-hud";
 import { SeedAssetRuntime } from "../assets/seed-asset-runtime";
 
+const HEX_RENDER_SCALE = 12;
+
 interface GameRuntimeOptions {
   env: EnvConfig;
   versionGate: VersionGateResult;
@@ -94,6 +96,7 @@ export class GameRuntime {
       this.interactionStore
     );
     this.movementPrediction.attachInputListeners(window);
+    this.attachWorldPointerControls(pixi.app.canvas);
     const seedAssets = await this.seedAssetRuntime.preload();
     worldRenderer.setSeedAssets(seedAssets);
 
@@ -192,5 +195,75 @@ export class GameRuntime {
 
   getReducerGateway(): ReducerGateway {
     return this.reducerGateway;
+  }
+
+  private attachWorldPointerControls(canvas: HTMLCanvasElement): void {
+    const resolveHexFromPointer = (event: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const localX = event.clientX - rect.left;
+      const localY = event.clientY - rect.top;
+
+      if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) {
+        return null;
+      }
+
+      return {
+        hexX: Math.round(localX / HEX_RENDER_SCALE),
+        hexZ: Math.round(localY / HEX_RENDER_SCALE)
+      };
+    };
+
+    const syncCursor = () => {
+      const preview = this.interactionStore.getBuildingPreview();
+      canvas.style.cursor = preview.enabled && preview.targeting ? "crosshair" : "default";
+    };
+
+    canvas.addEventListener("pointermove", (event) => {
+      const preview = this.interactionStore.getBuildingPreview();
+      if (!preview.enabled || !preview.targeting) {
+        return;
+      }
+
+      const next = resolveHexFromPointer(event);
+      if (!next || (next.hexX === preview.hexX && next.hexZ === preview.hexZ)) {
+        return;
+      }
+
+      this.interactionStore.updateBuildingPreview({
+        hexX: next.hexX,
+        hexZ: next.hexZ,
+        isValid: null,
+        reasonCode: "pointer_targeting"
+      });
+    });
+
+    canvas.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      const preview = this.interactionStore.getBuildingPreview();
+      if (!preview.enabled) {
+        return;
+      }
+
+      const next = resolveHexFromPointer(event);
+      if (!next) {
+        return;
+      }
+
+      this.interactionStore.updateBuildingPreview({
+        hexX: next.hexX,
+        hexZ: next.hexZ,
+        targeting: false,
+        isValid: null,
+        reasonCode: "pointer_picked"
+      });
+    });
+
+    this.interactionStore.subscribe(() => {
+      syncCursor();
+    });
+    syncCursor();
   }
 }
