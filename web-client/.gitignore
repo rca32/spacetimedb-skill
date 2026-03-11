@@ -1,0 +1,4 @@
+node_modules
+dist
+src/module_bindings/*.ts
+!src/module_bindings/index.ts

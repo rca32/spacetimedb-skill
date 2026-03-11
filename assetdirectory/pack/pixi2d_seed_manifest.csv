@@ -1,0 +1,7 @@
+asset_name,category,license,source,zip_path,extracted_path,intended_use
+ui-pack,ui,CC0,https://kenney.nl/assets/ui-pack,pack/kenney_zips/ui-pack.zip,pack/kenney/ui-pack,"generic HUD frame, button, icon panel"
+ui-pack-rpg-expansion,ui,CC0,https://kenney.nl/assets/ui-pack-rpg-expansion,pack/kenney_zips/ui-pack-rpg-expansion.zip,pack/kenney/ui-pack-rpg-expansion,"RPG HUD frame, slot, fantasy accent"
+input-prompts,input,CC0,https://kenney.nl/assets/input-prompts,pack/kenney_zips/input-prompts-redownload.zip,pack/kenney/input-prompts/package,"keyboard and gamepad prompt icon atlas"
+top-down-shooter,world-entity,CC0,https://kenney.nl/assets/top-down-shooter,pack/kenney_zips/top-down-shooter-redownload.zip,pack/kenney/top-down-shooter/package,"player and NPC placeholder, projectile, combat prototype"
+tiny-town,world-tile,CC0,https://kenney.nl/assets/tiny-town,pack/kenney_zips/tiny-town.zip,pack/kenney/tiny-town,"town tilemap, interior blockout, housing prototype"
+impact-sounds,audio,CC0,https://kenney.nl/assets/impact-sounds,pack/kenney_zips/impact-sounds.zip,pack/kenney/impact-sounds,"hit, collision, impact SFX"

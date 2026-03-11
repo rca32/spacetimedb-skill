@@ -1,0 +1,21 @@
+{
+  "name": "@stitch/web-client",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "spacetime:generate": "bash ./scripts/generate-bindings.sh",
+    "assets:stage": "bash ./scripts/stage-seed-assets.sh"
+  },
+  "dependencies": {
+    "pixi.js": "^8",
+    "spacetimedb": "^1"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vite": "^6"
+  }
+}
