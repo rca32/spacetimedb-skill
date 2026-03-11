@@ -15,10 +15,15 @@ export interface TableHandleLike {
   onUpdate?: (callback: (ctx: unknown, oldRow: unknown, newRow: unknown) => void) => void;
 }
 
+export interface SubscriptionHandleLike {
+  unsubscribe?: () => void;
+  isEnded?: () => boolean;
+}
+
 export interface SubscriptionBuilderLike {
   onApplied(callback: (ctx: { db: Record<string, unknown> }) => void): SubscriptionBuilderLike;
   onError(callback: (ctx: unknown, error: Error) => void): SubscriptionBuilderLike;
-  subscribe(queries: string | string[]): unknown;
+  subscribe(queries: string | string[]): SubscriptionHandleLike;
 }
 
 export interface DbConnectionLike {

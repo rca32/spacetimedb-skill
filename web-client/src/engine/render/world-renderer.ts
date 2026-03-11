@@ -1,4 +1,4 @@
-import { Container, Graphics, Text } from "pixi.js";
+import { Container, Graphics, Sprite, Text } from "pixi.js";
 
 import type { AuthoritativeStore } from "../state/authoritative-store";
 import type { EventLogStore } from "../state/event-log-store";
@@ -16,6 +16,26 @@ function clearContainer(container: Container): void {
   for (const child of children) {
     child.destroy();
   }
+}
+
+function createSeedSprite(
+  texture: SeedAssetHandles[keyof SeedAssetHandles] | undefined,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  anchor = 0.5
+): Sprite | null {
+  if (!texture) {
+    return null;
+  }
+
+  const sprite = new Sprite(texture);
+  sprite.anchor.set(anchor);
+  sprite.position.set(x, y);
+  sprite.width = width;
+  sprite.height = height;
+  return sprite;
 }
 
 function biomeColor(biomeId: number): number {
@@ -103,7 +123,7 @@ export class WorldRenderer {
     const transformRows = this.authoritativeStore.getRows("transform_state");
     const resourceRows = this.authoritativeStore.getRows("resource_node");
     const buildingRows = this.authoritativeStore.getRows("building_state");
-    const npcRows = this.authoritativeStore.getRows("npc_state");
+    const npcRows = this.authoritativeStore.getRows("npc_state_stream");
 
     const payloadByChunk = new Map<string, number>();
     const decodedPayloadByChunk = new Map<string, ReturnType<typeof decodeTerrainPayload>>();
@@ -131,10 +151,31 @@ export class WorldRenderer {
       const decodedPayload =
         decodedPayloadByChunk.get(chunkKey) ?? null;
 
-      const tile = new Graphics()
-        .rect(x, y, CHUNK_SIZE - 4, CHUNK_SIZE - 4)
-        .fill({ color, alpha: 0.85 })
-        .stroke({ width: 2, color: 0xb2d9f7, alpha: 0.18 });
+      const texturedTile = createSeedSprite(
+        this.seedAssets.terrainTexture,
+        x,
+        y,
+        CHUNK_SIZE - 4,
+        CHUNK_SIZE - 4,
+        0
+      );
+      if (texturedTile) {
+        texturedTile.tint = color;
+        texturedTile.alpha = 0.88;
+        this.worldRoot.addChild(texturedTile);
+      }
+
+      const tile = new Graphics();
+      if (!texturedTile) {
+        tile
+          .rect(x, y, CHUNK_SIZE - 4, CHUNK_SIZE - 4)
+          .fill({ color, alpha: 0.85 })
+          .stroke({ width: 2, color: 0xb2d9f7, alpha: 0.18 });
+      } else {
+        tile
+          .rect(x, y, CHUNK_SIZE - 4, CHUNK_SIZE - 4)
+          .stroke({ width: 2, color: 0xb2d9f7, alpha: 0.18 });
+      }
 
       const label = new Text({
         text: toChunkLabel(row, payloadBytes),
@@ -144,7 +185,6 @@ export class WorldRenderer {
         }
       });
       label.position.set(x + 8, y + 8);
-
       this.worldRoot.addChild(tile, label);
 
       if (decodedPayload && decodedPayload.cells.length > 0) {
@@ -182,16 +222,28 @@ export class WorldRenderer {
         readNumber(row, 0, "hexZ", "hex_z") * HEX_SIZE;
       const amount = readNumber(row, 0, "amount");
 
-      const node = new Graphics()
-        .circle(x + 24, y + 24, 6)
-        .fill({ color: 0x77e39c, alpha: 0.9 });
+      const nodeSprite = createSeedSprite(
+        this.seedAssets.resourceTexture,
+        x + 24,
+        y + 24,
+        20,
+        20
+      );
+      if (nodeSprite) {
+        this.overlayRoot.addChild(nodeSprite);
+      } else {
+        const node = new Graphics()
+          .circle(x + 24, y + 24, 6)
+          .fill({ color: 0x77e39c, alpha: 0.9 });
+        this.overlayRoot.addChild(node);
+      }
 
       const label = new Text({
         text: `R ${amount}`,
         style: { fill: 0xcdf8dc, fontSize: 10 }
       });
       label.position.set(x + 32, y + 18);
-      this.overlayRoot.addChild(node, label);
+      this.overlayRoot.addChild(label);
     }
 
     for (const row of buildingRows) {
@@ -200,49 +252,75 @@ export class WorldRenderer {
       const progress = readNumber(row, 0, "buildProgress", "build_progress");
       const required = readNumber(row, 0, "buildRequired", "build_required");
 
-      const building = new Graphics()
-        .roundRect(x + 12, y + 12, 20, 20, 5)
-        .fill({ color: 0xd2a15e, alpha: 0.92 });
+      const buildingSprite = createSeedSprite(
+        this.seedAssets.buildingTexture,
+        x + 22,
+        y + 22,
+        28,
+        28
+      );
+      if (buildingSprite) {
+        this.overlayRoot.addChild(buildingSprite);
+      } else {
+        const building = new Graphics()
+          .roundRect(x + 12, y + 12, 20, 20, 5)
+          .fill({ color: 0xd2a15e, alpha: 0.92 });
+        this.overlayRoot.addChild(building);
+      }
 
       const label = new Text({
         text: `B ${progress}/${required}`,
         style: { fill: 0xffe5bb, fontSize: 10 }
       });
       label.position.set(x + 36, y + 14);
-      this.overlayRoot.addChild(building, label);
+      this.overlayRoot.addChild(label);
     }
 
-    for (const row of npcRows) {
+    const npcFallbackRows =
+      npcRows.length > 0 ? npcRows : this.authoritativeStore.getRows("npc_state");
+
+    for (const row of npcFallbackRows) {
       const x = readNumber(row, 0, "hexX", "hex_x") * HEX_SIZE;
       const y = readNumber(row, 0, "hexZ", "hex_z") * HEX_SIZE;
       const traveling = readBoolean(row, false, "traveling");
 
-      const npc = new Graphics()
-        .circle(x + 18, y + 18, 8)
-        .fill({ color: traveling ? 0xffd36f : 0xff88b5, alpha: 0.95 });
+      const npcSprite = createSeedSprite(
+        this.seedAssets.npcTexture,
+        x + 18,
+        y + 18,
+        traveling ? 22 : 20,
+        traveling ? 28 : 26
+      );
+      if (npcSprite) {
+        npcSprite.tint = traveling ? 0xffd36f : 0xffffff;
+        this.overlayRoot.addChild(npcSprite);
+      } else {
+        const npc = new Graphics()
+          .circle(x + 18, y + 18, 8)
+          .fill({ color: traveling ? 0xffd36f : 0xff88b5, alpha: 0.95 });
+        this.overlayRoot.addChild(npc);
+      }
 
       const label = new Text({
         text: `NPC ${readNumber(row, 0, "npcId", "npc_id")}`,
         style: { fill: 0xffebf3, fontSize: 10 }
       });
       label.position.set(x + 30, y + 12);
-      this.overlayRoot.addChild(npc, label);
+      this.overlayRoot.addChild(label);
     }
 
     for (const row of transformRows) {
       const [x, , z] = toVector3(row.position);
-      if (this.seedAssets.worldSprite) {
-        const actor = this.seedAssets.worldSprite.clone();
-        actor.position.set(x, z);
-        actor.scale.set(0.32);
+      const actor = createSeedSprite(this.seedAssets.actorTexture, x, z, 26, 34);
+      if (actor) {
         this.overlayRoot.addChild(actor);
       } else {
-        const actor = new Graphics()
+        const fallbackActor = new Graphics()
           .circle(x, z, 7)
           .fill({ color: 0x8bd8ff, alpha: 0.95 })
           .stroke({ width: 2, color: 0xeaf9ff, alpha: 0.45 });
 
-        this.overlayRoot.addChild(actor);
+        this.overlayRoot.addChild(fallbackActor);
       }
     }
 
@@ -253,10 +331,14 @@ export class WorldRenderer {
       .stroke({ width: 2, color: 0xffa200, alpha: 0.45 });
     this.overlayRoot.addChild(predictedMarker);
 
-    if (this.seedAssets.promptSprite) {
-      const prompt = this.seedAssets.promptSprite.clone();
-      prompt.position.set(movementState.predicted.x + 24, movementState.predicted.z - 18);
-      prompt.scale.set(0.18);
+    const prompt = createSeedSprite(
+      this.seedAssets.promptTexture,
+      movementState.predicted.x + 24,
+      movementState.predicted.z - 18,
+      42,
+      42
+    );
+    if (prompt) {
       this.overlayRoot.addChild(prompt);
     }
 
@@ -264,12 +346,12 @@ export class WorldRenderer {
       chunkFallbackRows.length > 0 ||
       resourceRows.length > 0 ||
       buildingRows.length > 0 ||
-      npcRows.length > 0 ||
+      npcFallbackRows.length > 0 ||
       transformRows.length > 0
     ) {
       this.eventLog.push(
         "info",
-        `world renderer sync: chunks=${chunkFallbackRows.length}, resources=${resourceRows.length}, buildings=${buildingRows.length}, npcs=${npcRows.length}, transforms=${transformRows.length}`
+        `world renderer sync: chunks=${chunkFallbackRows.length}, resources=${resourceRows.length}, buildings=${buildingRows.length}, npcs=${npcFallbackRows.length}, transforms=${transformRows.length}`
       );
     }
   }
