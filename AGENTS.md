@@ -6,6 +6,7 @@
 - [BitCraftPublicDoc ↔ BitCraftPublic/BitCraftServer 관계 (참고 수준)](#bitcraftpublicdoc--bitcraftpublicbitcraftserver-관계-참고-수준)
 - [DESIGN 문서](#design-문서)
 - [Client Development Environment](#client-development-environment)
+- [웹 디버깅/테스트 규칙](#웹-디버깅테스트-규칙)
 - [파일 인코딩/BOM 주의](#파일-인코딩bom-주의)
 - [SpacetimeDB 작업 규칙](#spacetimedb-작업-규칙)
 - [assetdirectory 안내](#assetdirectory-안내)
@@ -25,6 +26,15 @@
 
 ## Client Development Environment
 - Client 개발 환경은 `bun` 기반이며, 클라이언트 코드 작성은 `TypeScript`를 사용한다.
+
+## 웹 디버깅/테스트 규칙
+- 웹 페이지를 열고 조작해야 하는 디버깅/테스트 작업은 기본적으로 `agent-browser` 스킬을 사용한다.
+- 다음 작업은 `agent-browser`를 우선 사용한다.
+  - 웹 화면 열기/탐색
+  - DOM 상호작용(클릭, 입력, 스크롤)
+  - 스크린샷/디버그 로그 확인
+  - 테스트 시 상태 변화 검증(동작 전/후 비교)
+- `agent-browser` 미설치 시 또는 비정상 동작 시 대체 도구 사용 전, 우선 스킬 동작 가능 여부를 점검한다.
 
 ## 환경 해석 규칙
 - 환경 컨텍스트에 `shell: powershell`이 주어지면 **Windows 환경으로 인식**한다.
