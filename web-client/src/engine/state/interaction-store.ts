@@ -43,19 +43,38 @@ export class InteractionStore {
   }
 
   updateBuildingPreview(patch: Partial<BuildingPreviewState>): void {
-    this.buildingPreview = {
+    const next = {
       ...this.buildingPreview,
       ...patch
     };
+    const changed = Object.keys(next).some((key) => {
+      const typedKey = key as keyof BuildingPreviewState;
+      return next[typedKey] !== this.buildingPreview[typedKey];
+    });
+
+    if (!changed) {
+      return;
+    }
+
+    this.buildingPreview = next;
     this.emit();
   }
 
-  beginPreview(regionId: number, dimensionId: number): void {
+  beginPreview(
+    regionId: number,
+    dimensionId: number,
+    hexX = 0,
+    hexZ = 0,
+    buildingDefId = this.buildingPreview.buildingDefId
+  ): void {
     this.updateBuildingPreview({
       enabled: true,
       targeting: true,
       regionId,
       dimensionId,
+      hexX,
+      hexZ,
+      buildingDefId,
       isValid: null,
       reasonCode: "targeting"
     });

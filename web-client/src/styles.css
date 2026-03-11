@@ -58,6 +58,7 @@ body {
   border-radius: 18px;
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
   padding: 16px 18px;
+  pointer-events: auto;
 }
 
 .debug-card h1,
@@ -133,6 +134,133 @@ body {
   line-height: 1.45;
 }
 
+.hud-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.hud-field {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8bb5d1;
+}
+
+.hud-input,
+.hud-select,
+.hud-button {
+  border: 1px solid rgba(153, 202, 255, 0.22);
+  border-radius: 12px;
+  background: rgba(9, 19, 31, 0.82);
+  color: #edf7fd;
+  font: inherit;
+  pointer-events: auto;
+}
+
+.hud-input,
+.hud-select {
+  padding: 8px 10px;
+}
+
+.hud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.hud-button {
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.hud-button:hover {
+  border-color: rgba(153, 202, 255, 0.45);
+  background: rgba(19, 38, 61, 0.92);
+}
+
+.inventory-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-group {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inventory-slot {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-height: 76px;
+  padding: 10px 8px;
+  border: 1px solid rgba(153, 202, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(5, 13, 22, 0.82);
+  color: #d8ebf7;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.inventory-slot.is-filled {
+  border-color: rgba(125, 209, 157, 0.32);
+  background: rgba(14, 29, 23, 0.88);
+}
+
+.inventory-slot.is-source {
+  outline: 2px solid rgba(255, 211, 111, 0.85);
+}
+
+.inventory-slot.is-locked {
+  border-style: dashed;
+  color: #8a9ead;
+  cursor: not-allowed;
+}
+
+.inventory-slot-index {
+  color: #88abc5;
+  font-size: 11px;
+}
+
+.inventory-slot small {
+  color: #9db8cb;
+}
+
+.hud-empty {
+  border: 1px dashed rgba(153, 202, 255, 0.2);
+  border-radius: 14px;
+  padding: 12px;
+  color: #aac5d8;
+  font-size: 12px;
+}
+
+.drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  pointer-events: none;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 211, 111, 0.92);
+  color: #152433;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
 @media (max-width: 900px) {
   .hud-host {
     flex-direction: column;
@@ -142,5 +270,10 @@ body {
 
   .debug-card {
     width: 100%;
+  }
+
+  .hud-grid,
+  .inventory-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

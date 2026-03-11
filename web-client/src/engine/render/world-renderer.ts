@@ -39,6 +39,23 @@ function createSeedSprite(
   return sprite;
 }
 
+function hashNumbers(...values: number[]): number {
+  let hash = 2166136261;
+  for (const value of values) {
+    hash ^= Math.trunc(value);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function pickFromPool(pool: Texture[] | undefined, seed: number): Texture | undefined {
+  if (!pool || pool.length === 0) {
+    return undefined;
+  }
+
+  return pool[seed % pool.length];
+}
+
 function toVector3(value: unknown): [number, number, number] {
   if (Array.isArray(value) && value.length >= 3) {
     return [
@@ -84,26 +101,34 @@ function pickTerrainTexture(
   row: Record<string, unknown>
 ): Texture | undefined {
   const biomeId = readNumber(row, 0, "biomeId", "biome_id");
+  const chunkX = readNumber(row, 0, "chunkX", "chunk_x");
+  const chunkY = readNumber(row, 0, "chunkY", "chunk_y");
+  const seed = readNumber(row, 0, "seed");
   const waterRatio = readNumber(
     row,
     0,
     "waterRatioPermille",
     "water_ratio_permille"
   );
+  const textureSeed = hashNumbers(chunkX, chunkY, biomeId, seed);
 
-  if (waterRatio >= 500) {
-    return seedAssets.terrainTextures.water;
+  if (waterRatio >= 820 || biomeId === 5) {
+    return pickFromPool(seedAssets.terrainTextures.ocean, textureSeed);
   }
 
-  switch (Math.abs(biomeId) % 4) {
-    case 0:
-      return seedAssets.terrainTextures.grass;
+  if (waterRatio >= 350 || biomeId === 4) {
+    return pickFromPool(seedAssets.terrainTextures.lake, textureSeed);
+  }
+
+  switch (biomeId) {
     case 1:
-      return seedAssets.terrainTextures.sand;
+      return pickFromPool(seedAssets.terrainTextures.forest, textureSeed);
     case 2:
-      return seedAssets.terrainTextures.stone;
+      return pickFromPool(seedAssets.terrainTextures.desert, textureSeed);
+    case 3:
+      return pickFromPool(seedAssets.terrainTextures.tundra, textureSeed);
     default:
-      return seedAssets.terrainTextures.grass;
+      return pickFromPool(seedAssets.terrainTextures.plains, textureSeed);
   }
 }
 
@@ -111,17 +136,20 @@ function pickResourceTexture(
   seedAssets: SeedAssetHandles,
   row: Record<string, unknown>
 ): Texture | undefined {
-  if (readBoolean(row, false, "isDepleted", "is_depleted")) {
-    return seedAssets.resourceTextures.fiber;
-  }
+  const resourceType = readNumber(row, 0, "resourceType", "resource_type");
+  const entityId = readNumber(row, 0, "entityId", "entity_id");
+  const clumpId = readNumber(row, 0, "clumpId", "clump_id");
+  const depleted = readBoolean(row, false, "isDepleted", "is_depleted");
+  const textureSeed = hashNumbers(entityId, clumpId, resourceType, depleted ? 1 : 0);
 
-  switch (readNumber(row, 0, "resourceType", "resource_type") % 3) {
-    case 0:
-      return seedAssets.resourceTextures.wood;
+  switch (resourceType) {
     case 1:
-      return seedAssets.resourceTextures.ore;
+      return pickFromPool(seedAssets.resourceTextures.wood, textureSeed);
+    case 2:
+      return pickFromPool(seedAssets.resourceTextures.ore, textureSeed);
+    case 3:
     default:
-      return seedAssets.resourceTextures.fiber;
+      return pickFromPool(seedAssets.resourceTextures.fiber, textureSeed);
   }
 }
 
@@ -129,25 +157,35 @@ function pickBuildingTexture(
   seedAssets: SeedAssetHandles,
   row: Record<string, unknown>
 ): Texture | undefined {
+  const entityId = readNumber(row, 0, "entityId", "entity_id");
+  const state = readNumber(row, 0, "state");
   const progress = readNumber(row, 0, "buildProgress", "build_progress");
   const required = readNumber(row, 0, "buildRequired", "build_required");
+  const requiredItemDefId = readNumber(
+    row,
+    0,
+    "requiredItemDefId",
+    "required_item_def_id"
+  );
+  const textureSeed = hashNumbers(entityId, requiredItemDefId, required, progress, state);
 
-  if (required > 0 && progress < required) {
-    return seedAssets.buildingTextures.site;
+  if (state === 2 || (required > 0 && progress < required)) {
+    return pickFromPool(seedAssets.buildingTextures.site, textureSeed);
   }
 
-  return readNumber(row, 0, "entityId", "entity_id") % 2 === 0
-    ? seedAssets.buildingTextures.house
-    : seedAssets.buildingTextures.tower;
+  return requiredItemDefId % 3 === 0 || required >= 12
+    ? pickFromPool(seedAssets.buildingTextures.tower, textureSeed)
+    : pickFromPool(seedAssets.buildingTextures.house, textureSeed);
 }
 
 function pickPreviewTexture(
   seedAssets: SeedAssetHandles,
   buildingDefId: number
 ): Texture | undefined {
-  return buildingDefId % 2 === 0
-    ? seedAssets.buildingTextures.house
-    : seedAssets.buildingTextures.tower;
+  const textureSeed = hashNumbers(buildingDefId, buildingDefId * 17);
+  return buildingDefId % 3 === 0
+    ? pickFromPool(seedAssets.buildingTextures.tower, textureSeed)
+    : pickFromPool(seedAssets.buildingTextures.house, textureSeed);
 }
 
 export class WorldRenderer {
@@ -157,6 +195,7 @@ export class WorldRenderer {
     resourceTextures: {} as SeedAssetHandles["resourceTextures"],
     actorTextures: {} as SeedAssetHandles["actorTextures"]
   };
+  private lastRenderSummary: string | null = null;
 
   constructor(
     private readonly worldRoot: Container,
@@ -276,13 +315,10 @@ export class WorldRenderer {
     }
 
     for (const row of resourceRows) {
-      const x =
-        readNumber(row, 0, "chunkX", "chunk_x") * CHUNK_SIZE +
-        readNumber(row, 0, "hexX", "hex_x") * HEX_SIZE;
-      const y =
-        readNumber(row, 0, "chunkY", "chunk_y") * CHUNK_SIZE +
-        readNumber(row, 0, "hexZ", "hex_z") * HEX_SIZE;
+      const x = readNumber(row, 0, "hexX", "hex_x") * HEX_SIZE;
+      const y = readNumber(row, 0, "hexZ", "hex_z") * HEX_SIZE;
       const amount = readNumber(row, 0, "amount");
+      const depleted = readBoolean(row, false, "isDepleted", "is_depleted");
 
       const nodeSprite = createSeedSprite(
         pickResourceTexture(this.seedAssets, row),
@@ -292,6 +328,7 @@ export class WorldRenderer {
         20
       );
       if (nodeSprite) {
+        nodeSprite.alpha = depleted ? 0.35 : 0.94;
         this.overlayRoot.addChild(nodeSprite);
       } else {
         this.overlayRoot.addChild(
@@ -457,13 +494,18 @@ export class WorldRenderer {
       this.overlayRoot.addChild(prompt);
     }
 
-    if (
-      chunkFallbackRows.length > 0 ||
-      resourceRows.length > 0 ||
-      buildingRows.length > 0 ||
-      npcFallbackRows.length > 0 ||
-      transformRows.length > 0
-    ) {
+    const summary = [
+      chunkFallbackRows.length,
+      resourceRows.length,
+      buildingRows.length,
+      npcFallbackRows.length,
+      transformRows.length,
+      preview.enabled ? 1 : 0,
+      movementState.pendingIntents
+    ].join(":");
+
+    if (summary !== this.lastRenderSummary) {
+      this.lastRenderSummary = summary;
       this.eventLog.push(
         "info",
         `world renderer sync: chunks=${chunkFallbackRows.length}, resources=${resourceRows.length}, buildings=${buildingRows.length}, npcs=${npcFallbackRows.length}, transforms=${transformRows.length}`

@@ -6,9 +6,12 @@ import { SubscriptionCoordinator } from "../net/subscription-coordinator";
 import { ReducerGateway } from "../net/reducer-gateway";
 import { AuthoritativeStore } from "../state/authoritative-store";
 import { EventLogStore } from "../state/event-log-store";
+import { InteractionStore } from "../state/interaction-store";
 import { FrameClock } from "./frame-clock";
 import { DebugHud } from "../../ui/hud/debug-hud";
 import { InventoryHud } from "../../ui/hud/inventory-hud";
+import { BuildingPreviewHud } from "../../ui/hud/building-preview-hud";
+import { ReducerDispatchHud } from "../../ui/hud/reducer-dispatch-hud";
 import { WorldRenderer } from "../render/world-renderer";
 import { MovementPredictionRuntime } from "../prediction/movement-prediction-runtime";
 import { MovementHud } from "../../ui/hud/movement-hud";
@@ -25,14 +28,16 @@ export class GameRuntime {
   private readonly frameClock = new FrameClock();
   private readonly eventLog = new EventLogStore();
   private readonly authoritativeStore = new AuthoritativeStore();
+  private readonly interactionStore = new InteractionStore();
   private readonly spacetimeClient = new SpacetimeClient();
-  private readonly subscriptionCoordinator = new SubscriptionCoordinator(
-    this.authoritativeStore,
-    this.eventLog
-  );
   private readonly reducerGateway = new ReducerGateway(
     this.spacetimeClient,
     this.eventLog
+  );
+  private readonly subscriptionCoordinator = new SubscriptionCoordinator(
+    this.authoritativeStore,
+    this.eventLog,
+    this.reducerGateway
   );
   private readonly movementPrediction = new MovementPredictionRuntime(
     this.authoritativeStore,
@@ -43,6 +48,8 @@ export class GameRuntime {
   private readonly debugHud: DebugHud;
   private readonly inventoryHud: InventoryHud;
   private readonly movementHud: MovementHud;
+  private readonly buildingPreviewHud: BuildingPreviewHud;
+  private readonly reducerDispatchHud: ReducerDispatchHud;
 
   constructor(private readonly options: GameRuntimeOptions) {
     this.debugHud = new DebugHud(
@@ -52,11 +59,27 @@ export class GameRuntime {
     );
     this.inventoryHud = new InventoryHud(
       options.hudHost,
-      this.authoritativeStore
+      this.authoritativeStore,
+      this.reducerGateway,
+      this.eventLog
     );
     this.movementHud = new MovementHud(
       options.hudHost,
       this.movementPrediction
+    );
+    this.buildingPreviewHud = new BuildingPreviewHud(
+      options.hudHost,
+      this.authoritativeStore,
+      this.interactionStore,
+      this.reducerGateway,
+      this.eventLog
+    );
+    this.reducerDispatchHud = new ReducerDispatchHud(
+      options.hudHost,
+      this.authoritativeStore,
+      this.interactionStore,
+      this.reducerGateway,
+      this.eventLog
     );
   }
 
@@ -67,7 +90,8 @@ export class GameRuntime {
       pixi.layers.worldOverlayRoot,
       this.authoritativeStore,
       this.eventLog,
-      this.movementPrediction
+      this.movementPrediction,
+      this.interactionStore
     );
     this.movementPrediction.attachInputListeners(window);
     const seedAssets = await this.seedAssetRuntime.preload();

@@ -1,15 +1,12 @@
 # AGENTS 가이드
 
 ## 빠른 앵커
-<!--- [IMPLEMENTDOC 운영 원칙 (서버/클라이언트 공통)](#implementdoc-운영-원칙-서버클라이언트-공통)
-- [IMPLEMENTDOC 핵심 링크](#implementdoc-핵심-링크)-->
 - [BitCraftPublicDoc ↔ BitCraftPublic/BitCraftServer 관계 (참고 수준)](#bitcraftpublicdoc--bitcraftpublicbitcraftserver-관계-참고-수준)
 - [DESIGN 문서](#design-문서)
 - [Client Development Environment](#client-development-environment)
 - [웹 디버깅/테스트 규칙](#웹-디버깅테스트-규칙)
-- [파일 인코딩/BOM 주의](#파일-인코딩bom-주의)
 - [SpacetimeDB 작업 규칙](#spacetimedb-작업-규칙)
-- [assetdirectory 안내](#assetdirectory-안내)
+
 
 
 
@@ -26,38 +23,19 @@
 
 ## Client Development Environment
 - Client 개발 환경은 `bun` 기반이며, 클라이언트 코드 작성은 `TypeScript`를 사용한다.
+- 웹 개발 서버(`web-client`)는 `bun run dev` 기준으로 항상 실행 중인 상태로 보고 진행한다.
 
 ## 웹 디버깅/테스트 규칙
-- 웹 페이지를 열고 조작해야 하는 디버깅/테스트 작업은 기본적으로 `agent-browser` 스킬을 사용한다.
-- 다음 작업은 `agent-browser`를 우선 사용한다.
+- 웹 페이지를 열고 조작해야 하는 디버깅/테스트 작업은 **항상 `agent-browser` 스킬을 사용**한다. Playwright는 사용하지 않는다.
+- 다음 작업은 `agent-browser`로 수행한다.
   - 웹 화면 열기/탐색
   - DOM 상호작용(클릭, 입력, 스크롤)
   - 스크린샷/디버그 로그 확인
   - 테스트 시 상태 변화 검증(동작 전/후 비교)
-- `agent-browser` 미설치 시 또는 비정상 동작 시 대체 도구 사용 전, 우선 스킬 동작 가능 여부를 점검한다.
+- web-client 개발이 마무리되면 기본적으로 `agent-browser`로 페이지 로딩 후 브라우저 콘솔 에러를 점검한다.
 
-## 환경 해석 규칙
-- 환경 컨텍스트에 `shell: powershell`이 주어지면 **Windows 환경으로 인식**한다.
-- 환경 컨텍스트에 `shell: cmd`가 주어지면 **Windows 환경으로 인식**한다.
-- 환경 컨텍스트에 `shell: bash`가 주어졌더라도 경로가 `C:\...`, `D:\...` 형태이면 Windows 기반 셸(예: Git Bash) 가능성을 먼저 고려한다.
-- 환경 컨텍스트에 `shell: bash`가 주어지고 경로가 `/home/...`, `/workspace/...`, `/mnt/...` 형태이면 Linux/WSL 계열로 우선 해석한다.
-- `wsl`, `/mnt/c/...`, `/mnt/d/...` 패턴이 보이면 **WSL 환경**으로 인식하고, 경로/권한/브라우저 연동이 일반 Linux와 다를 수 있음을 고려한다.
-- 경로가 `D:\...`, `C:\...` 형태이면 Windows 경로 규칙을 따른다.
-- 경로가 `/home/...`, `/usr/...`, `/opt/...` 형태이면 POSIX 경로 규칙을 따른다.
-- Windows 환경에서는 줄바꿈, BOM, 경로 구분자, PowerShell 명령 문법 차이를 먼저 고려한다.
-- POSIX 환경에서는 `/` 경로 구분자, LF 줄바꿈, 셸 quoting 규칙을 우선 고려한다.
 
-## 파일 인코딩/BOM 주의
-- Windows에서 생성된 `.md`, `.txt` 파일은 UTF-8 BOM이 포함될 수 있다.
-- BOM이 있으면 `apply_patch`의 context matching이 실패할 수 있으므로, 수정 전 `Get-Content -Encoding utf8` 등으로 내용을 확인한다.
-- 문맥 매칭 실패가 반복되면 BOM 존재를 우선 의심하고, 필요 시 파일을 UTF-8 without BOM으로 재저장하거나 삭제 후 동일 경로로 재생성한다.
-- 프롬프트/기록 문서 수정 시에는 첫 줄 불일치가 BOM 때문일 가능성을 먼저 점검한다.
+
 
 ## SpacetimeDB 작업 규칙
 - SpacetimeDB 관련 작업은 반드시 `.opencode/skills/spacetimedb/SKILL.md` 스킬을 참조한다.
-
-
-
-## assetdirectory 안내
-- 외부 에셋 수집(모델/텍스처/오디오) 상세는 [`assetdirectory/README.md`](assetdirectory/README.md)를 참조.
-- `assetdirectory`는 실험/테스트용으로만 보관하며 `web-client` 빌드 경로에는 강제 연결하지 않음.

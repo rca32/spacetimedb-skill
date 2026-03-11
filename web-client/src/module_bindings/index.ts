@@ -17,7 +17,7 @@ import {
   procedures as __procedures,
   reducerSchema as __reducerSchema,
   reducers as __reducers,
-  schema as __schema,
+  schema as __schemaBase,
   t as __t,
   table as __table,
   type AlgebraicTypeType as __AlgebraicTypeType,
@@ -32,6 +32,19 @@ import {
   type SubscriptionEventContextInterface as __SubscriptionEventContextInterface,
   type SubscriptionHandleImpl as __SubscriptionHandleImpl,
 } from "spacetimedb";
+
+const __schema = (...handles: any[]): any => {
+  if (
+    handles.length === 1 &&
+    handles[0] &&
+    typeof handles[0] === "object" &&
+    !Array.isArray(handles[0])
+  ) {
+    return __schemaBase(...(Object.values(handles[0]) as any[]));
+  }
+
+  return __schemaBase(...handles);
+};
 
 // Import all reducer arg schemas
 import AccountBootstrapReducer from "./account_bootstrap_reducer";
@@ -1302,4 +1315,3 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
-

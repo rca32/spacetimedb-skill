@@ -293,10 +293,11 @@ export class MovementPredictionRuntime {
 
       if (!acknowledged && this.reducerGateway?.isConnected()) {
         try {
-          this.reducerGateway.invoke("ack_server_correction", {
+          this.reducerGateway.invoke(
+            "ack_server_correction",
             correctionId,
-            ackedClientFrameNo: this.lastPublishedFrameNo
-          });
+            this.lastPublishedFrameNo
+          );
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "ack_server_correction failed";
@@ -318,12 +319,13 @@ export class MovementPredictionRuntime {
     }
 
     try {
-      this.reducerGateway.invoke("sync_client_frame", {
+      this.reducerGateway.invoke(
+        "sync_client_frame",
         frameNo,
-        regionId: session.regionId,
-        dimensionId: session.dimensionId,
-        clientTimeMs: Math.floor(now)
-      });
+        session.regionId,
+        session.dimensionId,
+        Math.floor(now)
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "sync_client_frame failed";
@@ -343,16 +345,17 @@ export class MovementPredictionRuntime {
     }
 
     try {
-      this.reducerGateway.invoke("submit_motion_intent", {
+      this.reducerGateway.invoke(
+        "submit_motion_intent",
         intentId,
-        regionId: session.regionId,
-        dimensionId: session.dimensionId,
+        session.regionId,
+        session.dimensionId,
         frameNo,
-        inputX: direction.x,
-        inputZ: direction.z,
-        requestedSpeed: speed,
-        jump: false
-      });
+        direction.x,
+        direction.z,
+        speed,
+        false
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "submit_motion_intent failed";

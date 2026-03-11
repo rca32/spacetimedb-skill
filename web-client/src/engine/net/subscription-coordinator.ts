@@ -264,7 +264,15 @@ export class SubscriptionCoordinator {
     this.lastAoiRequestKey = requestKey;
 
     try {
-      this.reducerGateway.invoke("request_chunks_for_aoi", bounds);
+      this.reducerGateway.invoke(
+        "request_chunks_for_aoi",
+        bounds.regionId,
+        bounds.dimensionId,
+        bounds.minChunkX,
+        bounds.maxChunkX,
+        bounds.minChunkY,
+        bounds.maxChunkY
+      );
       this.eventLog.push(
         "info",
         `terrain AOI request: (${bounds.minChunkX},${bounds.minChunkY}) -> (${bounds.maxChunkX},${bounds.maxChunkY})`

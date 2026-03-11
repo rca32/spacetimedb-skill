@@ -48,21 +48,21 @@ export class SpacetimeClient {
     return await new Promise<DbConnectionLike>((resolve, reject) => {
       const builder = DbConnection.builder()
         .withUri(config.uri)
-        .withDatabaseName(config.databaseName)
+        .withModuleName(config.databaseName)
         .withConfirmedReads(config.confirmedReads)
-        .onConnect((connection, identity, token) => {
+        .onConnect((connection: unknown, identity: unknown, token: unknown) => {
           const normalizedIdentity =
             normalizeIdentityHex(identity) ?? "unknown";
 
           this.connection = connection as DbConnectionLike;
-          listeners.onConnect?.(this.connection, normalizedIdentity, token);
+          listeners.onConnect?.(this.connection, normalizedIdentity, String(token ?? ""));
           resolve(this.connection);
         })
-        .onConnectError((_ctx, error) => {
+        .onConnectError((_ctx: unknown, error: Error) => {
           listeners.onConnectError?.(error);
           reject(error);
         })
-        .onDisconnect((_ctx, error) => {
+        .onDisconnect((_ctx: unknown, error: Error | undefined) => {
           this.connection = null;
           listeners.onDisconnect?.(error);
         });
