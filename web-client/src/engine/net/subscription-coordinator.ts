@@ -278,12 +278,14 @@ export class SubscriptionCoordinator {
     try {
       this.reducerGateway.invoke(
         "request_chunks_for_aoi",
-        bounds.regionId,
-        bounds.dimensionId,
-        bounds.minChunkX,
-        bounds.maxChunkX,
-        bounds.minChunkY,
-        bounds.maxChunkY
+        {
+          regionId: BigInt(bounds.regionId),
+          dimensionId: bounds.dimensionId,
+          minChunkX: bounds.minChunkX,
+          maxChunkX: bounds.maxChunkX,
+          minChunkY: bounds.minChunkY,
+          maxChunkY: bounds.maxChunkY
+        }
       );
       this.eventLog.push(
         "info",
