@@ -20,10 +20,18 @@ mkdir -p "${DEST_ROOT}"
 mkdir -p "${PUBLIC_ROOT}"
 
 for pack in "${PACKS[@]}"; do
-  if [[ -d "${SOURCE_ROOT}/${pack}" ]]; then
-    mkdir -p "${DEST_ROOT}/${pack}"
-    mkdir -p "${PUBLIC_ROOT}/${pack}"
-    rsync -a "${SOURCE_ROOT}/${pack}/" "${DEST_ROOT}/${pack}/"
-    rsync -a "${SOURCE_ROOT}/${pack}/" "${PUBLIC_ROOT}/${pack}/"
+  SOURCE_PACK="${SOURCE_ROOT}/${pack}"
+  DEST_PACK="${DEST_ROOT}/${pack}"
+  PUBLIC_PACK="${PUBLIC_ROOT}/${pack}"
+
+  mkdir -p "${DEST_PACK}"
+  mkdir -p "${PUBLIC_PACK}"
+
+  if [[ -d "${SOURCE_PACK}" ]]; then
+    rsync -a "${SOURCE_PACK}/" "${DEST_PACK}/"
+  fi
+
+  if [[ -d "${DEST_PACK}" ]]; then
+    rsync -a "${DEST_PACK}/" "${PUBLIC_PACK}/"
   fi
 done
