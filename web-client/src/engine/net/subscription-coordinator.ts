@@ -1,4 +1,5 @@
 import { normalizeIdentityHex, readNumber } from "../shared/row-access";
+import type { ReducerGateway } from "./reducer-gateway";
 import type { AuthoritativeStore } from "../state/authoritative-store";
 import type { EventLogStore } from "../state/event-log-store";
 import type {
@@ -21,6 +22,15 @@ interface SessionContext {
 interface WorldAnchor {
   chunkX: number;
   chunkY: number;
+}
+
+interface AoiRequestBounds {
+  regionId: number;
+  dimensionId: number;
+  minChunkX: number;
+  maxChunkX: number;
+  minChunkY: number;
+  maxChunkY: number;
 }
 
 const CHUNK_WORLD_SIZE = 32;
@@ -51,13 +61,15 @@ const STATIC_GROUPS = {
         "player_inventory_container_view",
         "player_inventory_slot_view",
         "player_inventory_item_view",
-        "player_wallet_view"
+        "player_wallet_view",
+        "building_preview_feedback_view"
       ],
       queries: [
         `SELECT * FROM player_inventory_container_view${ownerFilter}`,
         `SELECT * FROM player_inventory_slot_view${ownerFilter}`,
         `SELECT * FROM player_inventory_item_view${ownerFilter}`,
-        `SELECT * FROM player_wallet_view${sessionFilter}`
+        `SELECT * FROM player_wallet_view${sessionFilter}`,
+        `SELECT * FROM building_preview_feedback_view${sessionFilter}`
       ]
     };
   },
@@ -162,16 +174,32 @@ function canReplaceQueryWithBounds(anchor: WorldAnchor | null): boolean {
   return anchor != null;
 }
 
+function buildAoiRequestBounds(
+  session: SessionContext,
+  anchor: WorldAnchor
+): AoiRequestBounds {
+  return {
+    regionId: session.regionId,
+    dimensionId: session.dimensionId,
+    minChunkX: anchor.chunkX - PRELOAD_CHUNK_RADIUS,
+    maxChunkX: anchor.chunkX + PRELOAD_CHUNK_RADIUS,
+    minChunkY: anchor.chunkY - PRELOAD_CHUNK_RADIUS,
+    maxChunkY: anchor.chunkY + PRELOAD_CHUNK_RADIUS
+  };
+}
+
 export class SubscriptionCoordinator {
   private readonly observedTables = new Set<string>();
   private readonly handles = new Map<string, SubscriptionHandleLike>();
   private connection: DbConnectionLike | null = null;
   private identityHex: string | null = null;
   private lastWorldQueryKey: string | null = null;
+  private lastAoiRequestKey: string | null = null;
 
   constructor(
     private readonly authoritativeStore: AuthoritativeStore,
-    private readonly eventLog: EventLogStore
+    private readonly eventLog: EventLogStore,
+    private readonly reducerGateway?: ReducerGateway
   ) {
     this.authoritativeStore.subscribe(() => {
       this.maybeRefreshWorldSubscription();
@@ -208,6 +236,7 @@ export class SubscriptionCoordinator {
 
     this.lastWorldQueryKey = queryKey;
     this.subscribeGroup(group);
+    this.maybeRequestAoiChunks(session, anchor);
 
     const scope = canReplaceQueryWithBounds(anchor)
       ? `chunk=${anchor!.chunkX},${anchor!.chunkY} active=${ACTIVE_CHUNK_RADIUS} preload=${PRELOAD_CHUNK_RADIUS}`
@@ -216,6 +245,35 @@ export class SubscriptionCoordinator {
       "info",
       `world subscription refreshed: region=${session.regionId} dimension=${session.dimensionId} ${scope}`
     );
+  }
+
+  private maybeRequestAoiChunks(
+    session: SessionContext,
+    anchor: WorldAnchor | null
+  ): void {
+    if (!anchor || !this.reducerGateway?.isConnected()) {
+      return;
+    }
+
+    const bounds = buildAoiRequestBounds(session, anchor);
+    const requestKey = JSON.stringify(bounds);
+    if (this.lastAoiRequestKey === requestKey) {
+      return;
+    }
+
+    this.lastAoiRequestKey = requestKey;
+
+    try {
+      this.reducerGateway.invoke("request_chunks_for_aoi", bounds);
+      this.eventLog.push(
+        "info",
+        `terrain AOI request: (${bounds.minChunkX},${bounds.minChunkY}) -> (${bounds.maxChunkX},${bounds.maxChunkY})`
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "request_chunks_for_aoi failed";
+      this.eventLog.push("warn", message);
+    }
   }
 
   private subscribeGroup(group: SubscriptionGroup): void {

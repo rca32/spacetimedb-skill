@@ -1,11 +1,12 @@
-import { Container, Graphics, Sprite, Text } from "pixi.js";
+import { Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
 
+import type { SeedAssetHandles } from "../assets/seed-asset-runtime";
+import type { MovementPredictionRuntime } from "../prediction/movement-prediction-runtime";
+import { readBoolean, readField, readNumber } from "../shared/row-access";
+import type { InteractionStore } from "../state/interaction-store";
 import type { AuthoritativeStore } from "../state/authoritative-store";
 import type { EventLogStore } from "../state/event-log-store";
-import { readBoolean, readField, readNumber } from "../shared/row-access";
 import { decodeTerrainPayload } from "./terrain-payload-decoder";
-import type { MovementPredictionRuntime } from "../prediction/movement-prediction-runtime";
-import type { SeedAssetHandles } from "../assets/seed-asset-runtime";
 
 const CHUNK_SIZE = 96;
 const HEX_SIZE = 12;
@@ -19,7 +20,7 @@ function clearContainer(container: Container): void {
 }
 
 function createSeedSprite(
-  texture: SeedAssetHandles[keyof SeedAssetHandles] | undefined,
+  texture: Texture | undefined,
   x: number,
   y: number,
   width: number,
@@ -36,18 +37,6 @@ function createSeedSprite(
   sprite.width = width;
   sprite.height = height;
   return sprite;
-}
-
-function biomeColor(biomeId: number): number {
-  const palette = [
-    0x24485f,
-    0x2f6642,
-    0x70613c,
-    0x385a80,
-    0x5f3e37,
-    0x4f4b74
-  ];
-  return palette[Math.abs(biomeId) % palette.length] ?? 0x3b5c73;
 }
 
 function toVector3(value: unknown): [number, number, number] {
@@ -90,17 +79,97 @@ function payloadCellColor(height: number, water: boolean): number {
   return 0xc5bf8f;
 }
 
+function pickTerrainTexture(
+  seedAssets: SeedAssetHandles,
+  row: Record<string, unknown>
+): Texture | undefined {
+  const biomeId = readNumber(row, 0, "biomeId", "biome_id");
+  const waterRatio = readNumber(
+    row,
+    0,
+    "waterRatioPermille",
+    "water_ratio_permille"
+  );
+
+  if (waterRatio >= 500) {
+    return seedAssets.terrainTextures.water;
+  }
+
+  switch (Math.abs(biomeId) % 4) {
+    case 0:
+      return seedAssets.terrainTextures.grass;
+    case 1:
+      return seedAssets.terrainTextures.sand;
+    case 2:
+      return seedAssets.terrainTextures.stone;
+    default:
+      return seedAssets.terrainTextures.grass;
+  }
+}
+
+function pickResourceTexture(
+  seedAssets: SeedAssetHandles,
+  row: Record<string, unknown>
+): Texture | undefined {
+  if (readBoolean(row, false, "isDepleted", "is_depleted")) {
+    return seedAssets.resourceTextures.fiber;
+  }
+
+  switch (readNumber(row, 0, "resourceType", "resource_type") % 3) {
+    case 0:
+      return seedAssets.resourceTextures.wood;
+    case 1:
+      return seedAssets.resourceTextures.ore;
+    default:
+      return seedAssets.resourceTextures.fiber;
+  }
+}
+
+function pickBuildingTexture(
+  seedAssets: SeedAssetHandles,
+  row: Record<string, unknown>
+): Texture | undefined {
+  const progress = readNumber(row, 0, "buildProgress", "build_progress");
+  const required = readNumber(row, 0, "buildRequired", "build_required");
+
+  if (required > 0 && progress < required) {
+    return seedAssets.buildingTextures.site;
+  }
+
+  return readNumber(row, 0, "entityId", "entity_id") % 2 === 0
+    ? seedAssets.buildingTextures.house
+    : seedAssets.buildingTextures.tower;
+}
+
+function pickPreviewTexture(
+  seedAssets: SeedAssetHandles,
+  buildingDefId: number
+): Texture | undefined {
+  return buildingDefId % 2 === 0
+    ? seedAssets.buildingTextures.house
+    : seedAssets.buildingTextures.tower;
+}
+
 export class WorldRenderer {
-  private seedAssets: SeedAssetHandles = {};
+  private seedAssets: SeedAssetHandles = {
+    terrainTextures: {} as SeedAssetHandles["terrainTextures"],
+    buildingTextures: {} as SeedAssetHandles["buildingTextures"],
+    resourceTextures: {} as SeedAssetHandles["resourceTextures"],
+    actorTextures: {} as SeedAssetHandles["actorTextures"]
+  };
 
   constructor(
     private readonly worldRoot: Container,
     private readonly overlayRoot: Container,
     private readonly authoritativeStore: AuthoritativeStore,
     private readonly eventLog: EventLogStore,
-    private readonly movementRuntime: MovementPredictionRuntime
+    private readonly movementRuntime: MovementPredictionRuntime,
+    private readonly interactionStore: InteractionStore
   ) {
     this.authoritativeStore.subscribe(() => {
+      this.render();
+    });
+    this.interactionStore.subscribe(() => {
       this.render();
     });
   }
@@ -145,14 +214,12 @@ export class WorldRenderer {
       const chunkY = readNumber(row, 0, "chunkY", "chunk_y");
       const x = chunkX * CHUNK_SIZE;
       const y = chunkY * CHUNK_SIZE;
-      const color = biomeColor(readNumber(row, 0, "biomeId", "biome_id"));
       const chunkKey = String(readField(row, "chunkKey", "chunk_key") ?? "");
       const payloadBytes = payloadByChunk.get(chunkKey) ?? null;
-      const decodedPayload =
-        decodedPayloadByChunk.get(chunkKey) ?? null;
+      const decodedPayload = decodedPayloadByChunk.get(chunkKey) ?? null;
 
       const texturedTile = createSeedSprite(
-        this.seedAssets.terrainTexture,
+        pickTerrainTexture(this.seedAssets, row),
         x,
         y,
         CHUNK_SIZE - 4,
@@ -160,21 +227,16 @@ export class WorldRenderer {
         0
       );
       if (texturedTile) {
-        texturedTile.tint = color;
-        texturedTile.alpha = 0.88;
+        texturedTile.alpha = 0.92;
         this.worldRoot.addChild(texturedTile);
       }
 
       const tile = new Graphics();
+      tile
+        .rect(x, y, CHUNK_SIZE - 4, CHUNK_SIZE - 4)
+        .stroke({ width: 2, color: 0xb2d9f7, alpha: 0.18 });
       if (!texturedTile) {
-        tile
-          .rect(x, y, CHUNK_SIZE - 4, CHUNK_SIZE - 4)
-          .fill({ color, alpha: 0.85 })
-          .stroke({ width: 2, color: 0xb2d9f7, alpha: 0.18 });
-      } else {
-        tile
-          .rect(x, y, CHUNK_SIZE - 4, CHUNK_SIZE - 4)
-          .stroke({ width: 2, color: 0xb2d9f7, alpha: 0.18 });
+        tile.fill({ color: 0x385a80, alpha: 0.75 });
       }
 
       const label = new Text({
@@ -223,7 +285,7 @@ export class WorldRenderer {
       const amount = readNumber(row, 0, "amount");
 
       const nodeSprite = createSeedSprite(
-        this.seedAssets.resourceTexture,
+        pickResourceTexture(this.seedAssets, row),
         x + 24,
         y + 24,
         20,
@@ -232,14 +294,15 @@ export class WorldRenderer {
       if (nodeSprite) {
         this.overlayRoot.addChild(nodeSprite);
       } else {
-        const node = new Graphics()
-          .circle(x + 24, y + 24, 6)
-          .fill({ color: 0x77e39c, alpha: 0.9 });
-        this.overlayRoot.addChild(node);
+        this.overlayRoot.addChild(
+          new Graphics()
+            .circle(x + 24, y + 24, 6)
+            .fill({ color: 0x77e39c, alpha: 0.9 })
+        );
       }
 
       const label = new Text({
-        text: `R ${amount}`,
+        text: `R${readNumber(row, 0, "resourceType", "resource_type")} ${amount}`,
         style: { fill: 0xcdf8dc, fontSize: 10 }
       });
       label.position.set(x + 32, y + 18);
@@ -253,7 +316,7 @@ export class WorldRenderer {
       const required = readNumber(row, 0, "buildRequired", "build_required");
 
       const buildingSprite = createSeedSprite(
-        this.seedAssets.buildingTexture,
+        pickBuildingTexture(this.seedAssets, row),
         x + 22,
         y + 22,
         28,
@@ -262,10 +325,11 @@ export class WorldRenderer {
       if (buildingSprite) {
         this.overlayRoot.addChild(buildingSprite);
       } else {
-        const building = new Graphics()
-          .roundRect(x + 12, y + 12, 20, 20, 5)
-          .fill({ color: 0xd2a15e, alpha: 0.92 });
-        this.overlayRoot.addChild(building);
+        this.overlayRoot.addChild(
+          new Graphics()
+            .roundRect(x + 12, y + 12, 20, 20, 5)
+            .fill({ color: 0xd2a15e, alpha: 0.92 })
+        );
       }
 
       const label = new Text({
@@ -285,20 +349,22 @@ export class WorldRenderer {
       const traveling = readBoolean(row, false, "traveling");
 
       const npcSprite = createSeedSprite(
-        this.seedAssets.npcTexture,
+        traveling
+          ? this.seedAssets.actorTextures.npcTravel
+          : this.seedAssets.actorTextures.npc,
         x + 18,
         y + 18,
-        traveling ? 22 : 20,
-        traveling ? 28 : 26
+        traveling ? 24 : 20,
+        traveling ? 30 : 26
       );
       if (npcSprite) {
-        npcSprite.tint = traveling ? 0xffd36f : 0xffffff;
         this.overlayRoot.addChild(npcSprite);
       } else {
-        const npc = new Graphics()
-          .circle(x + 18, y + 18, 8)
-          .fill({ color: traveling ? 0xffd36f : 0xff88b5, alpha: 0.95 });
-        this.overlayRoot.addChild(npc);
+        this.overlayRoot.addChild(
+          new Graphics()
+            .circle(x + 18, y + 18, 8)
+            .fill({ color: traveling ? 0xffd36f : 0xff88b5, alpha: 0.95 })
+        );
       }
 
       const label = new Text({
@@ -311,17 +377,66 @@ export class WorldRenderer {
 
     for (const row of transformRows) {
       const [x, , z] = toVector3(row.position);
-      const actor = createSeedSprite(this.seedAssets.actorTexture, x, z, 26, 34);
+      const actor = createSeedSprite(
+        this.seedAssets.actorTextures.player,
+        x,
+        z,
+        26,
+        34
+      );
       if (actor) {
         this.overlayRoot.addChild(actor);
       } else {
-        const fallbackActor = new Graphics()
-          .circle(x, z, 7)
-          .fill({ color: 0x8bd8ff, alpha: 0.95 })
-          .stroke({ width: 2, color: 0xeaf9ff, alpha: 0.45 });
-
-        this.overlayRoot.addChild(fallbackActor);
+        this.overlayRoot.addChild(
+          new Graphics()
+            .circle(x, z, 7)
+            .fill({ color: 0x8bd8ff, alpha: 0.95 })
+            .stroke({ width: 2, color: 0xeaf9ff, alpha: 0.45 })
+        );
       }
+    }
+
+    const preview = this.interactionStore.getBuildingPreview();
+    if (preview.enabled) {
+      const x = preview.hexX * HEX_SIZE;
+      const y = preview.hexZ * HEX_SIZE;
+      const previewSprite = createSeedSprite(
+        pickPreviewTexture(this.seedAssets, preview.buildingDefId),
+        x + 20,
+        y + 20,
+        28,
+        28
+      );
+
+      if (previewSprite) {
+        previewSprite.alpha = preview.isValid === false ? 0.35 : 0.68;
+        previewSprite.tint =
+          preview.isValid == null
+            ? 0xffd36f
+            : preview.isValid
+              ? 0x9ef0ae
+              : 0xff8686;
+        this.overlayRoot.addChild(previewSprite);
+      }
+
+      const previewOutline = new Graphics()
+        .roundRect(x + 10, y + 10, 22, 22, 4)
+        .stroke({
+          width: 2,
+          color:
+            preview.isValid == null
+              ? 0xffd36f
+              : preview.isValid
+                ? 0x9ef0ae
+                : 0xff8686,
+          alpha: 0.95
+        });
+      const previewLabel = new Text({
+        text: `preview ${preview.buildingDefId} ${preview.reasonCode}`,
+        style: { fill: 0xf3f8fb, fontSize: 10 }
+      });
+      previewLabel.position.set(x + 34, y + 10);
+      this.overlayRoot.addChild(previewOutline, previewLabel);
     }
 
     const movementState = this.movementRuntime.getDebugState();

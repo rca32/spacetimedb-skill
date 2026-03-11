@@ -1,4 +1,0 @@
-interface:
-  display_name: "WSL Human CDP Download"
-  short_description: "Human-in-loop CDP bridge with Linux-safe downloads"
-  default_prompt: "Use $wsl-human-cdp-download to bridge WSL to Windows browser login and save target files directly to Linux."

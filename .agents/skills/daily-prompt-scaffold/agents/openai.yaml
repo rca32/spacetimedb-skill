@@ -1,4 +1,0 @@
-interface:
-  display_name: "Daily Prompt Scaffold"
-  short_description: "당일 prompts 작업 파일 세트 생성"
-  default_prompt: "Use $daily-prompt-scaffold to create today's prompt files with the Python scaffold script for a new task."
