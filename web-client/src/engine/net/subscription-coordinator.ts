@@ -205,6 +205,7 @@ export class SubscriptionCoordinator {
   private readonly handles = new Map<string, SubscriptionHandleLike>();
   private connection: DbConnectionLike | null = null;
   private identityHex: string | null = null;
+  private lastKnownAnchor: WorldAnchor | null = null;
   private lastWorldQueryKey: string | null = null;
   private lastAoiRequestKey: string | null = null;
 
@@ -238,7 +239,12 @@ export class SubscriptionCoordinator {
       return;
     }
 
-    const anchor = this.readWorldAnchor();
+    const currentAnchor = this.readWorldAnchor();
+    if (currentAnchor) {
+      this.lastKnownAnchor = currentAnchor;
+    }
+
+    const anchor = currentAnchor ?? this.lastKnownAnchor;
     const group = buildWorldGroup(session, anchor);
     const queryKey = group.queries.join("\n");
 

@@ -88,6 +88,7 @@ export class GameRuntime {
   async start(): Promise<void> {
     const pixi = await createPixiAppRuntime(this.options.canvasHost);
     const worldRenderer = new WorldRenderer(
+      pixi.app,
       pixi.layers.worldRoot,
       pixi.layers.worldOverlayRoot,
       this.authoritativeStore,
@@ -102,6 +103,7 @@ export class GameRuntime {
 
     pixi.app.ticker.add((ticker) => {
       this.movementPrediction.tick(performance.now());
+      worldRenderer.tick();
       this.movementHud.render();
       this.frameClock.step(ticker.deltaMS);
     });

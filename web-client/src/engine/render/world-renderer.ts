@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
+import { Container, Graphics, Sprite, Text, type Application, type Texture } from "pixi.js";
 
 import type {
   BuildingTextureGroup,
@@ -24,6 +24,8 @@ const CHUNK_SIZE = 96;
 const HEX_SIZE = 12;
 const PAYLOAD_GRID_COLUMNS = 8;
 const PREVIEW_REASON_NO_BUILD_PERMISSION = "no_build_permission_in_claim";
+const SHOW_CHUNK_DEBUG_OVERLAY = false;
+const SHOW_ENTITY_LABELS = false;
 
 interface WorldVisualMetadata {
   terrainGroups: Map<number, TerrainTextureGroup>;
@@ -372,9 +374,11 @@ export class WorldRenderer {
     resourceTextures: {} as SeedAssetHandles["resourceTextures"],
     actorTextures: {} as SeedAssetHandles["actorTextures"]
   };
+  private dirty = true;
   private lastRenderSummary: string | null = null;
 
   constructor(
+    private readonly app: Application,
     private readonly worldRoot: Container,
     private readonly overlayRoot: Container,
     private readonly authoritativeStore: AuthoritativeStore,
@@ -383,19 +387,59 @@ export class WorldRenderer {
     private readonly interactionStore: InteractionStore
   ) {
     this.authoritativeStore.subscribe(() => {
-      this.render();
+      this.requestRender();
     });
     this.interactionStore.subscribe(() => {
-      this.render();
+      this.requestRender();
     });
   }
 
   setSeedAssets(assets: SeedAssetHandles): void {
     this.seedAssets = assets;
-    this.render();
+    this.requestRender();
+  }
+
+  tick(): void {
+    this.updateCamera();
+    if (this.dirty) {
+      this.render();
+    }
+  }
+
+  private requestRender(): void {
+    this.dirty = true;
+  }
+
+  private updateCamera(): void {
+    const focus = this.readFocusPoint();
+    const viewportWidth = this.app.screen.width;
+    const viewportHeight = this.app.screen.height;
+    const worldOffsetX = Math.round(viewportWidth * 0.5 - focus.x);
+    const worldOffsetY = Math.round(viewportHeight * 0.5 - focus.y);
+
+    this.worldRoot.position.set(worldOffsetX, worldOffsetY);
+    this.overlayRoot.position.set(worldOffsetX, worldOffsetY);
+  }
+
+  private readFocusPoint(): { x: number; y: number } {
+    const movementState = this.movementRuntime.getDebugState();
+    if (
+      Number.isFinite(movementState.predicted.x) &&
+      Number.isFinite(movementState.predicted.z)
+    ) {
+      return {
+        x: movementState.predicted.x,
+        y: movementState.predicted.z
+      };
+    }
+
+    const transform = this.authoritativeStore.getRows("transform_state")[0];
+    const [x, , z] = toVector3(transform?.position);
+    return { x, y: z };
   }
 
   private render(): void {
+    this.dirty = false;
     clearContainer(this.worldRoot);
     clearContainer(this.overlayRoot);
 
@@ -471,17 +515,9 @@ export class WorldRenderer {
         tile.fill({ color: 0x385a80, alpha: 0.75 });
       }
 
-      const label = new Text({
-        text: toChunkLabel(row, payloadBytes),
-        style: {
-          fill: 0xe6f2fa,
-          fontSize: 11
-        }
-      });
-      label.position.set(x + 8, y + 8);
-      this.worldRoot.addChild(tile, label);
+      this.worldRoot.addChild(tile);
 
-      if (decodedPayload && decodedPayload.cells.length > 0) {
+      if (SHOW_CHUNK_DEBUG_OVERLAY && decodedPayload && decodedPayload.cells.length > 0) {
         const miniCellSize = 8;
         const payloadPreview = new Graphics();
         const previewLimit = Math.min(decodedPayload.cells.length, 64);
@@ -504,6 +540,18 @@ export class WorldRenderer {
         }
 
         this.worldRoot.addChild(payloadPreview);
+      }
+
+      if (SHOW_CHUNK_DEBUG_OVERLAY) {
+        const label = new Text({
+          text: toChunkLabel(row, payloadBytes),
+          style: {
+            fill: 0xe6f2fa,
+            fontSize: 11
+          }
+        });
+        label.position.set(x + 8, y + 8);
+        this.worldRoot.addChild(label);
       }
     }
 
@@ -531,12 +579,14 @@ export class WorldRenderer {
         );
       }
 
-      const label = new Text({
-        text: `R${readNumber(row, 0, "resourceType", "resource_type")} ${amount}`,
-        style: { fill: 0xcdf8dc, fontSize: 10 }
-      });
-      label.position.set(x + 32, y + 18);
-      this.overlayRoot.addChild(label);
+      if (SHOW_ENTITY_LABELS) {
+        const label = new Text({
+          text: `R${readNumber(row, 0, "resourceType", "resource_type")} ${amount}`,
+          style: { fill: 0xcdf8dc, fontSize: 10 }
+        });
+        label.position.set(x + 32, y + 18);
+        this.overlayRoot.addChild(label);
+      }
     }
 
     for (const row of buildingRows) {
@@ -562,12 +612,14 @@ export class WorldRenderer {
         );
       }
 
-      const label = new Text({
-        text: `B ${progress}/${required}`,
-        style: { fill: 0xffe5bb, fontSize: 10 }
-      });
-      label.position.set(x + 36, y + 14);
-      this.overlayRoot.addChild(label);
+      if (SHOW_ENTITY_LABELS) {
+        const label = new Text({
+          text: `B ${progress}/${required}`,
+          style: { fill: 0xffe5bb, fontSize: 10 }
+        });
+        label.position.set(x + 36, y + 14);
+        this.overlayRoot.addChild(label);
+      }
     }
 
     for (const row of claimRows) {
@@ -646,12 +698,14 @@ export class WorldRenderer {
         );
       }
 
-      const label = new Text({
-        text: `NPC ${readNumber(row, 0, "npcId", "npc_id")}`,
-        style: { fill: 0xffebf3, fontSize: 10 }
-      });
-      label.position.set(x + 30, y + 12);
-      this.overlayRoot.addChild(label);
+      if (SHOW_ENTITY_LABELS) {
+        const label = new Text({
+          text: `NPC ${readNumber(row, 0, "npcId", "npc_id")}`,
+          style: { fill: 0xffebf3, fontSize: 10 }
+        });
+        label.position.set(x + 30, y + 12);
+        this.overlayRoot.addChild(label);
+      }
     }
 
     for (const row of transformRows) {
