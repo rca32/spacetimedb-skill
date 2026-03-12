@@ -10,7 +10,6 @@ const TABLE_SUMMARY_ORDER = [
   "player_session_view",
   "physics_state",
   "transform_state",
-  "player_movement_feedback_view",
   "path_result",
   "path_step",
   "server_correction",
@@ -85,12 +84,17 @@ export class ConsoleDiagnostics {
   sampleMovement(nowMs: number): void {
     const state = this.movement.getDebugState();
     const next =
+      `frame=${state.currentFrameNo}/${state.lastPublishedFrameNo}/${state.lastAuthoritativeFrameNo} ` +
       `pending=${state.pendingIntents} ` +
+      `path=${state.activePathId ?? "-"} ` +
       `reason=${state.correctionReason} ` +
+      `delta=${state.delta.distance.toFixed(2)} ` +
       `predicted=(${state.predicted.x.toFixed(1)},${state.predicted.z.toFixed(1)}) ` +
       `authoritative=(${state.authoritative.x.toFixed(1)},${state.authoritative.z.toFixed(1)})`;
     const shouldHeartbeat =
-      state.pendingIntents > 0 || state.correctionReason !== "ok";
+      state.pendingIntents > 0 ||
+      state.correctionReason !== "ok" ||
+      state.activePathId != null;
     const shouldLogAgain = shouldHeartbeat && nowMs - this.lastMovementLogAt >= 1000;
 
     if (next === this.lastMovementSummary && !shouldLogAgain) {
@@ -103,8 +107,8 @@ export class ConsoleDiagnostics {
     if (
       state.pendingIntents > 0 ||
       state.correctionReason !== "ok" ||
-      Math.abs(state.predicted.x - state.authoritative.x) > 0.25 ||
-      Math.abs(state.predicted.z - state.authoritative.z) > 0.25
+      state.delta.distance > 0.2 ||
+      state.activePathId != null
     ) {
       console.info(`[runtime:movement] ${next}`);
     }

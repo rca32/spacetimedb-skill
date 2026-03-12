@@ -7,6 +7,7 @@ MODULE_PATH="${SPACETIME_MODULE_PATH:-"${CLIENT_DIR}/../stitch-server/crates/gam
 OUT_DIR="${CLIENT_DIR}/src/module_bindings"
 
 mkdir -p "${OUT_DIR}"
+rm -rf "${OUT_DIR:?}/"*
 
 spacetime generate --lang typescript \
   --out-dir "${OUT_DIR}" \

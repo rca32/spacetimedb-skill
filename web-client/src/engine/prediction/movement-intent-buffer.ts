@@ -4,6 +4,7 @@ export interface MovementIntent {
   directionX: number;
   directionZ: number;
   speed: number;
+  durationMs: number;
   createdAt: number;
 }
 

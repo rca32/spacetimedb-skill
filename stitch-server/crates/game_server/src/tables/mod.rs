@@ -66,7 +66,7 @@ pub use live_ops::{
     ActionRateViolation, AntiCheatEvent, AntiCheatParams, BalanceParams, EconomyMetric,
     EconomyParams, FeatureFlags, MetricDaily, ParamChangeLog, ParamGuardrail,
 };
-pub use movement::{MovementActorState, MovementRequestLog, MovementViolation};
+pub use movement::MovementViolation;
 pub use npc_quest::{
     AgentRequest, AgentResult, NpcAiStatusView, NpcAnchorState, NpcInteractionLog,
     NpcPopulationDef, NpcState, NpcStateStream, NpcTradeOrderDef, NpcTradeOrderState,
@@ -87,7 +87,7 @@ pub use player_progression::{
 pub use player_state::PlayerState;
 pub use player_views::{
     PlayerInventoryContainerView, PlayerInventoryItemView, PlayerInventorySlotView,
-    PlayerMovementFeedbackView, PlayerSessionView, PlayerWalletView,
+    PlayerSessionView, PlayerWalletView,
 };
 pub use project_site_state::ProjectSiteState;
 pub use role_binding::RoleBinding;

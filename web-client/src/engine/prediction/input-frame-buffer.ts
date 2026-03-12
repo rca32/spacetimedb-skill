@@ -21,19 +21,30 @@ export class InputFrameBuffer {
     }
   }
 
-  push(moveX: number, moveZ: number, sprint: boolean): InputFrame {
+  push(
+    frameNo: number,
+    moveX: number,
+    moveZ: number,
+    sprint: boolean,
+    timestamp = Date.now()
+  ): InputFrame {
+    const resolvedFrameNo = Math.max(this.nextFrameNo, Math.floor(frameNo));
     const frame: InputFrame = {
-      frameNo: this.nextFrameNo,
+      frameNo: resolvedFrameNo,
       moveX,
       moveZ,
       sprint,
-      timestamp: Date.now()
+      timestamp
     };
 
-    this.nextFrameNo += 1;
+    this.nextFrameNo = resolvedFrameNo + 1;
     this.frames.push(frame);
     this.frames.splice(0, Math.max(0, this.frames.length - 120));
     return frame;
+  }
+
+  peekNextFrameNo(): number {
+    return this.nextFrameNo;
   }
 
   getRecent(): readonly InputFrame[] {
@@ -41,6 +52,7 @@ export class InputFrameBuffer {
   }
 
   clear(): void {
+    this.nextFrameNo = 1;
     this.frames.length = 0;
   }
 }

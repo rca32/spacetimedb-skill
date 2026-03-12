@@ -46,6 +46,7 @@ const SESSION_GROUP_NAME = "session";
 const PERSONAL_GROUP_NAME = "personal";
 const MOVEMENT_GROUP_NAME = "movement";
 const WORLD_GROUP_NAME = "world";
+const PATH_STEP_GROUP_NAME = "path-active";
 
 const STATIC_GROUPS = {
   session(identityHex: string | null): SubscriptionGroup {
@@ -79,28 +80,36 @@ const STATIC_GROUPS = {
     };
   },
   movement(identityHex: string | null): SubscriptionGroup {
-    const sessionFilter = identityHex ? ` WHERE identity = 0x${identityHex}` : "";
     const entityFilter = identityHex ? ` WHERE entity_id = 0x${identityHex}` : "";
+    const correctionFilter = identityHex
+      ? ` WHERE identity = 0x${identityHex} AND acknowledged = false`
+      : " WHERE acknowledged = false";
+    const pathFilter = identityHex
+      ? ` WHERE requester_identity = 0x${identityHex}`
+      : " WHERE requester_identity = 0x0";
 
     return {
       name: MOVEMENT_GROUP_NAME,
-      tables: [
-        "physics_state",
-        "player_movement_feedback_view",
-        "server_correction",
-        "path_result",
-        "path_step"
-      ],
+      tables: ["physics_state", "server_correction", "path_result"],
       queries: [
         `SELECT * FROM physics_state${entityFilter}`,
-        `SELECT * FROM player_movement_feedback_view${sessionFilter}`,
-        `SELECT * FROM server_correction${sessionFilter}`,
-        `SELECT * FROM path_result WHERE requester_identity = 0x${identityHex ?? "0"}`,
-        "SELECT * FROM path_step"
+        `SELECT * FROM server_correction${correctionFilter}`,
+        `SELECT * FROM path_result${pathFilter}`
       ]
+    };
+  },
+  pathStep(pathId: string): SubscriptionGroup {
+    return {
+      name: PATH_STEP_GROUP_NAME,
+      tables: ["path_step"],
+      queries: [`SELECT * FROM path_step WHERE path_id = '${escapeSqlString(pathId)}'`]
     };
   }
 } as const;
+
+function escapeSqlString(value: string): string {
+  return value.replace(/'/g, "''");
+}
 
 function toHandleName(table: string): string {
   return table.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase());
@@ -243,6 +252,7 @@ export class SubscriptionCoordinator {
   private readonly handles = new Map<string, SubscriptionHandleLike>();
   private connection: DbConnectionLike | null = null;
   private identityHex: string | null = null;
+  private trackedPathId: string | null = null;
   private lastKnownAnchor: WorldAnchor | null = null;
   private lastWorldQueryKey: string | null = null;
   private lastAoiRequestKey: string | null = null;
@@ -266,7 +276,26 @@ export class SubscriptionCoordinator {
     this.subscribeGroup(STATIC_GROUPS.session(identityHex));
     this.subscribeGroup(STATIC_GROUPS.personal(identityHex));
     this.subscribeGroup(STATIC_GROUPS.movement(identityHex));
+    this.setTrackedPathId(null);
     this.maybeRefreshWorldSubscription();
+  }
+
+  setTrackedPathId(pathId: string | null): void {
+    if (this.trackedPathId === pathId) {
+      return;
+    }
+
+    this.trackedPathId = pathId;
+    if (!this.connection) {
+      return;
+    }
+
+    if (!pathId) {
+      this.unsubscribeGroup(PATH_STEP_GROUP_NAME, ["path_step"]);
+      return;
+    }
+
+    this.subscribeGroup(STATIC_GROUPS.pathStep(pathId));
   }
 
   setViewportSize(width: number, height: number): void {
@@ -377,6 +406,18 @@ export class SubscriptionCoordinator {
       .subscribe(group.queries);
 
     this.handles.set(group.name, handle);
+  }
+
+  private unsubscribeGroup(groupName: string, tablesToClear: readonly string[] = []): void {
+    const previous = this.handles.get(groupName);
+    if (previous && !previous.isEnded?.()) {
+      previous.unsubscribe?.();
+    }
+    this.handles.delete(groupName);
+
+    for (const table of tablesToClear) {
+      this.authoritativeStore.clearTable(table);
+    }
   }
 
   private captureGroupSnapshot(tables: string[], db: Record<string, unknown>): void {

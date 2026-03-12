@@ -4,8 +4,7 @@ import type { SpacetimeClient } from "./spacetime-client";
 const QUIET_REDUCERS = new Set([
   "sync_client_frame",
   "submit_motion_intent",
-  "ack_server_correction",
-  "move_to"
+  "ack_server_correction"
 ]);
 
 function toReducerHandleName(reducerName: string): string {

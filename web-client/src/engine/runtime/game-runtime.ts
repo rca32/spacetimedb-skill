@@ -51,6 +51,9 @@ export class GameRuntime {
   constructor(private readonly options: GameRuntimeOptions) {
     options.hudHost.replaceChildren();
     options.hudHost.hidden = true;
+    this.movementPrediction.setTrackedPathIdHandler((pathId) => {
+      this.subscriptionCoordinator.setTrackedPathId(pathId);
+    });
     this.consoleDiagnostics = new ConsoleDiagnostics(
       options.env,
       options.versionGate,
@@ -137,6 +140,8 @@ export class GameRuntime {
             this.eventLog.push("error", `connect failed: ${error.message}`);
           },
           onDisconnect: (error) => {
+            this.movementPrediction.resetForResync("disconnect");
+            this.subscriptionCoordinator.setTrackedPathId(null);
             this.consoleDiagnostics.setRuntimeStatus({
               label: "disconnected",
               tone: error ? "error" : "warn"

@@ -53,17 +53,3 @@ pub struct PlayerSessionView {
     pub dimension_id: u32,
     pub last_active_at: Timestamp,
 }
-
-#[spacetimedb::table(accessor = player_movement_feedback_view, public)]
-pub struct PlayerMovementFeedbackView {
-    #[primary_key]
-    pub request_key: String,
-    pub identity: Identity,
-    pub request_id: String,
-    pub accepted: bool,
-    pub reason_code: String,
-    pub server_x: f32,
-    pub server_y: f32,
-    pub server_z: f32,
-    pub processed_at: Timestamp,
-}

@@ -7,56 +7,70 @@ export interface TableSnapshot {
 
 type StoreListener = (tables: readonly TableSnapshot[]) => void;
 
-const PRIMARY_KEY_CANDIDATES = [
-  ["chunkKey", "chunk_key"],
-  ["requestKey", "request_key"],
-  ["identity"],
-  ["regionId", "region_id"],
-  ["entityId", "entity_id"],
-  ["buildingDefId", "building_def_id"],
-  ["biomeId", "biome_id"],
-  ["resourceType", "resource_type"],
-  ["npcId", "npc_id"],
-  ["itemInstanceId", "item_instance_id"],
-  ["containerId", "container_id"],
-  ["messageId", "message_id"],
-  ["guildId", "guild_id"],
-  ["partyId", "party_id"],
-  ["claimId", "claim_id"],
-  ["channelId", "channel_id"],
-  ["slotKey", "slot_key"],
-  ["viewKey", "view_key"],
-  ["stepKey", "step_key"],
-  ["pathId", "path_id"]
-] as const;
+const TABLE_KEY_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  biome_gen_def: ["biomeId", "biome_id"],
+  building_def: ["buildingDefId", "building_def_id"],
+  building_preview_feedback_view: ["requestKey", "request_key"],
+  building_state: ["entityId", "entity_id"],
+  claim_state: ["claimId", "claim_id"],
+  npc_state_stream: ["npcId", "npc_id"],
+  path_result: ["pathId", "path_id"],
+  path_step: ["stepKey", "step_key"],
+  physics_state: ["entityId", "entity_id"],
+  player_inventory_container_view: ["viewKey", "view_key"],
+  player_inventory_item_view: ["itemInstanceId", "item_instance_id"],
+  player_inventory_slot_view: ["slotKey", "slot_key"],
+  player_session_view: ["identity"],
+  player_wallet_view: ["identity"],
+  resource_gen_def: ["resourceType", "resource_type"],
+  resource_node: ["entityId", "entity_id"],
+  server_correction: ["correctionId", "correction_id"],
+  terrain_chunk_payload: ["chunkKey", "chunk_key", "regionId", "region_id", "dimensionId", "dimension_id", "chunkX", "chunk_x", "chunkY", "chunk_y"],
+  terrain_chunk_stream: ["chunkKey", "chunk_key", "regionId", "region_id", "dimensionId", "dimension_id", "chunkX", "chunk_x", "chunkY", "chunk_y"],
+  transform_state: ["entityId", "entity_id"]
+};
 
-function inferRowKey(row: Record<string, unknown>): string {
-  for (const candidates of PRIMARY_KEY_CANDIDATES) {
-    const value = readField(row, ...candidates);
-    if (value != null) {
-      return `${candidates[0]}:${String(value)}`;
+function stringifyRow(row: Record<string, unknown>): string {
+  return JSON.stringify(row, (_key, value) =>
+    typeof value === "bigint" ? value.toString() : value
+  );
+}
+
+function inferRowKey(table: string, row: Record<string, unknown>): string {
+  const keyColumns = TABLE_KEY_COLUMNS[table];
+  if (keyColumns) {
+    const values = keyColumns.map((column) => readField(row, column));
+    if (values.every((value) => value != null)) {
+      return `${table}:${values.map((value) => String(value)).join(":")}`;
+    }
+
+    const singleValue = keyColumns
+      .map((column) => readField(row, column))
+      .find((value) => value != null);
+    if (singleValue != null) {
+      return `${table}:${String(singleValue)}`;
     }
   }
 
-  const chunkKey =
+  const compositeChunkKey =
     readField(row, "regionId", "region_id") != null &&
     readField(row, "dimensionId", "dimension_id") != null &&
     readField(row, "chunkX", "chunk_x") != null &&
     readField(row, "chunkY", "chunk_y") != null;
 
-  if (chunkKey) {
-    return `chunk:${String(readField(row, "regionId", "region_id"))}:${String(readField(row, "dimensionId", "dimension_id"))}:${String(readField(row, "chunkX", "chunk_x"))}:${String(readField(row, "chunkY", "chunk_y"))}`;
+  if (compositeChunkKey) {
+    return `${table}:${String(readField(row, "regionId", "region_id"))}:${String(readField(row, "dimensionId", "dimension_id"))}:${String(readField(row, "chunkX", "chunk_x"))}:${String(readField(row, "chunkY", "chunk_y"))}`;
   }
 
-  const slotKey =
+  const compositeSlotKey =
     readField(row, "containerId", "container_id") != null &&
     readField(row, "slotIndex", "slot_index") != null;
 
-  if (slotKey) {
-    return `slot:${String(readField(row, "containerId", "container_id"))}:${String(readField(row, "slotIndex", "slot_index"))}`;
+  if (compositeSlotKey) {
+    return `${table}:${String(readField(row, "containerId", "container_id"))}:${String(readField(row, "slotIndex", "slot_index"))}`;
   }
 
-  return JSON.stringify(row);
+  return `${table}:${stringifyRow(row)}`;
 }
 
 export class AuthoritativeStore {
@@ -73,16 +87,25 @@ export class AuthoritativeStore {
     const next = new Map<string, Record<string, unknown>>();
 
     for (const row of rows) {
-      next.set(inferRowKey(row), row);
+      next.set(inferRowKey(table, row), row);
     }
 
     this.tables.set(table, next);
     this.emit();
   }
 
+  clearTable(table: string): void {
+    if (!this.tables.has(table)) {
+      return;
+    }
+
+    this.tables.set(table, new Map());
+    this.emit();
+  }
+
   upsert(table: string, row: Record<string, unknown>): void {
     const bucket = this.tables.get(table) ?? new Map<string, Record<string, unknown>>();
-    bucket.set(inferRowKey(row), row);
+    bucket.set(inferRowKey(table, row), row);
     this.tables.set(table, bucket);
     this.emit();
   }
@@ -93,7 +116,7 @@ export class AuthoritativeStore {
       return;
     }
 
-    bucket.delete(inferRowKey(row));
+    bucket.delete(inferRowKey(table, row));
     this.emit();
   }
 

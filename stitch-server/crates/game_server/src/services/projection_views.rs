@@ -7,22 +7,18 @@ use crate::tables::inventory_container::inventory_container;
 use crate::tables::inventory_slot::inventory_slot;
 use crate::tables::item_instance::item_instance;
 use crate::tables::item_stack::item_stack;
-use crate::tables::movement::movement_request_log;
 use crate::tables::npc_quest::{npc_ai_status_view, npc_state, npc_state_stream};
 use crate::tables::player_views::player_inventory_container_view;
 use crate::tables::player_views::player_inventory_item_view;
 use crate::tables::player_views::player_inventory_slot_view;
-use crate::tables::player_views::player_movement_feedback_view;
 use crate::tables::player_views::player_session_view;
 use crate::tables::player_views::player_wallet_view;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
 use crate::tables::{
     NpcAiStatusView, NpcState, NpcStateStream, PlayerInventoryContainerView,
-    PlayerInventoryItemView, PlayerInventorySlotView, PlayerMovementFeedbackView,
-    PlayerSessionView, PlayerWalletView,
+    PlayerInventoryItemView, PlayerInventorySlotView, PlayerSessionView, PlayerWalletView,
 };
-use crate::validation::anti_cheat;
 
 pub fn sync_player_inventory_views(ctx: &ReducerContext, owner_identity: Identity) {
     let containers: Vec<_> = ctx
@@ -264,61 +260,6 @@ pub fn reconcile_npc_state_stream(ctx: &ReducerContext) {
     }
 }
 
-pub fn upsert_movement_feedback(
-    ctx: &ReducerContext,
-    identity: Identity,
-    request_id: &str,
-    accepted: bool,
-    reason_code: &str,
-    fallback_pos: Vec<f32>,
-) {
-    let request_key = anti_cheat::request_key(identity, request_id);
-    let reason_code = sanitize_reason_code(reason_code);
-    let processed_at = ctx
-        .db
-        .movement_request_log()
-        .request_key()
-        .find(request_key.clone())
-        .map(|row| row.processed_at)
-        .unwrap_or(ctx.timestamp);
-
-    let (server_x, server_y, server_z) = normalize_position(
-        ctx.db
-            .transform_state()
-            .entity_id()
-            .find(identity)
-            .map(|row| row.position)
-            .unwrap_or(fallback_pos),
-    );
-
-    let next = PlayerMovementFeedbackView {
-        request_key: request_key.clone(),
-        identity,
-        request_id: request_id.to_string(),
-        accepted,
-        reason_code,
-        server_x,
-        server_y,
-        server_z,
-        processed_at,
-    };
-
-    if ctx
-        .db
-        .player_movement_feedback_view()
-        .request_key()
-        .find(request_key.clone())
-        .is_some()
-    {
-        ctx.db
-            .player_movement_feedback_view()
-            .request_key()
-            .update(next);
-    } else {
-        ctx.db.player_movement_feedback_view().insert(next);
-    }
-}
-
 fn inventory_container_view_key(owner_identity: Identity, container_id: u64) -> String {
     format!("{owner_identity}:{container_id}")
 }
@@ -340,28 +281,4 @@ fn project_npc_state_row(row: &NpcState) -> NpcStateStream {
         next_action_ts: row.next_action_ts,
         anchor_entity_id: row.anchor_entity_id,
     }
-}
-
-fn sanitize_reason_code(reason_code: &str) -> String {
-    let trimmed = reason_code.trim();
-    if trimmed.is_empty() {
-        return "unknown".to_string();
-    }
-
-    const MAX_REASON_CHARS: usize = 64;
-    if trimmed.chars().count() <= MAX_REASON_CHARS {
-        return trimmed.to_string();
-    }
-
-    trimmed.chars().take(MAX_REASON_CHARS).collect()
-}
-
-fn normalize_position(position: Vec<f32>) -> (f32, f32, f32) {
-    let mut normalized = [0.0_f32, 0.0_f32, 0.0_f32];
-
-    for (index, value) in position.into_iter().take(3).enumerate() {
-        normalized[index] = if value.is_finite() { value } else { 0.0 };
-    }
-
-    (normalized[0], normalized[1], normalized[2])
 }

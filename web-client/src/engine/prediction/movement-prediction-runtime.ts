@@ -46,19 +46,40 @@ interface MovementCommand {
   directionX: number;
   directionZ: number;
   sprint: boolean;
-  target: PredictedPosition | null;
   inputKey: string;
 }
 
-const WALK_SPEED = 30;
-const SPRINT_SPEED = 48;
+interface MovementDebugState {
+  predicted: PredictedPosition;
+  authoritative: PredictedPosition;
+  pendingIntents: number;
+  correctionReason: string;
+  activePathId: string | null;
+  currentFrameNo: number;
+  lastPublishedFrameNo: number;
+  lastAuthoritativeFrameNo: number;
+  delta: {
+    x: number;
+    z: number;
+    distance: number;
+  };
+}
+
+type PathTrackingHandler = (pathId: string | null) => void;
+
+const WALK_SPEED = 10;
+const SPRINT_SPEED = 14;
 const FIXED_SIM_STEP_MS = 1000 / 60;
 const MAX_SIM_STEPS_PER_TICK = 8;
-const MOVE_SEGMENT_MS = 150;
-const MAX_PENDING_SEGMENTS = 2;
+const NETWORK_SEND_INTERVAL_MS = 50;
+const MAX_PENDING_INTENTS = 6;
+const MAX_SERVER_FRAME_STEP = 12;
 const PATH_STATUS_SUCCESS = 1;
-const PATH_REACH_RADIUS = 0.45;
+const PATH_REACH_RADIUS = 0.35;
 const DEFAULT_PATH_NODE_LIMIT = 2048;
+const HARD_SNAP_DISTANCE = 1.5;
+const SMOOTH_CORRECTION_DISTANCE = 0.35;
+const SMOOTH_CORRECTION_ALPHA = 0.35;
 
 function isMovementKey(event: KeyboardEvent): boolean {
   switch (event.code) {
@@ -126,41 +147,44 @@ function parseCorrectionFrameNo(correctionId: string): number | null {
   return Number.isFinite(frameNo) && frameNo > 0 ? frameNo : null;
 }
 
+function parsePathMicros(pathId: string): number {
+  const parts = pathId.split(":");
+  if (parts.length < 3) {
+    return 0;
+  }
+
+  const micros = Number(parts[2]);
+  return Number.isFinite(micros) ? micros : 0;
+}
+
 export class MovementPredictionRuntime {
   private readonly keyState = new Set<string>();
   private readonly inputFrames = new InputFrameBuffer();
   private readonly intents = new MovementIntentBuffer();
-  private readonly processedFeedback = new Set<string>();
   private readonly processedCorrections = new Set<string>();
   private predictedPosition: PredictedPosition = { x: 120, z: 120 };
   private authoritativePosition: PredictedPosition = { x: 120, z: 120 };
-  private segmentCursorPosition: PredictedPosition = { x: 120, z: 120 };
   private authoritativeY = 0;
   private localIdentityHex: string | null = null;
+  private trackedPathId: string | null = null;
+  private trackedPathIdHandler: PathTrackingHandler | null = null;
   private lastPublishedFrameNo = 0;
   private lastAuthoritativeFrameNo = 0;
+  private currentFrameNo = 0;
   private lastStepAt = 0;
   private accumulatedSimMs = 0;
-  private segmentElapsedMs = 0;
-  private segmentDirty = false;
-  private lastSegmentInputKey = "";
-  private lastSegmentDirection = { x: 0, z: 0 };
-  private lastSegmentSprint = false;
+  private networkElapsedMs = 0;
+  private lastSentInputKey = "idle";
+  private lastSentWasMoving = false;
   private correctionReason = "bootstrap";
   private initializedFromServer = false;
   private activePathId: string | null = null;
+  private activePathExpectedStepCount = 0;
   private activePathWaypoints: PathWaypoint[] = [];
   private activePathStepIndex = 0;
   private pendingPathGoal: PendingPathGoal | null = null;
   private lastHandledPathId: string | null = null;
-  private lastCommand: MovementCommand = {
-    kind: "idle",
-    directionX: 0,
-    directionZ: 0,
-    sprint: false,
-    target: null,
-    inputKey: "idle"
-  };
+  private lastSessionKey: string | null = null;
   private readonly movementSessionId = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
 
   constructor(
@@ -171,6 +195,35 @@ export class MovementPredictionRuntime {
 
   setLocalIdentityHex(identityHex: string): void {
     this.localIdentityHex = normalizeIdentityHex(identityHex);
+  }
+
+  setTrackedPathIdHandler(handler: PathTrackingHandler): void {
+    this.trackedPathIdHandler = handler;
+    handler(this.trackedPathId);
+  }
+
+  resetForResync(reason: string): void {
+    this.keyState.clear();
+    this.inputFrames.clear();
+    this.intents.clear();
+    this.processedCorrections.clear();
+    this.pendingPathGoal = null;
+    this.activePathId = null;
+    this.activePathExpectedStepCount = 0;
+    this.activePathWaypoints = [];
+    this.activePathStepIndex = 0;
+    this.setTrackedPathId(null);
+    this.lastPublishedFrameNo = 0;
+    this.lastAuthoritativeFrameNo = 0;
+    this.currentFrameNo = 0;
+    this.lastStepAt = 0;
+    this.accumulatedSimMs = 0;
+    this.networkElapsedMs = 0;
+    this.lastSentInputKey = "idle";
+    this.lastSentWasMoving = false;
+    this.correctionReason = reason;
+    this.initializedFromServer = false;
+    this.eventLog.push("info", `movement state reset: ${reason}`);
   }
 
   requestClickMove(goalHexX: number, goalHexZ: number): void {
@@ -253,48 +306,33 @@ export class MovementPredictionRuntime {
   }
 
   tick(now: number): void {
-    const dtMs = this.lastStepAt === 0 ? 16 : now - this.lastStepAt;
-    this.lastStepAt = now;
-    this.accumulatedSimMs = Math.min(
-      this.accumulatedSimMs + Math.max(0, dtMs),
-      FIXED_SIM_STEP_MS * MAX_SIM_STEPS_PER_TICK
-    );
-
+    const session = this.readSessionContext();
+    this.syncSessionContext(session);
     this.pullAuthoritativePosition();
-    this.applyMovementFeedback();
     this.applyServerCorrections();
     this.syncClickPathState();
 
     const command = this.resolveMovementCommand();
+    const dtMs = this.lastStepAt === 0 ? 16 : now - this.lastStepAt;
+    this.lastStepAt = now;
+
     if (command.kind === "idle") {
-      if (this.segmentDirty) {
-        this.publishMoveSegment(now, this.readSessionContext(), this.lastCommand);
+      if (this.lastSentWasMoving) {
+        this.publishIntent(session, command);
       }
       this.accumulatedSimMs = 0;
-      this.segmentElapsedMs = 0;
-      this.segmentDirty = false;
-      this.lastSegmentInputKey = "";
-      this.lastCommand = command;
+      this.networkElapsedMs = 0;
       this.reconcilePredictedPosition();
       return;
     }
 
+    this.accumulatedSimMs = Math.min(
+      this.accumulatedSimMs + Math.max(0, dtMs),
+      FIXED_SIM_STEP_MS * MAX_SIM_STEPS_PER_TICK
+    );
+    this.networkElapsedMs += Math.max(0, dtMs);
+
     const speed = command.sprint ? SPRINT_SPEED : WALK_SPEED;
-    const session = this.readSessionContext();
-    const inputKey = command.inputKey;
-    if (inputKey !== this.lastSegmentInputKey) {
-      if (this.segmentDirty) {
-        this.publishMoveSegment(now, session, this.lastCommand);
-      }
-      this.segmentElapsedMs = MOVE_SEGMENT_MS;
-      this.lastSegmentInputKey = inputKey;
-    }
-    this.lastCommand = command;
-    this.lastSegmentDirection = {
-      x: command.directionX,
-      z: command.directionZ
-    };
-    this.lastSegmentSprint = command.sprint;
     let processedStep = false;
     let steps = 0;
 
@@ -305,6 +343,10 @@ export class MovementPredictionRuntime {
       this.accumulatedSimMs -= FIXED_SIM_STEP_MS;
       steps += 1;
       processedStep = true;
+      this.currentFrameNo = Math.max(
+        this.currentFrameNo + 1,
+        this.inputFrames.peekNextFrameNo()
+      );
 
       this.predictedPosition = {
         x:
@@ -314,32 +356,41 @@ export class MovementPredictionRuntime {
           this.predictedPosition.z +
           command.directionZ * speed * (FIXED_SIM_STEP_MS / 1000)
       };
-      this.segmentDirty = true;
-      this.segmentElapsedMs += FIXED_SIM_STEP_MS;
-
-      if (this.segmentElapsedMs >= MOVE_SEGMENT_MS) {
-        this.publishMoveSegment(now, session, command);
-      }
     }
 
-    if (!processedStep) {
+    const shouldPublish =
+      this.networkElapsedMs >= NETWORK_SEND_INTERVAL_MS ||
+      command.inputKey !== this.lastSentInputKey;
+
+    if (shouldPublish) {
+      this.publishIntent(session, command);
+    }
+
+    if (!processedStep && command.inputKey === this.lastSentInputKey) {
+      this.reconcilePredictedPosition();
       return;
     }
 
     this.reconcilePredictedPosition();
   }
 
-  getDebugState(): {
-    predicted: PredictedPosition;
-    authoritative: PredictedPosition;
-    pendingIntents: number;
-    correctionReason: string;
-  } {
+  getDebugState(): MovementDebugState {
+    const dx = this.authoritativePosition.x - this.predictedPosition.x;
+    const dz = this.authoritativePosition.z - this.predictedPosition.z;
     return {
       predicted: this.predictedPosition,
       authoritative: this.authoritativePosition,
       pendingIntents: this.intents.getPending().length,
-      correctionReason: this.correctionReason
+      correctionReason: this.correctionReason,
+      activePathId: this.activePathId,
+      currentFrameNo: this.currentFrameNo,
+      lastPublishedFrameNo: this.lastPublishedFrameNo,
+      lastAuthoritativeFrameNo: this.lastAuthoritativeFrameNo,
+      delta: {
+        x: dx,
+        z: dz,
+        distance: Math.hypot(dx, dz)
+      }
     };
   }
 
@@ -371,7 +422,6 @@ export class MovementPredictionRuntime {
         directionX: normalized.x,
         directionZ: normalized.z,
         sprint: manual.sprint,
-        target: null,
         inputKey: `manual:${manual.moveX}:${manual.moveZ}:${manual.sprint ? 1 : 0}`
       };
     }
@@ -383,18 +433,13 @@ export class MovementPredictionRuntime {
         directionX: 0,
         directionZ: 0,
         sprint: false,
-        target: null,
         inputKey: "idle"
       };
     }
 
-    const source =
-      this.intents.getPending().length > 0
-        ? this.segmentCursorPosition
-        : this.authoritativePosition;
     const normalized = normalize(
-      waypoint.worldX - source.x,
-      waypoint.worldZ - source.z
+      waypoint.worldX - this.authoritativePosition.x,
+      waypoint.worldZ - this.authoritativePosition.z
     );
     if (normalized.x === 0 && normalized.z === 0) {
       return {
@@ -402,7 +447,6 @@ export class MovementPredictionRuntime {
         directionX: 0,
         directionZ: 0,
         sprint: false,
-        target: null,
         inputKey: "idle"
       };
     }
@@ -412,10 +456,6 @@ export class MovementPredictionRuntime {
       directionX: normalized.x,
       directionZ: normalized.z,
       sprint: false,
-      target: {
-        x: waypoint.worldX,
-        z: waypoint.worldZ
-      },
       inputKey: `path:${this.activePathId ?? "pending"}:${this.activePathStepIndex}`
     };
   }
@@ -432,6 +472,19 @@ export class MovementPredictionRuntime {
       regionId: readNumber(session, 0, "regionId", "region_id"),
       dimensionId: readNumber(session, 0, "dimensionId", "dimension_id")
     };
+  }
+
+  private syncSessionContext(session: SessionContext | null): void {
+    const nextKey = session ? `${session.regionId}:${session.dimensionId}` : null;
+    if (nextKey === this.lastSessionKey) {
+      return;
+    }
+
+    const shouldReset = this.lastSessionKey != null || nextKey == null;
+    this.lastSessionKey = nextKey;
+    if (shouldReset) {
+      this.resetForResync(nextKey == null ? "session_pending" : "session_changed");
+    }
   }
 
   private pullAuthoritativePosition(): void {
@@ -456,23 +509,20 @@ export class MovementPredictionRuntime {
         "lastFrameNo",
         "last_frame_no"
       );
+
       this.lastAuthoritativeFrameNo = Math.max(this.lastAuthoritativeFrameNo, lastFrameNo);
+      this.currentFrameNo = Math.max(this.currentFrameNo, lastFrameNo);
       if (lastFrameNo > 0) {
         this.inputFrames.seedNextFrameNo(lastFrameNo + 1);
+        this.intents.acknowledgeThrough(lastFrameNo);
       }
       if (lastIntentId) {
         this.intents.acknowledgeIntent(lastIntentId);
       }
-      if (lastFrameNo > 0) {
-        this.intents.acknowledgeThrough(lastFrameNo);
-      }
 
       if (!this.initializedFromServer) {
         this.predictedPosition = { x, z };
-        this.segmentCursorPosition = { x, z };
         this.initializedFromServer = true;
-      } else if (this.intents.getPending().length === 0) {
-        this.segmentCursorPosition = { x, z };
       }
       return;
     }
@@ -491,283 +541,284 @@ export class MovementPredictionRuntime {
 
     if (!this.initializedFromServer) {
       this.predictedPosition = { x, z };
-      this.segmentCursorPosition = { x, z };
       this.initializedFromServer = true;
-    } else if (this.intents.getPending().length === 0) {
-      this.segmentCursorPosition = { x, z };
-    }
-  }
-
-  private applyMovementFeedback(): void {
-    const feedbackRows = this.authoritativeStore.getRows("player_movement_feedback_view");
-
-    for (const row of feedbackRows) {
-      if (!this.matchesLocalIdentity(row, "identity")) {
-        continue;
-      }
-
-      const requestKey = readString(row, "", "requestKey", "request_key");
-      if (!requestKey || this.processedFeedback.has(requestKey)) {
-        continue;
-      }
-
-      this.processedFeedback.add(requestKey);
-
-      const requestId = readString(row, "", "requestId", "request_id");
-      if (!requestId || !this.isOwnRequestId(requestId)) {
-        continue;
-      }
-
-      const reasonCode = readString(row, "ok", "reasonCode", "reason_code");
-      const accepted = readBoolean(row, false, "accepted");
-      const nextPosition = {
-        x: readNumber(row, this.authoritativePosition.x, "serverX", "server_x"),
-        z: readNumber(row, this.authoritativePosition.z, "serverZ", "server_z")
-      };
-      this.authoritativeY = readNumber(row, this.authoritativeY, "serverY", "server_y");
-
-      this.authoritativePosition = nextPosition;
-      if (requestId) {
-        this.intents.acknowledgeIntent(requestId);
-      }
-      if (this.intents.getPending().length === 0) {
-        this.segmentCursorPosition = { ...nextPosition };
-      }
-
-      if (!accepted) {
-        this.predictedPosition = { ...nextPosition };
-        this.segmentCursorPosition = { ...nextPosition };
-        this.intents.clear();
-      }
-
-      this.correctionReason = accepted ? "server_accept" : reasonCode;
-      this.eventLog.push(
-        accepted ? "info" : "warn",
-        `movement feedback ${accepted ? "accepted" : "rejected"} request=${requestId} reason=${reasonCode}`
-      );
     }
   }
 
   private syncClickPathState(): void {
     this.advancePathWaypoint();
 
-    if (!this.pendingPathGoal) {
-      return;
-    }
+    if (this.pendingPathGoal && !this.activePathId) {
+      const results = this.authoritativeStore
+        .getRows("path_result")
+        .filter((row) => this.matchesLocalIdentity(row, "requesterIdentity", "requester_identity"))
+        .filter(
+          (row) =>
+            readNumber(row, 0, "regionId", "region_id") === this.pendingPathGoal!.regionId &&
+            readNumber(row, 0, "dimensionId", "dimension_id") === this.pendingPathGoal!.dimensionId &&
+            readNumber(row, 0, "goalHexX", "goal_hex_x") === this.pendingPathGoal!.goalHexX &&
+            readNumber(row, 0, "goalHexZ", "goal_hex_z") === this.pendingPathGoal!.goalHexZ
+        )
+        .sort((left, right) => {
+          const leftId = String(readField(left, "pathId", "path_id") ?? "");
+          const rightId = String(readField(right, "pathId", "path_id") ?? "");
+          return parsePathMicros(rightId) - parsePathMicros(leftId);
+        });
 
-    const results = this.authoritativeStore
-      .getRows("path_result")
-      .filter((row) => this.matchesLocalIdentity(row, "requesterIdentity", "requester_identity"))
-      .filter(
-        (row) =>
-          readNumber(row, 0, "regionId", "region_id") === this.pendingPathGoal!.regionId &&
-          readNumber(row, 0, "dimensionId", "dimension_id") === this.pendingPathGoal!.dimensionId &&
-          readNumber(row, 0, "goalHexX", "goal_hex_x") === this.pendingPathGoal!.goalHexX &&
-          readNumber(row, 0, "goalHexZ", "goal_hex_z") === this.pendingPathGoal!.goalHexZ
-      )
-      .sort((left, right) => {
-        const leftId = String(readField(left, "pathId", "path_id") ?? "");
-        const rightId = String(readField(right, "pathId", "path_id") ?? "");
-        return parsePathMicros(rightId) - parsePathMicros(leftId);
-      });
+      const latest = results[0];
+      if (!latest) {
+        return;
+      }
 
-    const latest = results[0];
-    if (!latest) {
-      return;
-    }
+      const pathId = String(readField(latest, "pathId", "path_id") ?? "");
+      if (!pathId || pathId === this.lastHandledPathId) {
+        return;
+      }
 
-    const pathId = String(readField(latest, "pathId", "path_id") ?? "");
-    if (!pathId || pathId === this.lastHandledPathId) {
-      return;
-    }
-
-    const status = readNumber(latest, 0, "status");
-    const stepCount = readNumber(latest, 0, "stepCount", "step_count");
-    if (status !== PATH_STATUS_SUCCESS) {
-      const failedGoal = this.pendingPathGoal;
+      const status = readNumber(latest, 0, "status");
+      const stepCount = readNumber(latest, 0, "stepCount", "step_count");
       this.lastHandledPathId = pathId;
+
+      if (status !== PATH_STATUS_SUCCESS) {
+        const failedGoal = this.pendingPathGoal;
+        this.pendingPathGoal = null;
+        this.eventLog.push(
+          "warn",
+          `click path failed: status=${status} goal=${failedGoal?.goalHexX ?? "?"},${failedGoal?.goalHexZ ?? "?"}`
+        );
+        return;
+      }
+
       this.pendingPathGoal = null;
+      this.activePathId = pathId;
+      this.activePathExpectedStepCount = stepCount;
+      this.activePathWaypoints = [];
+      this.activePathStepIndex = 0;
+      this.setTrackedPathId(pathId);
       this.eventLog.push(
-        "warn",
-        `click path failed: status=${status} goal=${failedGoal?.goalHexX ?? "?"},${failedGoal?.goalHexZ ?? "?"}`
+        "info",
+        `click path selected: path=${pathId} expected_steps=${stepCount}`
       );
+    }
+
+    if (!this.activePathId || this.activePathExpectedStepCount === 0) {
       return;
     }
 
     const steps = this.authoritativeStore
       .getRows("path_step")
-      .filter((row) => readString(row, "", "pathId", "path_id") === pathId)
+      .filter((row) => readString(row, "", "pathId", "path_id") === this.activePathId)
       .sort(
         (left, right) =>
           readNumber(left, 0, "stepIndex", "step_index") -
           readNumber(right, 0, "stepIndex", "step_index")
       );
 
-    if (steps.length < stepCount) {
+    if (steps.length < this.activePathExpectedStepCount) {
       return;
     }
 
-    this.lastHandledPathId = pathId;
-    this.activePathId = pathId;
-    this.pendingPathGoal = null;
-    this.activePathWaypoints = steps
-      .slice(1)
-      .map((row): PathWaypoint => {
-        const hexX = readNumber(row, 0, "hexX", "hex_x");
-        const hexZ = readNumber(row, 0, "hexZ", "hex_z");
-        return {
-          hexX,
-          hexZ,
-          worldX: hexX + 0.5,
-          worldZ: hexZ + 0.5
-        };
-      });
-    this.activePathStepIndex = 0;
-    this.eventLog.push(
-      "info",
-      `click path ready: path=${pathId} steps=${this.activePathWaypoints.length}`
-    );
+    const nextWaypoints = steps.slice(1).map((row): PathWaypoint => {
+      const hexX = readNumber(row, 0, "hexX", "hex_x");
+      const hexZ = readNumber(row, 0, "hexZ", "hex_z");
+      return {
+        hexX,
+        hexZ,
+        worldX: hexX + 0.5,
+        worldZ: hexZ + 0.5
+      };
+    });
+
+    const waypointCountChanged =
+      nextWaypoints.length !== this.activePathWaypoints.length;
+    this.activePathWaypoints = nextWaypoints;
+    if (waypointCountChanged) {
+      this.eventLog.push(
+        "info",
+        `click path ready: path=${this.activePathId} steps=${this.activePathWaypoints.length}`
+      );
+    }
     this.advancePathWaypoint();
   }
 
   private applyServerCorrections(): void {
-    const correctionRows = this.authoritativeStore.getRows("server_correction");
+    const correctionRows = [...this.authoritativeStore.getRows("server_correction")]
+      .filter((row) => this.matchesLocalIdentity(row, "identity"))
+      .sort((left, right) => {
+        const leftFrame = parseCorrectionFrameNo(
+          readString(left, "", "correctionId", "correction_id")
+        );
+        const rightFrame = parseCorrectionFrameNo(
+          readString(right, "", "correctionId", "correction_id")
+        );
+        return (leftFrame ?? 0) - (rightFrame ?? 0);
+      });
 
     for (const row of correctionRows) {
-      if (!this.matchesLocalIdentity(row, "identity")) {
-        continue;
-      }
-
       const correctionId = readString(row, "", "correctionId", "correction_id");
       if (!correctionId || this.processedCorrections.has(correctionId)) {
         continue;
       }
 
+      this.processedCorrections.add(correctionId);
+
+      const acknowledged = readBoolean(row, false, "acknowledged");
       const correctionFrameNo = parseCorrectionFrameNo(correctionId);
       if (
         correctionFrameNo != null &&
         this.lastAuthoritativeFrameNo > 0 &&
         correctionFrameNo <= this.lastAuthoritativeFrameNo
       ) {
-        this.processedCorrections.add(correctionId);
+        this.ackServerCorrection(correctionId, acknowledged);
         continue;
       }
 
-      this.processedCorrections.add(correctionId);
-
       const reason = readString(row, "server_correction", "reason");
-      const acknowledged = readBoolean(row, false, "acknowledged");
       const nextPosition = {
         x: readNumber(row, this.authoritativePosition.x, "serverX", "server_x"),
         z: readNumber(row, this.authoritativePosition.z, "serverZ", "server_z")
       };
-      this.authoritativeY = readNumber(row, this.authoritativeY, "serverY", "server_y");
 
+      this.authoritativeY = readNumber(row, this.authoritativeY, "serverY", "server_y");
       this.authoritativePosition = nextPosition;
+      if (correctionFrameNo != null) {
+        this.intents.acknowledgeThrough(correctionFrameNo);
+      }
       this.predictedPosition = { ...nextPosition };
-      this.segmentCursorPosition = { ...nextPosition };
-      this.intents.clear();
+      this.resimulatePendingIntents();
       this.correctionReason = reason;
 
-      if (!acknowledged && this.reducerGateway?.isConnected()) {
-        try {
-          this.reducerGateway.invoke(
-            "ack_server_correction",
-            {
-              correctionId,
-              ackedClientFrameNo: BigInt(this.lastPublishedFrameNo)
-            }
-          );
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "ack_server_correction failed";
-          this.eventLog.push("warn", message);
-        }
-      }
-
+      this.ackServerCorrection(correctionId, acknowledged);
       this.eventLog.push("warn", `server correction ${correctionId}: ${reason}`);
     }
   }
 
-  private publishMoveSegment(
-    now: number,
+  private publishIntent(
     session: SessionContext | null,
     command: MovementCommand
   ): void {
-    if (!this.segmentDirty || !session || !this.reducerGateway?.isConnected()) {
+    if (!session || !this.reducerGateway?.isConnected()) {
       return;
     }
 
-    if (this.intents.getPending().length >= MAX_PENDING_SEGMENTS) {
+    const isMovementIntent = command.kind !== "idle";
+    if (isMovementIntent && this.intents.getPending().length >= MAX_PENDING_INTENTS) {
       return;
     }
 
-    const targetPosition =
-      command.kind === "path" && command.target
-        ? command.target
-        : this.computeManualTarget();
-
-    const frame = this.inputFrames.push(
-      this.lastSegmentDirection.x,
-      this.lastSegmentDirection.z,
-      this.lastSegmentSprint
+    let frameNo = Math.max(
+      this.currentFrameNo,
+      this.lastPublishedFrameNo + 1,
+      this.lastAuthoritativeFrameNo + 1,
+      1
     );
-    const intentId = `move:${this.movementSessionId}:${frame.frameNo}`;
-    this.lastPublishedFrameNo = frame.frameNo;
-    this.intents.enqueue({
-      intentId,
-      frameNo: frame.frameNo,
-      directionX: this.lastSegmentDirection.x,
-      directionZ: this.lastSegmentDirection.z,
-      speed: this.lastSegmentSprint ? SPRINT_SPEED : WALK_SPEED,
-      createdAt: frame.timestamp
-    });
+    if (!isMovementIntent) {
+      frameNo = Math.max(frameNo, this.currentFrameNo + 1);
+    }
+    this.currentFrameNo = frameNo;
+
+    const timestamp = Date.now();
+    const frameStep = Math.max(
+      1,
+      Math.min(MAX_SERVER_FRAME_STEP, frameNo - this.lastPublishedFrameNo)
+    );
+    const intentDurationMs = frameStep * FIXED_SIM_STEP_MS;
+    const requestedSpeed = isMovementIntent
+      ? command.sprint
+        ? SPRINT_SPEED
+        : WALK_SPEED
+      : 0;
+    const intentId = `move:${this.movementSessionId}:${frameNo}`;
 
     try {
-      this.reducerGateway.invoke(
-        "move_to",
-        {
-          requestId: intentId,
-          regionId: BigInt(session.regionId),
-          clientTsMs: BigInt(Date.now()),
-          x: targetPosition.x,
-          y: this.authoritativeY,
-          z: targetPosition.z
-        }
+      this.reducerGateway.invoke("sync_client_frame", {
+        frameNo: BigInt(frameNo),
+        regionId: BigInt(session.regionId),
+        dimensionId: session.dimensionId,
+        clientTimeMs: BigInt(timestamp)
+      });
+      this.reducerGateway.invoke("submit_motion_intent", {
+        intentId,
+        regionId: BigInt(session.regionId),
+        dimensionId: session.dimensionId,
+        frameNo: BigInt(frameNo),
+        inputX: command.directionX,
+        inputZ: command.directionZ,
+        requestedSpeed,
+        jump: false
+      });
+
+      this.inputFrames.push(
+        frameNo,
+        command.directionX,
+        command.directionZ,
+        command.sprint,
+        timestamp
       );
-      this.segmentCursorPosition = targetPosition;
-      this.segmentElapsedMs = 0;
-      this.segmentDirty = false;
+      if (isMovementIntent) {
+        this.intents.enqueue({
+          intentId,
+          frameNo,
+          directionX: command.directionX,
+          directionZ: command.directionZ,
+          speed: requestedSpeed,
+          durationMs: intentDurationMs,
+          createdAt: timestamp
+        });
+      }
+
+      this.lastPublishedFrameNo = frameNo;
+      this.lastSentInputKey = command.inputKey;
+      this.lastSentWasMoving = isMovementIntent;
+      this.networkElapsedMs = 0;
+      if (this.correctionReason === "bootstrap") {
+        this.correctionReason = "ok";
+      }
       this.eventLog.push(
         "info",
-        `movement publish request=${intentId} frame=${frame.frameNo} pending=${this.intents.getPending().length} target=(${targetPosition.x.toFixed(2)},${targetPosition.z.toFixed(2)}) correction=${this.correctionReason}`
+        `movement publish intent=${intentId} frame=${frameNo} pending=${this.intents.getPending().length} input=(${command.directionX.toFixed(2)},${command.directionZ.toFixed(2)}) speed=${requestedSpeed.toFixed(1)}`
       );
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "move_to failed";
+        error instanceof Error
+          ? error.message
+          : "v2 movement publish failed";
       this.eventLog.push("warn", message);
     }
   }
 
-  private computeManualTarget(): PredictedPosition {
-    const segmentDurationMs = Math.min(
-      MOVE_SEGMENT_MS,
-      Math.max(FIXED_SIM_STEP_MS, this.segmentElapsedMs)
-    );
-    const segmentSpeed = this.lastSegmentSprint ? SPRINT_SPEED : WALK_SPEED;
-    const basePosition =
-      this.intents.getPending().length > 0
-        ? this.segmentCursorPosition
-        : this.authoritativePosition;
+  private ackServerCorrection(correctionId: string, acknowledged: boolean): void {
+    if (acknowledged || !this.reducerGateway?.isConnected()) {
+      return;
+    }
 
-    return {
-      x:
-        basePosition.x +
-        this.lastSegmentDirection.x * segmentSpeed * (segmentDurationMs / 1000),
-      z:
-        basePosition.z +
-        this.lastSegmentDirection.z * segmentSpeed * (segmentDurationMs / 1000)
-    };
+    try {
+      this.reducerGateway.invoke("ack_server_correction", {
+        correctionId,
+        ackedClientFrameNo: BigInt(this.lastPublishedFrameNo)
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "ack_server_correction failed";
+      this.eventLog.push("warn", message);
+    }
+  }
+
+  private resimulatePendingIntents(): void {
+    let replayPosition = { ...this.authoritativePosition };
+
+    for (const intent of this.intents.getPending()) {
+      replayPosition = {
+        x:
+          replayPosition.x +
+          intent.directionX * intent.speed * (intent.durationMs / 1000),
+        z:
+          replayPosition.z +
+          intent.directionZ * intent.speed * (intent.durationMs / 1000)
+      };
+    }
+
+    this.predictedPosition = replayPosition;
   }
 
   private currentPathWaypoint(): PathWaypoint | null {
@@ -801,10 +852,12 @@ export class MovementPredictionRuntime {
       return;
     }
 
+    this.pendingPathGoal = null;
     this.activePathId = null;
+    this.activePathExpectedStepCount = 0;
     this.activePathWaypoints = [];
     this.activePathStepIndex = 0;
-    this.pendingPathGoal = null;
+    this.setTrackedPathId(null);
     this.eventLog.push("info", `click path canceled: ${reason}`);
   }
 
@@ -813,28 +866,41 @@ export class MovementPredictionRuntime {
     const dz = this.authoritativePosition.z - this.predictedPosition.z;
     const distance = Math.hypot(dx, dz);
 
-    if (distance > 8) {
+    if (distance > HARD_SNAP_DISTANCE) {
       this.predictedPosition = { ...this.authoritativePosition };
-      if (this.correctionReason === "server_accept" || this.correctionReason === "bootstrap") {
+      if (this.correctionReason === "ok" || this.correctionReason === "bootstrap") {
         this.correctionReason = "hard_snap";
       }
       return;
     }
 
-    if (distance > 1.5) {
+    if (distance > SMOOTH_CORRECTION_DISTANCE) {
       this.predictedPosition = {
-        x: this.predictedPosition.x + dx * 0.18,
-        z: this.predictedPosition.z + dz * 0.18
+        x: this.predictedPosition.x + dx * SMOOTH_CORRECTION_ALPHA,
+        z: this.predictedPosition.z + dz * SMOOTH_CORRECTION_ALPHA
       };
-      if (this.correctionReason === "server_accept" || this.correctionReason === "bootstrap") {
+      if (this.correctionReason === "ok" || this.correctionReason === "bootstrap") {
         this.correctionReason = "smooth_correction";
       }
       return;
     }
 
-    if (this.correctionReason === "hard_snap" || this.correctionReason === "smooth_correction") {
+    if (
+      this.correctionReason === "hard_snap" ||
+      this.correctionReason === "smooth_correction" ||
+      this.correctionReason === "server_accept"
+    ) {
       this.correctionReason = "ok";
     }
+  }
+
+  private setTrackedPathId(pathId: string | null): void {
+    if (this.trackedPathId === pathId) {
+      return;
+    }
+
+    this.trackedPathId = pathId;
+    this.trackedPathIdHandler?.(pathId);
   }
 
   private findSelfRow(
@@ -859,18 +925,4 @@ export class MovementPredictionRuntime {
     const value = readField(row, ...identityKeys);
     return normalizeIdentityHex(value) === this.localIdentityHex;
   }
-
-  private isOwnRequestId(requestId: string): boolean {
-    return requestId.startsWith(`move:${this.movementSessionId}:`);
-  }
-}
-
-function parsePathMicros(pathId: string): number {
-  const parts = pathId.split(":");
-  if (parts.length < 3) {
-    return 0;
-  }
-
-  const micros = Number(parts[2]);
-  return Number.isFinite(micros) ? micros : 0;
 }
