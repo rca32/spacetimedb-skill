@@ -25,9 +25,9 @@ const PRIMARY_KEY_CANDIDATES = [
   ["claimId", "claim_id"],
   ["channelId", "channel_id"],
   ["slotKey", "slot_key"],
-  ["viewKey", "view_key"]
-  ,["pathId", "path_id"]
-  ,["stepKey", "step_key"]
+  ["viewKey", "view_key"],
+  ["stepKey", "step_key"],
+  ["pathId", "path_id"]
 ] as const;
 
 function inferRowKey(row: Record<string, unknown>): string {

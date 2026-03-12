@@ -25,6 +25,7 @@
 - Client 개발 환경은 `bun` 기반이며, 클라이언트 코드 작성은 `TypeScript`를 사용한다.
 - 웹 개발 서버(`web-client`)는 `bun run dev` 기준으로 항상 실행 중인 상태로 보고 진행한다.
 - 개발에 도움이 되는 정보는 웹 HUD에 표시 하지 않고 console로 남겨서 agent 가 agent-browser 의 console 확인 기능으로 확인하게 한다.
+- 개발이나 디버깅시 agent-browser eval 적극적으로 사용할수있게 구조를 만드는게 좋음 
 
 ## 웹 디버깅/테스트 규칙
 - 웹 페이지를 열고 조작해야 하는 디버깅/테스트 작업은 **항상 `agent-browser` 스킬을 사용**한다. Playwright는 사용하지 않는다.

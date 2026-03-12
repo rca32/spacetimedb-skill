@@ -161,11 +161,14 @@ export class ConsoleDiagnostics {
       {
         getMovementState: () => this.movement.getDebugState(),
         getTableSnapshot: () => this.authoritativeStore.getTableSnapshot(),
-        getBuildingPreview: () => this.interactionStore.getBuildingPreview()
+        getTableRows: (table: string) => this.authoritativeStore.getRows(table),
+        getBuildingPreview: () => this.interactionStore.getBuildingPreview(),
+        requestClickMove: (hexX: number, hexZ: number) =>
+          this.movement.requestClickMove(hexX, hexZ)
       };
 
     console.info(
-      "[runtime:debug] window.__stitchDebug.getMovementState(), getTableSnapshot(), getBuildingPreview()"
+      "[runtime:debug] window.__stitchDebug.getMovementState(), getTableSnapshot(), getTableRows(table), getBuildingPreview(), requestClickMove(hexX, hexZ)"
     );
   }
 }

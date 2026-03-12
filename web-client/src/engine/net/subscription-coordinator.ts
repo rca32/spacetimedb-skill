@@ -45,7 +45,6 @@ const PRELOAD_CHUNK_MARGIN = 1;
 const SESSION_GROUP_NAME = "session";
 const PERSONAL_GROUP_NAME = "personal";
 const MOVEMENT_GROUP_NAME = "movement";
-const PATH_GROUP_NAME = "path";
 const WORLD_GROUP_NAME = "world";
 
 const STATIC_GROUPS = {
@@ -89,36 +88,19 @@ const STATIC_GROUPS = {
         "physics_state",
         "player_movement_feedback_view",
         "server_correction",
-        "path_result"
+        "path_result",
+        "path_step"
       ],
       queries: [
         `SELECT * FROM physics_state${entityFilter}`,
         `SELECT * FROM player_movement_feedback_view${sessionFilter}`,
         `SELECT * FROM server_correction${sessionFilter}`,
-        `SELECT * FROM path_result WHERE requester_identity = 0x${identityHex ?? "0"}`
+        `SELECT * FROM path_result WHERE requester_identity = 0x${identityHex ?? "0"}`,
+        "SELECT * FROM path_step"
       ]
     };
   }
 } as const;
-
-function parsePathMicros(pathId: string): number {
-  const parts = pathId.split(":");
-  if (parts.length < 3) {
-    return 0;
-  }
-
-  const micros = Number(parts[2]);
-  return Number.isFinite(micros) ? micros : 0;
-}
-
-function buildPathGroup(pathId: string | null): SubscriptionGroup {
-  const safePathId = pathId ? pathId.replace(/'/g, "''") : "__none__";
-  return {
-    name: PATH_GROUP_NAME,
-    tables: ["path_step"],
-    queries: [`SELECT * FROM path_step WHERE path_id = '${safePathId}'`]
-  };
-}
 
 function toHandleName(table: string): string {
   return table.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase());
@@ -264,7 +246,6 @@ export class SubscriptionCoordinator {
   private lastKnownAnchor: WorldAnchor | null = null;
   private lastWorldQueryKey: string | null = null;
   private lastAoiRequestKey: string | null = null;
-  private lastPathQueryKey: string | null = null;
   private viewportWidth = DEFAULT_VIEWPORT_WIDTH;
   private viewportHeight = DEFAULT_VIEWPORT_HEIGHT;
 
@@ -319,7 +300,6 @@ export class SubscriptionCoordinator {
     const radii = computeChunkRadii(this.viewportWidth, this.viewportHeight);
     const group = buildWorldGroup(session, anchor, radii, this.identityHex);
     const queryKey = group.queries.join("\n");
-    this.maybeRefreshPathSubscription();
 
     if (this.lastWorldQueryKey === queryKey) {
       return;
@@ -336,34 +316,6 @@ export class SubscriptionCoordinator {
       "info",
       `world subscription refreshed: region=${session.regionId} dimension=${session.dimensionId} ${scope}`
     );
-  }
-
-  private maybeRefreshPathSubscription(): void {
-    if (!this.connection) {
-      return;
-    }
-
-    const pathRows = this.authoritativeStore
-      .getRows("path_result")
-      .filter((row) => this.findSelfRow([row], "requesterIdentity", "requester_identity"));
-
-    const latest = [...pathRows].sort((left, right) => {
-      const leftId = String(left.pathId ?? left.path_id ?? "");
-      const rightId = String(right.pathId ?? right.path_id ?? "");
-      return parsePathMicros(rightId) - parsePathMicros(leftId);
-    })[0];
-
-    const pathId = latest
-      ? String(latest.pathId ?? latest.path_id ?? "")
-      : null;
-    const group = buildPathGroup(pathId);
-    const queryKey = group.queries.join("\n");
-    if (queryKey === this.lastPathQueryKey) {
-      return;
-    }
-
-    this.lastPathQueryKey = queryKey;
-    this.subscribeGroup(group);
   }
 
   private maybeRequestAoiChunks(
