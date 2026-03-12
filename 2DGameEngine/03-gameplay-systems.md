@@ -7,7 +7,7 @@
 | Session/Auth | `auth/*.rs`, `tables/session_state.rs`, `tables/player_views.rs` | `SessionController`, `LoginFlow`, `RegionDimensionCoordinator` |
 | Entity/Transform | `tables/transform_state.rs`, `subscriptions/aoi.rs` | `EntityRegistry`, `TransformMirror`, `ActorPresenter` |
 | Map/World | `tables/world_state.rs`, `tables/world_gen.rs`, `subscriptions/world_stream.rs` | `ChunkCache`, `TerrainDecoder`, `MiniMapModel` |
-| Movement | `reducers/player/move_player.rs`, `tables/movement.rs`, `player_movement_feedback_view` | `MovementController`, `PredictionBuffer`, `CorrectionResolver` |
+| Movement | `reducers/v2/mod.rs`, `reducers/pathfinding/mod.rs`, `tables/v2.rs`, `tables/pathfinding.rs` | `MovementController`, `PredictionBuffer`, `CorrectionResolver` |
 | Combat | `reducers/combat/*.rs`, `tables/combat.rs`, `subscriptions/combat_stream.rs` | `CombatController`, `CombatHud`, `HitEventPresenter` |
 | Building/Claim | `reducers/building/*.rs`, `tables/building_state.rs`, `tables/claim_state.rs` | `BuildModeController`, `FootprintProjector`, `ClaimOverlay` |
 | Inventory | `reducers/inventory/*.rs`, `player_inventory_*_view` | `InventoryStore`, `DragDropController`, `ContainerPanel` |
@@ -81,15 +81,18 @@
 
 ### 서버 기준
 
-- `reducers/player/move_player.rs`
-- `tables/movement.rs`
-- `player_movement_feedback_view`
+- `reducers/v2/mod.rs`
+- `reducers/pathfinding/mod.rs`
+- `tables/v2.rs`
+- `tables/pathfinding.rs`
 - `services/nav.rs`
 
 ### 계획
 
 - local motor는 purely visual controller다.
-- pathfinding/auto-move는 local proposal만 만들고, 실제 이동은 연속 `move_to` reducer 호출로 보낸다.
+- 수동 이동과 click-to-move 모두 `sync_client_frame` + `submit_motion_intent`만 사용한다.
+- pathfinding/auto-move는 `request_path_in_dimension`으로 경로를 받고, `path_result`/`path_step`를 waypoint source로만 소비한다.
+- authoritative baseline은 `physics_state`, 보정/거절 사유는 `server_correction`을 기준으로 삼는다.
 - reason code HUD/debug overlay를 기본 탑재한다.
   - `invalid_position`
   - `region_mismatch`
@@ -101,7 +104,7 @@
 
 1. WASD / pointer move
 2. self prediction
-3. movement feedback HUD
+3. server correction/reason HUD
 4. correction blend
 5. nav debug overlay
 
@@ -257,6 +260,6 @@
 - current subscription set
 - AOI bounds / chunk ring overlay
 - pending intents
-- latest movement feedback reason
+- latest movement rejection/correction reason
 - latest server correction reason
 - selected entity raw row inspector

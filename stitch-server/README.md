@@ -41,17 +41,19 @@ spacetime call --server 127.0.0.1:3000 stitch-server sign_out
 ## Authoritative Movement / Anti-Cheat
 
 ```bash
-# 정상 이동
-spacetime call --server 127.0.0.1:3000 stitch-server move_to "req-1" 1 1000 1.0 0.0 0.0
+# 정상 이동 intent
+spacetime call --server 127.0.0.1:3000 stitch-server sync_client_frame 1 1 1 1000
+spacetime call --server 127.0.0.1:3000 stitch-server submit_motion_intent "intent-1" 1 1 1 1.0 0.0 10.0 false
 
-# 멱등 중복 요청 (same request_id): no-op 처리
-spacetime call --server 127.0.0.1:3000 stitch-server move_to "req-1" 1 1000 1.0 0.0 0.0
+# correction 유발 예시: 존재하지 않는 dimension
+spacetime call --server 127.0.0.1:3000 stitch-server sync_client_frame 2 1 999999 1016
+spacetime call --server 127.0.0.1:3000 stitch-server submit_motion_intent "intent-2" 1 999999 2 1.0 0.0 10.0 false
 
-# 위반 예시: 비정상 장거리 이동
-spacetime call --server 127.0.0.1:3000 stitch-server move_to "req-2" 1 2000 100.0 0.0 0.0
+# correction ack
+spacetime call --server 127.0.0.1:3000 stitch-server ack_server_correction "intent-2:2:terrain_missing" 2
 ```
 
-위반 요청은 reducer 오류 대신 서버 no-op으로 처리되고 `movement_violation`/`movement_request_log`에 기록된다.
+이상 이동은 reducer 오류 대신 `server_correction` / `ui_notification_event`로 되돌림과 ack 상태를 기록한다.
 
 ## Verify Seeded Data
 
@@ -63,8 +65,10 @@ spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS count FR
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS count FROM account"
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT COUNT(*) AS count FROM player_state"
 spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT entity_id, region_id, position FROM transform_state"
-spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT identity, reason, attempted_position FROM movement_violation"
-spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT identity, request_id, accepted FROM movement_request_log"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT frame_key, frame_no, client_time_ms FROM client_frame ORDER BY received_at DESC LIMIT 5"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT intent_id, frame_no, requested_speed FROM motion_intent ORDER BY submitted_at DESC LIMIT 5"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT entity_id, last_intent_id, last_frame_no FROM physics_state ORDER BY updated_at DESC LIMIT 5"
+spacetime sql --server 127.0.0.1:3000 stitch-server "SELECT correction_id, reason, acknowledged FROM server_correction ORDER BY created_at DESC LIMIT 5"
 ```
 
 ## Notes

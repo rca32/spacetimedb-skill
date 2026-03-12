@@ -829,7 +829,7 @@ export class MovementPredictionRuntime {
     while (true) {
       const waypoint = this.currentPathWaypoint();
       if (!waypoint) {
-        if (this.activePathId) {
+        if (this.activePathId && this.activePathWaypoints.length > 0) {
           this.cancelActivePath("reached_goal");
         }
         return;

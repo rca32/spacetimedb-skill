@@ -36,12 +36,13 @@ sequenceDiagram
 
 | 서버 경로 | 역할 | 클라이언트 사용법 |
 | --- | --- | --- |
-| `move_to` | 레거시 이동 reducer | 디버그/호환 경로로 유지 |
-| `player_movement_feedback_view` | 요청 수락/거절 피드백 | reason code UI와 correction source |
 | `sync_client_frame` | frame 동기화 | prediction 프레임 기준점 |
 | `submit_motion_intent` | 이동 의도 제출 | 주 이동 입력 경로 |
+| `request_path_in_dimension` | click-to-move path 요청 | waypoint 계획 수립 |
+| `path_result` | path 요청 결과 | active path 선택 |
+| `path_step` | path waypoint | click-to-move step 추적 |
 | `physics_state` | 권위 위치/속도 | reconciliation 기준 |
-| `server_correction` | 보정 메시지 | rollback/smoothing 기준 |
+| `server_correction` | 보정 메시지 | rollback/smoothing 및 reason source |
 | `ack_server_correction` | 보정 ack | correction lifecycle 종료 |
 
 ### 3.2 전투
@@ -99,6 +100,8 @@ sequenceDiagram
 - `inventory_slot_stream_query`
 - `inventory_item_stream_query`
 - `correction_stream_query`
+- self `path_result`
+- active path 전용 `path_step`
 
 3. 세션/도메인 구독
 - `combat_state_stream_query`
@@ -168,7 +171,7 @@ export interface CorrectionEnvelope {
 
 | 도메인 | 로컬 예측 허용 | authoritative source | rollback 방식 |
 | --- | --- | --- | --- |
-| 이동 | 높음 | `physics_state`, `server_correction`, `player_movement_feedback_view` | 위치 재설정 + smoothing |
+| 이동 | 높음 | `physics_state`, `server_correction` | 위치 재설정 + smoothing |
 | 전투 | 중간 | `combat_hit_event`, `attack_outcome`, `combat_state` | HP/상태 재계산, VFX 유지 |
 | 건설 preview | 중간 | `building_preview_feedback_view` | ghost 색상/상태 갱신 |
 | 건설 확정 | 낮음 | `building_state`, `project_site_state` | 미배치 상태로 복귀 |
@@ -181,12 +184,14 @@ export interface CorrectionEnvelope {
 ### 8.1 권장 알고리즘
 
 1. 입력을 `InputFrame`으로 캡처
-2. `frame_no`와 `intent_id`를 생성
-3. 로컬 physics preview를 즉시 진행
-4. `submit_motion_intent` 전송
-5. `physics_state` 갱신 수신 시 authoritative baseline 갱신
-6. `server_correction` 수신 시 해당 frame 이후 intent를 재적용
-7. correction 적용 후 `ack_server_correction` 호출
+2. click-to-move면 `request_path_in_dimension`으로 waypoint를 받고, 수동 이동이면 즉시 입력 방향을 확정
+3. 각 이동 tick마다 `frame_no`와 `intent_id`를 생성
+4. 로컬 physics preview를 즉시 진행
+5. 활성 이동 중에는 `sync_client_frame` 후 `submit_motion_intent`를 고정 cadence로 전송
+6. `physics_state` 갱신 수신 시 authoritative baseline 갱신
+7. `server_correction` 수신 시 해당 frame 이후 intent를 재적용
+8. correction 적용 후 `ack_server_correction` 호출
+9. `path_result`/`path_step`는 waypoint source로만 사용하고, 절대 좌표 이동 요청으로 되돌리지 않는다
 
 ### 8.2 correction 적용 규칙
 

@@ -4,6 +4,7 @@ set -euo pipefail
 DB_NAME="${DB_NAME:-stitch-server}"
 SERVER="${SERVER:-127.0.0.1:3000}"
 REGION_ID="${REGION_ID:-1}"
+DIMENSION_ID="${DIMENSION_ID:-1}"
 REPEAT="${REPEAT:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 YES_FLAG="${YES_FLAG:---yes}"
@@ -13,12 +14,13 @@ usage() {
 Stitch Multi-Identity + Security + Load Regression Suite
 
 Usage:
-  $(basename "$0") [--db <name>] [--server <addr>] [--region <id>] [--repeat <n>] [--dry-run]
+  $(basename "$0") [--db <name>] [--server <addr>] [--region <id>] [--dimension <id>] [--repeat <n>] [--dry-run]
 
 Options:
   --db <name>       Database name (default: ${DB_NAME})
   --server <addr>   SpacetimeDB server (default: ${SERVER})
   --region <id>     Region id for sign-in/movement (default: ${REGION_ID})
+  --dimension <id>  Dimension id for v2 movement checks (default: ${DIMENSION_ID})
   --repeat <n>      Repeat count (default: ${REPEAT})
   --dry-run         Print commands without executing
   -h, --help        Show this help
@@ -30,6 +32,7 @@ while [[ $# -gt 0 ]]; do
     --db) DB_NAME="$2"; shift 2 ;;
     --server) SERVER="$2"; shift 2 ;;
     --region) REGION_ID="$2"; shift 2 ;;
+    --dimension) DIMENSION_ID="$2"; shift 2 ;;
     --repeat) REPEAT="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -111,12 +114,13 @@ require_server() {
 run_identity_base_flow() {
   local tag="$1"
   local display_name="runner-${tag}"
-  local move_req="move-${tag}"
+  local motion_req="motion-${tag}"
   local base_ms="$(($(date +%s%3N) + 1000))"
 
   call_reducer account_bootstrap "\"${display_name}\""
   call_reducer sign_in "$REGION_ID"
-  call_reducer move_to "\"${move_req}\"" "$REGION_ID" "$base_ms" 1.0 0.0 1.0
+  call_reducer sync_client_frame 1 "$REGION_ID" "$DIMENSION_ID" "$base_ms"
+  call_reducer submit_motion_intent "\"${motion_req}\"" "$REGION_ID" "$DIMENSION_ID" 1 1.0 0.0 10.0 false
   call_reducer inventory_bootstrap
 }
 
@@ -148,8 +152,11 @@ run_load_checks() {
   echo "-- Load probe: AOI-like movement bursts --"
   local burst=20
   local i
+  local base_ms
+  base_ms="$(date +%s%3N)"
   for ((i=1; i<=burst; i++)); do
-    call_reducer move_to "\"move-${tag}-${i}\"" "$REGION_ID" "$(date +%s%3N)" 1.0 0.0 1.0
+    call_reducer sync_client_frame "$i" "$REGION_ID" "$DIMENSION_ID" "$((base_ms + i * 16))"
+    call_reducer submit_motion_intent "\"move-${tag}-${i}\"" "$REGION_ID" "$DIMENSION_ID" "$i" 1.0 0.0 10.0 false
   done
 
   echo "-- Load probe: scheduled reducers fan-out --"
@@ -159,7 +166,8 @@ run_load_checks() {
   expect_fail_or_warn_success spacetime call --server "$SERVER" $YES_FLAG "$DB_NAME" session_cleanup_agent_loop
 
   sql_check "load transform count" "SELECT COUNT(*) AS transform_cnt FROM transform_state"
-  sql_check "load movement request log" "SELECT COUNT(*) AS move_req_cnt FROM movement_request_log"
+  sql_check "load motion intent count" "SELECT COUNT(*) AS move_req_cnt FROM motion_intent"
+  sql_check "load physics state count" "SELECT COUNT(*) AS physics_state_cnt FROM physics_state"
   sql_check "load resource state" "SELECT COUNT(*) AS resource_state_cnt FROM resource_state"
   sql_check "load status effect" "SELECT COUNT(*) AS status_effect_cnt FROM status_effect"
 }

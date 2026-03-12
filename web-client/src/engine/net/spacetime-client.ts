@@ -46,9 +46,25 @@ export class SpacetimeClient {
     listeners: ConnectionListenerSet = {}
   ): Promise<DbConnectionLike> {
     return await new Promise<DbConnectionLike>((resolve, reject) => {
-      const builder = DbConnection.builder()
-        .withUri(config.uri)
-        .withModuleName(config.databaseName)
+      const rawBuilder = DbConnection.builder().withUri(config.uri) as typeof DbConnection.builder extends () => infer T ? T : never;
+      const builderWithDatabase = rawBuilder as typeof rawBuilder & {
+        withDatabaseName?: (name: string) => typeof rawBuilder;
+        withModuleName?: (name: string) => typeof rawBuilder;
+      };
+
+      const namedBuilder =
+        typeof builderWithDatabase.withDatabaseName === "function"
+          ? builderWithDatabase.withDatabaseName(config.databaseName)
+          : typeof builderWithDatabase.withModuleName === "function"
+            ? builderWithDatabase.withModuleName(config.databaseName)
+            : null;
+
+      if (namedBuilder == null) {
+        reject(new Error("DbConnectionBuilder is missing database name setter"));
+        return;
+      }
+
+      const builder = namedBuilder
         .withConfirmedReads(config.confirmedReads)
         .onConnect((connection: unknown, identity: unknown, token: unknown) => {
           const normalizedIdentity =

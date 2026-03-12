@@ -17,7 +17,7 @@ import {
   procedures as __procedures,
   reducerSchema as __reducerSchema,
   reducers as __reducers,
-  schema as __schemaBase,
+  schema as __schema,
   t as __t,
   table as __table,
   type AlgebraicTypeType as __AlgebraicTypeType,
@@ -32,19 +32,6 @@ import {
   type SubscriptionEventContextInterface as __SubscriptionEventContextInterface,
   type SubscriptionHandleImpl as __SubscriptionHandleImpl,
 } from "spacetimedb";
-
-const __schema = (...handles: any[]): any => {
-  if (
-    handles.length === 1 &&
-    handles[0] &&
-    typeof handles[0] === "object" &&
-    !Array.isArray(handles[0])
-  ) {
-    return __schemaBase(...(Object.values(handles[0]) as any[]));
-  }
-
-  return __schemaBase(...handles);
-};
 
 // Import all reducer arg schemas
 import AccountBootstrapReducer from "./account_bootstrap_reducer";
@@ -93,9 +80,6 @@ import MarketOrderCancelReducer from "./market_order_cancel_reducer";
 import MarketOrderMatchReducer from "./market_order_match_reducer";
 import MarketOrderPlaceReducer from "./market_order_place_reducer";
 import ModerationApplyActionReducer from "./moderation_apply_action_reducer";
-import MoveToReducer from "./move_to_reducer";
-import MovementFeedbackCleanupReducer from "./movement_feedback_cleanup_reducer";
-import MovementFeedbackCleanupGlobalReducer from "./movement_feedback_cleanup_global_reducer";
 import NpcActionResolveReducer from "./npc_action_resolve_reducer";
 import NpcDialogueRequestReducer from "./npc_dialogue_request_reducer";
 import NpcQuestReducer from "./npc_quest_reducer";
@@ -196,7 +180,6 @@ import PhysicsStateRow from "./physics_state_table";
 import PlayerInventoryContainerViewRow from "./player_inventory_container_view_table";
 import PlayerInventoryItemViewRow from "./player_inventory_item_view_table";
 import PlayerInventorySlotViewRow from "./player_inventory_slot_view_table";
-import PlayerMovementFeedbackViewRow from "./player_movement_feedback_view_table";
 import PlayerSessionViewRow from "./player_session_view_table";
 import PlayerStateRow from "./player_state_table";
 import PlayerWalletViewRow from "./player_wallet_view_table";
@@ -230,11 +213,11 @@ import WorldgenChunkGenerationQueueRow from "./worldgen_chunk_generation_queue_t
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
-const tablesSchema = __schema({
+const tableHandles = {
   account: __table({
     name: 'account',
     indexes: [
-      { name: 'identity', algorithm: 'btree', columns: [
+      { accessor: 'identity', name: 'identity', algorithm: 'btree', columns: [
         'identity',
       ] },
     ],
@@ -245,7 +228,7 @@ const tablesSchema = __schema({
   account_profile: __table({
     name: 'account_profile',
     indexes: [
-      { name: 'identity', algorithm: 'btree', columns: [
+      { accessor: 'identity', name: 'identity', algorithm: 'btree', columns: [
         'identity',
       ] },
     ],
@@ -256,7 +239,7 @@ const tablesSchema = __schema({
   achievement_def: __table({
     name: 'achievement_def',
     indexes: [
-      { name: 'achievement_id', algorithm: 'btree', columns: [
+      { accessor: 'achievement_id', name: 'achievement_id', algorithm: 'btree', columns: [
         'achievementId',
       ] },
     ],
@@ -267,7 +250,7 @@ const tablesSchema = __schema({
   action_state: __table({
     name: 'action_state',
     indexes: [
-      { name: 'entity_id', algorithm: 'btree', columns: [
+      { accessor: 'entity_id', name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
@@ -278,7 +261,7 @@ const tablesSchema = __schema({
   agent_result: __table({
     name: 'agent_result',
     indexes: [
-      { name: 'result_id', algorithm: 'btree', columns: [
+      { accessor: 'result_id', name: 'result_id', algorithm: 'btree', columns: [
         'resultId',
       ] },
     ],
@@ -289,7 +272,7 @@ const tablesSchema = __schema({
   aoi_stream: __table({
     name: 'aoi_stream',
     indexes: [
-      { name: 'stream_key', algorithm: 'btree', columns: [
+      { accessor: 'stream_key', name: 'stream_key', algorithm: 'btree', columns: [
         'streamKey',
       ] },
     ],
@@ -300,7 +283,7 @@ const tablesSchema = __schema({
   attack_outcome: __table({
     name: 'attack_outcome',
     indexes: [
-      { name: 'outcome_id', algorithm: 'btree', columns: [
+      { accessor: 'outcome_id', name: 'outcome_id', algorithm: 'btree', columns: [
         'outcomeId',
       ] },
     ],
@@ -311,7 +294,7 @@ const tablesSchema = __schema({
   audio_event: __table({
     name: 'audio_event',
     indexes: [
-      { name: 'event_id', algorithm: 'btree', columns: [
+      { accessor: 'event_id', name: 'event_id', algorithm: 'btree', columns: [
         'eventId',
       ] },
     ],
@@ -322,7 +305,7 @@ const tablesSchema = __schema({
   biome_gen_def: __table({
     name: 'biome_gen_def',
     indexes: [
-      { name: 'biome_id', algorithm: 'btree', columns: [
+      { accessor: 'biome_id', name: 'biome_id', algorithm: 'btree', columns: [
         'biomeId',
       ] },
     ],
@@ -333,7 +316,7 @@ const tablesSchema = __schema({
   buff_state: __table({
     name: 'buff_state',
     indexes: [
-      { name: 'buff_key', algorithm: 'btree', columns: [
+      { accessor: 'buff_key', name: 'buff_key', algorithm: 'btree', columns: [
         'buffKey',
       ] },
     ],
@@ -344,7 +327,7 @@ const tablesSchema = __schema({
   building_def: __table({
     name: 'building_def',
     indexes: [
-      { name: 'building_def_id', algorithm: 'btree', columns: [
+      { accessor: 'building_def_id', name: 'building_def_id', algorithm: 'btree', columns: [
         'buildingDefId',
       ] },
     ],
@@ -355,7 +338,7 @@ const tablesSchema = __schema({
   building_footprint: __table({
     name: 'building_footprint',
     indexes: [
-      { name: 'tile_key', algorithm: 'btree', columns: [
+      { accessor: 'tile_key', name: 'tile_key', algorithm: 'btree', columns: [
         'tileKey',
       ] },
     ],
@@ -366,7 +349,7 @@ const tablesSchema = __schema({
   building_preview_feedback_view: __table({
     name: 'building_preview_feedback_view',
     indexes: [
-      { name: 'request_key', algorithm: 'btree', columns: [
+      { accessor: 'request_key', name: 'request_key', algorithm: 'btree', columns: [
         'requestKey',
       ] },
     ],
@@ -377,7 +360,7 @@ const tablesSchema = __schema({
   building_state: __table({
     name: 'building_state',
     indexes: [
-      { name: 'entity_id', algorithm: 'btree', columns: [
+      { accessor: 'entity_id', name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
@@ -388,7 +371,7 @@ const tablesSchema = __schema({
   chat_channel: __table({
     name: 'chat_channel',
     indexes: [
-      { name: 'channel_id', algorithm: 'btree', columns: [
+      { accessor: 'channel_id', name: 'channel_id', algorithm: 'btree', columns: [
         'channelId',
       ] },
     ],
@@ -399,7 +382,7 @@ const tablesSchema = __schema({
   chat_message: __table({
     name: 'chat_message',
     indexes: [
-      { name: 'message_id', algorithm: 'btree', columns: [
+      { accessor: 'message_id', name: 'message_id', algorithm: 'btree', columns: [
         'messageId',
       ] },
     ],
@@ -410,7 +393,7 @@ const tablesSchema = __schema({
   claim_state: __table({
     name: 'claim_state',
     indexes: [
-      { name: 'claim_id', algorithm: 'btree', columns: [
+      { accessor: 'claim_id', name: 'claim_id', algorithm: 'btree', columns: [
         'claimId',
       ] },
     ],
@@ -421,7 +404,7 @@ const tablesSchema = __schema({
   client_frame: __table({
     name: 'client_frame',
     indexes: [
-      { name: 'frame_key', algorithm: 'btree', columns: [
+      { accessor: 'frame_key', name: 'frame_key', algorithm: 'btree', columns: [
         'frameKey',
       ] },
     ],
@@ -432,7 +415,7 @@ const tablesSchema = __schema({
   collision_proxy: __table({
     name: 'collision_proxy',
     indexes: [
-      { name: 'proxy_id', algorithm: 'btree', columns: [
+      { accessor: 'proxy_id', name: 'proxy_id', algorithm: 'btree', columns: [
         'proxyId',
       ] },
     ],
@@ -443,7 +426,7 @@ const tablesSchema = __schema({
   combat_action_def: __table({
     name: 'combat_action_def',
     indexes: [
-      { name: 'action_def_id', algorithm: 'btree', columns: [
+      { accessor: 'action_def_id', name: 'action_def_id', algorithm: 'btree', columns: [
         'actionDefId',
       ] },
     ],
@@ -454,7 +437,7 @@ const tablesSchema = __schema({
   combat_hit: __table({
     name: 'combat_hit',
     indexes: [
-      { name: 'hit_id', algorithm: 'btree', columns: [
+      { accessor: 'hit_id', name: 'hit_id', algorithm: 'btree', columns: [
         'hitId',
       ] },
     ],
@@ -465,7 +448,7 @@ const tablesSchema = __schema({
   combat_hit_event: __table({
     name: 'combat_hit_event',
     indexes: [
-      { name: 'event_id', algorithm: 'btree', columns: [
+      { accessor: 'event_id', name: 'event_id', algorithm: 'btree', columns: [
         'eventId',
       ] },
     ],
@@ -476,7 +459,7 @@ const tablesSchema = __schema({
   combat_intent: __table({
     name: 'combat_intent',
     indexes: [
-      { name: 'intent_id', algorithm: 'btree', columns: [
+      { accessor: 'intent_id', name: 'intent_id', algorithm: 'btree', columns: [
         'intentId',
       ] },
     ],
@@ -487,7 +470,7 @@ const tablesSchema = __schema({
   combat_state: __table({
     name: 'combat_state',
     indexes: [
-      { name: 'identity', algorithm: 'btree', columns: [
+      { accessor: 'identity', name: 'identity', algorithm: 'btree', columns: [
         'identity',
       ] },
     ],
@@ -498,7 +481,7 @@ const tablesSchema = __schema({
   dimension_desc: __table({
     name: 'dimension_desc',
     indexes: [
-      { name: 'entity_id', algorithm: 'btree', columns: [
+      { accessor: 'entity_id', name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
@@ -509,7 +492,7 @@ const tablesSchema = __schema({
   dimension_network: __table({
     name: 'dimension_network',
     indexes: [
-      { name: 'entity_id', algorithm: 'btree', columns: [
+      { accessor: 'entity_id', name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
@@ -520,7 +503,7 @@ const tablesSchema = __schema({
   entity_core: __table({
     name: 'entity_core',
     indexes: [
-      { name: 'entity_id', algorithm: 'btree', columns: [
+      { accessor: 'entity_id', name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
@@ -531,7 +514,7 @@ const tablesSchema = __schema({
   environment_effect_desc: __table({
     name: 'environment_effect_desc',
     indexes: [
-      { name: 'effect_id', algorithm: 'btree', columns: [
+      { accessor: 'effect_id', name: 'effect_id', algorithm: 'btree', columns: [
         'effectId',
       ] },
     ],
@@ -542,7 +525,7 @@ const tablesSchema = __schema({
   fx_event: __table({
     name: 'fx_event',
     indexes: [
-      { name: 'event_id', algorithm: 'btree', columns: [
+      { accessor: 'event_id', name: 'event_id', algorithm: 'btree', columns: [
         'eventId',
       ] },
     ],
@@ -553,7 +536,7 @@ const tablesSchema = __schema({
   guild_member: __table({
     name: 'guild_member',
     indexes: [
-      { name: 'member_key', algorithm: 'btree', columns: [
+      { accessor: 'member_key', name: 'member_key', algorithm: 'btree', columns: [
         'memberKey',
       ] },
     ],
@@ -564,7 +547,7 @@ const tablesSchema = __schema({
   guild_project: __table({
     name: 'guild_project',
     indexes: [
-      { name: 'project_id', algorithm: 'btree', columns: [
+      { accessor: 'project_id', name: 'project_id', algorithm: 'btree', columns: [
         'projectId',
       ] },
     ],
@@ -575,7 +558,7 @@ const tablesSchema = __schema({
   guild_state: __table({
     name: 'guild_state',
     indexes: [
-      { name: 'guild_id', algorithm: 'btree', columns: [
+      { accessor: 'guild_id', name: 'guild_id', algorithm: 'btree', columns: [
         'guildId',
       ] },
     ],
@@ -586,7 +569,7 @@ const tablesSchema = __schema({
   housing_state: __table({
     name: 'housing_state',
     indexes: [
-      { name: 'entity_id', algorithm: 'btree', columns: [
+      { accessor: 'entity_id', name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
@@ -597,7 +580,7 @@ const tablesSchema = __schema({
   id_lease_state: __table({
     name: 'id_lease_state',
     indexes: [
-      { name: 'lease_key', algorithm: 'btree', columns: [
+      { accessor: 'lease_key', name: 'lease_key', algorithm: 'btree', columns: [
         'leaseKey',
       ] },
     ],
@@ -608,7 +591,7 @@ const tablesSchema = __schema({
   instance_state: __table({
     name: 'instance_state',
     indexes: [
-      { name: 'instance_id', algorithm: 'btree', columns: [
+      { accessor: 'instance_id', name: 'instance_id', algorithm: 'btree', columns: [
         'instanceId',
       ] },
     ],
@@ -619,7 +602,7 @@ const tablesSchema = __schema({
   item_def: __table({
     name: 'item_def',
     indexes: [
-      { name: 'item_def_id', algorithm: 'btree', columns: [
+      { accessor: 'item_def_id', name: 'item_def_id', algorithm: 'btree', columns: [
         'itemDefId',
       ] },
     ],
@@ -630,7 +613,7 @@ const tablesSchema = __schema({
   market_fill: __table({
     name: 'market_fill',
     indexes: [
-      { name: 'fill_id', algorithm: 'btree', columns: [
+      { accessor: 'fill_id', name: 'fill_id', algorithm: 'btree', columns: [
         'fillId',
       ] },
     ],
@@ -641,7 +624,7 @@ const tablesSchema = __schema({
   market_order: __table({
     name: 'market_order',
     indexes: [
-      { name: 'order_id', algorithm: 'btree', columns: [
+      { accessor: 'order_id', name: 'order_id', algorithm: 'btree', columns: [
         'orderId',
       ] },
     ],
@@ -652,7 +635,7 @@ const tablesSchema = __schema({
   motion_intent: __table({
     name: 'motion_intent',
     indexes: [
-      { name: 'intent_id', algorithm: 'btree', columns: [
+      { accessor: 'intent_id', name: 'intent_id', algorithm: 'btree', columns: [
         'intentId',
       ] },
     ],
@@ -663,7 +646,7 @@ const tablesSchema = __schema({
   npc_ai_status_view: __table({
     name: 'npc_ai_status_view',
     indexes: [
-      { name: 'status_key', algorithm: 'btree', columns: [
+      { accessor: 'status_key', name: 'status_key', algorithm: 'btree', columns: [
         'statusKey',
       ] },
     ],
@@ -674,7 +657,7 @@ const tablesSchema = __schema({
   npc_anchor_state: __table({
     name: 'npc_anchor_state',
     indexes: [
-      { name: 'anchor_id', algorithm: 'btree', columns: [
+      { accessor: 'anchor_id', name: 'anchor_id', algorithm: 'btree', columns: [
         'anchorId',
       ] },
     ],
@@ -685,7 +668,7 @@ const tablesSchema = __schema({
   npc_interaction_log: __table({
     name: 'npc_interaction_log',
     indexes: [
-      { name: 'interaction_key', algorithm: 'btree', columns: [
+      { accessor: 'interaction_key', name: 'interaction_key', algorithm: 'btree', columns: [
         'interactionKey',
       ] },
     ],
@@ -696,7 +679,7 @@ const tablesSchema = __schema({
   npc_population_def: __table({
     name: 'npc_population_def',
     indexes: [
-      { name: 'npc_type', algorithm: 'btree', columns: [
+      { accessor: 'npc_type', name: 'npc_type', algorithm: 'btree', columns: [
         'npcType',
       ] },
     ],
@@ -707,7 +690,7 @@ const tablesSchema = __schema({
   npc_state: __table({
     name: 'npc_state',
     indexes: [
-      { name: 'npc_id', algorithm: 'btree', columns: [
+      { accessor: 'npc_id', name: 'npc_id', algorithm: 'btree', columns: [
         'npcId',
       ] },
     ],
@@ -718,7 +701,7 @@ const tablesSchema = __schema({
   npc_state_stream: __table({
     name: 'npc_state_stream',
     indexes: [
-      { name: 'npc_id', algorithm: 'btree', columns: [
+      { accessor: 'npc_id', name: 'npc_id', algorithm: 'btree', columns: [
         'npcId',
       ] },
     ],
@@ -729,7 +712,7 @@ const tablesSchema = __schema({
   npc_trade_order_def: __table({
     name: 'npc_trade_order_def',
     indexes: [
-      { name: 'order_def_id', algorithm: 'btree', columns: [
+      { accessor: 'order_def_id', name: 'order_def_id', algorithm: 'btree', columns: [
         'orderDefId',
       ] },
     ],
@@ -740,7 +723,7 @@ const tablesSchema = __schema({
   npc_trade_order_state: __table({
     name: 'npc_trade_order_state',
     indexes: [
-      { name: 'order_key', algorithm: 'btree', columns: [
+      { accessor: 'order_key', name: 'order_key', algorithm: 'btree', columns: [
         'orderKey',
       ] },
     ],
@@ -751,7 +734,7 @@ const tablesSchema = __schema({
   party_member: __table({
     name: 'party_member',
     indexes: [
-      { name: 'member_key', algorithm: 'btree', columns: [
+      { accessor: 'member_key', name: 'member_key', algorithm: 'btree', columns: [
         'memberKey',
       ] },
     ],
@@ -762,7 +745,7 @@ const tablesSchema = __schema({
   party_state: __table({
     name: 'party_state',
     indexes: [
-      { name: 'party_id', algorithm: 'btree', columns: [
+      { accessor: 'party_id', name: 'party_id', algorithm: 'btree', columns: [
         'partyId',
       ] },
     ],
@@ -773,7 +756,7 @@ const tablesSchema = __schema({
   path_result: __table({
     name: 'path_result',
     indexes: [
-      { name: 'path_id', algorithm: 'btree', columns: [
+      { accessor: 'path_id', name: 'path_id', algorithm: 'btree', columns: [
         'pathId',
       ] },
     ],
@@ -784,7 +767,7 @@ const tablesSchema = __schema({
   path_step: __table({
     name: 'path_step',
     indexes: [
-      { name: 'step_key', algorithm: 'btree', columns: [
+      { accessor: 'step_key', name: 'step_key', algorithm: 'btree', columns: [
         'stepKey',
       ] },
     ],
@@ -795,7 +778,7 @@ const tablesSchema = __schema({
   physics_state: __table({
     name: 'physics_state',
     indexes: [
-      { name: 'entity_id', algorithm: 'btree', columns: [
+      { accessor: 'entity_id', name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
@@ -806,7 +789,7 @@ const tablesSchema = __schema({
   player_inventory_container_view: __table({
     name: 'player_inventory_container_view',
     indexes: [
-      { name: 'view_key', algorithm: 'btree', columns: [
+      { accessor: 'view_key', name: 'view_key', algorithm: 'btree', columns: [
         'viewKey',
       ] },
     ],
@@ -817,7 +800,7 @@ const tablesSchema = __schema({
   player_inventory_item_view: __table({
     name: 'player_inventory_item_view',
     indexes: [
-      { name: 'item_instance_id', algorithm: 'btree', columns: [
+      { accessor: 'item_instance_id', name: 'item_instance_id', algorithm: 'btree', columns: [
         'itemInstanceId',
       ] },
     ],
@@ -828,7 +811,7 @@ const tablesSchema = __schema({
   player_inventory_slot_view: __table({
     name: 'player_inventory_slot_view',
     indexes: [
-      { name: 'slot_key', algorithm: 'btree', columns: [
+      { accessor: 'slot_key', name: 'slot_key', algorithm: 'btree', columns: [
         'slotKey',
       ] },
     ],
@@ -836,21 +819,10 @@ const tablesSchema = __schema({
       { name: 'player_inventory_slot_view_slot_key_key', constraint: 'unique', columns: ['slotKey'] },
     ],
   }, PlayerInventorySlotViewRow),
-  player_movement_feedback_view: __table({
-    name: 'player_movement_feedback_view',
-    indexes: [
-      { name: 'request_key', algorithm: 'btree', columns: [
-        'requestKey',
-      ] },
-    ],
-    constraints: [
-      { name: 'player_movement_feedback_view_request_key_key', constraint: 'unique', columns: ['requestKey'] },
-    ],
-  }, PlayerMovementFeedbackViewRow),
   player_session_view: __table({
     name: 'player_session_view',
     indexes: [
-      { name: 'identity', algorithm: 'btree', columns: [
+      { accessor: 'identity', name: 'identity', algorithm: 'btree', columns: [
         'identity',
       ] },
     ],
@@ -861,7 +833,7 @@ const tablesSchema = __schema({
   player_state: __table({
     name: 'player_state',
     indexes: [
-      { name: 'player_id', algorithm: 'btree', columns: [
+      { accessor: 'player_id', name: 'player_id', algorithm: 'btree', columns: [
         'playerId',
       ] },
     ],
@@ -872,7 +844,7 @@ const tablesSchema = __schema({
   player_wallet_view: __table({
     name: 'player_wallet_view',
     indexes: [
-      { name: 'identity', algorithm: 'btree', columns: [
+      { accessor: 'identity', name: 'identity', algorithm: 'btree', columns: [
         'identity',
       ] },
     ],
@@ -883,7 +855,7 @@ const tablesSchema = __schema({
   price_index: __table({
     name: 'price_index',
     indexes: [
-      { name: 'index_key', algorithm: 'btree', columns: [
+      { accessor: 'index_key', name: 'index_key', algorithm: 'btree', columns: [
         'indexKey',
       ] },
     ],
@@ -894,7 +866,7 @@ const tablesSchema = __schema({
   project_site_state: __table({
     name: 'project_site_state',
     indexes: [
-      { name: 'entity_id', algorithm: 'btree', columns: [
+      { accessor: 'entity_id', name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
@@ -905,7 +877,7 @@ const tablesSchema = __schema({
   quest_chain_def: __table({
     name: 'quest_chain_def',
     indexes: [
-      { name: 'chain_id', algorithm: 'btree', columns: [
+      { accessor: 'chain_id', name: 'chain_id', algorithm: 'btree', columns: [
         'chainId',
       ] },
     ],
@@ -916,7 +888,7 @@ const tablesSchema = __schema({
   quest_chain_state: __table({
     name: 'quest_chain_state',
     indexes: [
-      { name: 'chain_key', algorithm: 'btree', columns: [
+      { accessor: 'chain_key', name: 'chain_key', algorithm: 'btree', columns: [
         'chainKey',
       ] },
     ],
@@ -927,7 +899,7 @@ const tablesSchema = __schema({
   quest_stage_def: __table({
     name: 'quest_stage_def',
     indexes: [
-      { name: 'stage_id', algorithm: 'btree', columns: [
+      { accessor: 'stage_id', name: 'stage_id', algorithm: 'btree', columns: [
         'stageId',
       ] },
     ],
@@ -938,7 +910,7 @@ const tablesSchema = __schema({
   quest_stage_state: __table({
     name: 'quest_stage_state',
     indexes: [
-      { name: 'stage_key', algorithm: 'btree', columns: [
+      { accessor: 'stage_key', name: 'stage_key', algorithm: 'btree', columns: [
         'stageKey',
       ] },
     ],
@@ -949,7 +921,7 @@ const tablesSchema = __schema({
   region_state: __table({
     name: 'region_state',
     indexes: [
-      { name: 'region_id', algorithm: 'btree', columns: [
+      { accessor: 'region_id', name: 'region_id', algorithm: 'btree', columns: [
         'regionId',
       ] },
     ],
@@ -960,7 +932,7 @@ const tablesSchema = __schema({
   rent_state: __table({
     name: 'rent_state',
     indexes: [
-      { name: 'entity_id', algorithm: 'btree', columns: [
+      { accessor: 'entity_id', name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
@@ -971,7 +943,7 @@ const tablesSchema = __schema({
   rent_whitelist_entry: __table({
     name: 'rent_whitelist_entry',
     indexes: [
-      { name: 'entry_key', algorithm: 'btree', columns: [
+      { accessor: 'entry_key', name: 'entry_key', algorithm: 'btree', columns: [
         'entryKey',
       ] },
     ],
@@ -982,7 +954,7 @@ const tablesSchema = __schema({
   resource_clump_def: __table({
     name: 'resource_clump_def',
     indexes: [
-      { name: 'clump_key', algorithm: 'btree', columns: [
+      { accessor: 'clump_key', name: 'clump_key', algorithm: 'btree', columns: [
         'clumpKey',
       ] },
     ],
@@ -993,7 +965,7 @@ const tablesSchema = __schema({
   resource_gen_def: __table({
     name: 'resource_gen_def',
     indexes: [
-      { name: 'resource_type', algorithm: 'btree', columns: [
+      { accessor: 'resource_type', name: 'resource_type', algorithm: 'btree', columns: [
         'resourceType',
       ] },
     ],
@@ -1004,7 +976,7 @@ const tablesSchema = __schema({
   resource_node: __table({
     name: 'resource_node',
     indexes: [
-      { name: 'entity_id', algorithm: 'btree', columns: [
+      { accessor: 'entity_id', name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
@@ -1015,7 +987,7 @@ const tablesSchema = __schema({
   resource_state: __table({
     name: 'resource_state',
     indexes: [
-      { name: 'entity_id', algorithm: 'btree', columns: [
+      { accessor: 'entity_id', name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
@@ -1026,7 +998,7 @@ const tablesSchema = __schema({
   server_correction: __table({
     name: 'server_correction',
     indexes: [
-      { name: 'correction_id', algorithm: 'btree', columns: [
+      { accessor: 'correction_id', name: 'correction_id', algorithm: 'btree', columns: [
         'correctionId',
       ] },
     ],
@@ -1037,7 +1009,7 @@ const tablesSchema = __schema({
   social_feed: __table({
     name: 'social_feed',
     indexes: [
-      { name: 'feed_id', algorithm: 'btree', columns: [
+      { accessor: 'feed_id', name: 'feed_id', algorithm: 'btree', columns: [
         'feedId',
       ] },
     ],
@@ -1048,7 +1020,7 @@ const tablesSchema = __schema({
   status_effect: __table({
     name: 'status_effect',
     indexes: [
-      { name: 'status_key', algorithm: 'btree', columns: [
+      { accessor: 'status_key', name: 'status_key', algorithm: 'btree', columns: [
         'statusKey',
       ] },
     ],
@@ -1059,7 +1031,7 @@ const tablesSchema = __schema({
   terrain_chunk: __table({
     name: 'terrain_chunk',
     indexes: [
-      { name: 'chunk_key', algorithm: 'btree', columns: [
+      { accessor: 'chunk_key', name: 'chunk_key', algorithm: 'btree', columns: [
         'chunkKey',
       ] },
     ],
@@ -1070,7 +1042,7 @@ const tablesSchema = __schema({
   terrain_chunk_payload: __table({
     name: 'terrain_chunk_payload',
     indexes: [
-      { name: 'chunk_key', algorithm: 'btree', columns: [
+      { accessor: 'chunk_key', name: 'chunk_key', algorithm: 'btree', columns: [
         'chunkKey',
       ] },
     ],
@@ -1081,7 +1053,7 @@ const tablesSchema = __schema({
   terrain_chunk_stream: __table({
     name: 'terrain_chunk_stream',
     indexes: [
-      { name: 'chunk_key', algorithm: 'btree', columns: [
+      { accessor: 'chunk_key', name: 'chunk_key', algorithm: 'btree', columns: [
         'chunkKey',
       ] },
     ],
@@ -1092,7 +1064,7 @@ const tablesSchema = __schema({
   threat_state: __table({
     name: 'threat_state',
     indexes: [
-      { name: 'threat_key', algorithm: 'btree', columns: [
+      { accessor: 'threat_key', name: 'threat_key', algorithm: 'btree', columns: [
         'threatKey',
       ] },
     ],
@@ -1103,7 +1075,7 @@ const tablesSchema = __schema({
   trade_offer: __table({
     name: 'trade_offer',
     indexes: [
-      { name: 'offer_key', algorithm: 'btree', columns: [
+      { accessor: 'offer_key', name: 'offer_key', algorithm: 'btree', columns: [
         'offerKey',
       ] },
     ],
@@ -1114,7 +1086,7 @@ const tablesSchema = __schema({
   trade_session: __table({
     name: 'trade_session',
     indexes: [
-      { name: 'session_id', algorithm: 'btree', columns: [
+      { accessor: 'session_id', name: 'session_id', algorithm: 'btree', columns: [
         'sessionId',
       ] },
     ],
@@ -1125,7 +1097,7 @@ const tablesSchema = __schema({
   transform_state: __table({
     name: 'transform_state',
     indexes: [
-      { name: 'entity_id', algorithm: 'btree', columns: [
+      { accessor: 'entity_id', name: 'entity_id', algorithm: 'btree', columns: [
         'entityId',
       ] },
     ],
@@ -1136,7 +1108,7 @@ const tablesSchema = __schema({
   ui_notification_event: __table({
     name: 'ui_notification_event',
     indexes: [
-      { name: 'event_id', algorithm: 'btree', columns: [
+      { accessor: 'event_id', name: 'event_id', algorithm: 'btree', columns: [
         'eventId',
       ] },
     ],
@@ -1147,7 +1119,7 @@ const tablesSchema = __schema({
   world_gen_params: __table({
     name: 'world_gen_params',
     indexes: [
-      { name: 'id', algorithm: 'btree', columns: [
+      { accessor: 'id', name: 'id', algorithm: 'btree', columns: [
         'id',
       ] },
     ],
@@ -1158,7 +1130,7 @@ const tablesSchema = __schema({
   worldgen_chunk_generation_queue: __table({
     name: 'worldgen_chunk_generation_queue',
     indexes: [
-      { name: 'queue_key', algorithm: 'btree', columns: [
+      { accessor: 'queue_key', name: 'queue_key', algorithm: 'btree', columns: [
         'queueKey',
       ] },
     ],
@@ -1166,7 +1138,9 @@ const tablesSchema = __schema({
       { name: 'worldgen_chunk_generation_queue_queue_key_key', constraint: 'unique', columns: ['queueKey'] },
     ],
   }, WorldgenChunkGenerationQueueRow),
-});
+} as const;
+
+const tablesSchema = __schema(Object.values(tableHandles) as unknown as Parameters<typeof __schema>[0]);
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
@@ -1216,9 +1190,6 @@ const reducersSchema = __reducers(
   __reducerSchema("market_order_match", MarketOrderMatchReducer),
   __reducerSchema("market_order_place", MarketOrderPlaceReducer),
   __reducerSchema("moderation_apply_action", ModerationApplyActionReducer),
-  __reducerSchema("move_to", MoveToReducer),
-  __reducerSchema("movement_feedback_cleanup", MovementFeedbackCleanupReducer),
-  __reducerSchema("movement_feedback_cleanup_global", MovementFeedbackCleanupGlobalReducer),
   __reducerSchema("npc_action_resolve", NpcActionResolveReducer),
   __reducerSchema("npc_dialogue_request", NpcDialogueRequestReducer),
   __reducerSchema("npc_quest", NpcQuestReducer),
@@ -1315,3 +1286,4 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
+

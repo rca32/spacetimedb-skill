@@ -9,7 +9,7 @@
 
 1. 정적 데이터 import (`import_csv_data`)
 2. 계정/세션 (`account_bootstrap`, `sign_in`)
-3. 이동 (`move_to`)
+3. 이동 (`sync_client_frame`, `submit_motion_intent`, `server_correction`)
 4. 인벤토리 (`inventory_bootstrap`)
 5. 건설/클레임 (`building_place`, `building_advance`, `claim_totem_place`, `claim_expand`)
 6. 전투 가드레일 음성 테스트 (`attack_scheduled` expected fail)
@@ -93,7 +93,7 @@ Windows Git Bash에서 `spacetime`가 보이지 않으면 `SPACETIME_BIN=/c/User
 
 권장 순서:
 1. 터미널 A/B에서 서로 다른 identity로 `account_bootstrap`, `sign_in`.
-2. 동일 `region_id`와 근접 좌표로 `move_to` 정렬.
+2. 동일 `region_id`/`dimension_id`로 `sync_client_frame`과 `submit_motion_intent`를 맞춰 정렬.
 3. 전투: A가 B 대상으로 `attack_start` → `attack_scheduled` → `attack_impact`.
 4. 직접 거래: A가 `trade_session_open` 후 양측 `trade_item_add` 및 `trade_accept`.
 5. `trade_session`, `trade_offer`, `attack_outcome`, `threat_state` SQL 검증.
@@ -167,7 +167,7 @@ SELECT audit_id, actor_identity, action_type FROM audit_log ORDER BY audit_id DE
 3. `combat`: `attack_schedule_state`, `attack_outcome`, `threat_state` 확인.
 4. `trade/economy`: `market_order`, `market_fill`, `wallet`, `currency_txn`, `price_index` 확인.
 5. `social/moderation`: `chat_message`, `report_queue`, `moderation_action`, `moderation_flag` 확인.
-6. `world-load`: `transform_state`, `movement_request_log`, agent loop 결과 테이블 확인.
+6. `world-load`: `transform_state`, `motion_intent`, `physics_state`, agent loop 결과 테이블 확인.
 
 ## 5. stitch-server-ai-tester 정합 포인트
 

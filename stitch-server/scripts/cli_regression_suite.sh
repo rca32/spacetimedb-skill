@@ -4,6 +4,7 @@ set -euo pipefail
 DB_NAME="${DB_NAME:-stitch-server}"
 SERVER="${SERVER:-127.0.0.1:3000}"
 REGION_ID="${REGION_ID:-1}"
+DIMENSION_ID="${DIMENSION_ID:-1}"
 REPEAT="${REPEAT:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 YES_FLAG="${YES_FLAG:---yes}"
@@ -13,18 +14,19 @@ usage() {
 Stitch CLI Integration Regression Suite
 
 Usage:
-  $(basename "$0") [--db <name>] [--server <addr>] [--region <id>] [--repeat <n>] [--dry-run]
+  $(basename "$0") [--db <name>] [--server <addr>] [--region <id>] [--dimension <id>] [--repeat <n>] [--dry-run]
 
 Options:
   --db <name>       Database name (default: ${DB_NAME})
   --server <addr>   SpacetimeDB server (default: ${SERVER})
   --region <id>     Region id for sign-in/movement (default: ${REGION_ID})
+  --dimension <id>  Dimension id for v2 movement checks (default: ${DIMENSION_ID})
   --repeat <n>      Repeat count for deterministic regression runs (default: ${REPEAT})
   --dry-run         Print commands without executing
   -h, --help        Show this help
 
 Environment:
-  DB_NAME, SERVER, REGION_ID, REPEAT, DRY_RUN, YES_FLAG
+  DB_NAME, SERVER, REGION_ID, DIMENSION_ID, REPEAT, DRY_RUN, YES_FLAG
 USAGE
 }
 
@@ -36,6 +38,8 @@ while [[ $# -gt 0 ]]; do
       SERVER="$2"; shift 2 ;;
     --region)
       REGION_ID="$2"; shift 2 ;;
+    --dimension)
+      DIMENSION_ID="$2"; shift 2 ;;
     --repeat)
       REPEAT="$2"; shift 2 ;;
     --dry-run)
@@ -114,7 +118,7 @@ run_iteration() {
   base_ms="$(($(date +%s%3N) + iter * 10000))"
 
   local display_name="runner-${run_tag}"
-  local move_req="move-${run_tag}"
+  local motion_req="motion-${run_tag}"
   local talk_req="talk-${run_tag}"
   local trade_req="trade-${run_tag}"
   local quest_req="quest-${run_tag}"
@@ -127,7 +131,8 @@ run_iteration() {
   call_reducer import_csv_data
   call_reducer account_bootstrap "\"${display_name}\""
   call_reducer sign_in "$REGION_ID"
-  call_reducer move_to "\"${move_req}\"" "$REGION_ID" "$base_ms" 1.0 0.0 1.0
+  call_reducer sync_client_frame 1 "$REGION_ID" "$DIMENSION_ID" "$base_ms"
+  call_reducer submit_motion_intent "\"${motion_req}\"" "$REGION_ID" "$DIMENSION_ID" 1 1.0 0.0 10.0 false
   call_reducer inventory_bootstrap
 
   call_reducer building_place "$building_id" "$REGION_ID" 1 1 1 1 2
@@ -159,6 +164,9 @@ run_iteration() {
   sql_check "account count" "SELECT COUNT(*) AS account_cnt FROM account"
   sql_check "player count" "SELECT COUNT(*) AS player_cnt FROM player_state"
   sql_check "transform count" "SELECT COUNT(*) AS transform_cnt FROM transform_state"
+  sql_check "motion intent count" "SELECT COUNT(*) AS motion_intent_cnt FROM motion_intent"
+  sql_check "physics state count" "SELECT COUNT(*) AS physics_state_cnt FROM physics_state"
+  sql_check "server correction count" "SELECT COUNT(*) AS correction_cnt FROM server_correction"
 
   sql_check "inventory container count" "SELECT COUNT(*) AS container_cnt FROM inventory_container"
   sql_check "inventory slot count" "SELECT COUNT(*) AS slot_cnt FROM inventory_slot"

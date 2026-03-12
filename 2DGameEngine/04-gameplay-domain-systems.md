@@ -14,8 +14,8 @@
 
 ### 서버 기준
 
-- DESIGN: `transform_state`, `action_state`, `resource_state`, `player_movement_feedback_view`
-- 현재 구현: `move_to`, `sync_client_frame`, `submit_motion_intent`, `physics_state`, `server_correction`
+- DESIGN: `transform_state`, `action_state`, `resource_state`, `physics_state`, `server_correction`
+- 현재 구현: `sync_client_frame`, `submit_motion_intent`, `request_path_in_dimension`, `physics_state`, `server_correction`, `path_result`
 
 ### 클라이언트 모듈
 

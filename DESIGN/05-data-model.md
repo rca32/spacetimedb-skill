@@ -187,8 +187,11 @@
 | Table | Access | PK | 주요 컬럼 | 인덱스/비고 |
 |---|---|---|---|---|
 | anti_cheat_event | private | event_id | identity, type, severity, ts | identity, ts |
+| client_frame | public | frame_key | identity, region_id, dimension_id, frame_no, client_time_ms, received_at | identity, frame_no |
+| motion_intent | public | intent_id | identity, region_id, dimension_id, frame_no, input_x, input_z, requested_speed, jump, submitted_at | identity, submitted_at |
+| physics_state | public | entity_id | region_id, dimension_id, position, velocity, grounded, last_intent_id, last_frame_no, updated_at | region_id, dimension_id, updated_at |
+| server_correction | public | correction_id | identity, region_id, dimension_id, reason, server_x/y/z, velocity_x/y/z, created_at, acknowledged, acked_client_frame_no | identity, acknowledged, created_at |
 | movement_violation | private | violation_id | identity, reason, ts, position | identity |
-| player_movement_feedback_view | public | request_key | identity, request_id, accepted, reason_code, server_pos, processed_at | identity, processed_at |
 | action_rate_violation | private | violation_id | identity, action, ts | identity |
 
 ## 13) 메트릭/관측
@@ -214,7 +217,7 @@
 - 운영/중재/신고: [report_queue](05-data-model-tables/report_queue.md), [moderation_action](05-data-model-tables/moderation_action.md), [ban_list](05-data-model-tables/ban_list.md), [rate_limit_bucket](05-data-model-tables/rate_limit_bucket.md), [audit_log](05-data-model-tables/audit_log.md)
 - LLM/VLM NPC: [npc_state](05-data-model-tables/npc_state.md), [npc_relation](05-data-model-tables/npc_relation.md), [npc_memory_short](05-data-model-tables/npc_memory_short.md), [npc_memory_long](05-data-model-tables/npc_memory_long.md), [npc_conversation_session](05-data-model-tables/npc_conversation_session.md), [npc_conversation_turn](05-data-model-tables/npc_conversation_turn.md), [npc_policy_violation](05-data-model-tables/npc_policy_violation.md), [npc_cost_metrics](05-data-model-tables/npc_cost_metrics.md), [npc_action_request](05-data-model-tables/npc_action_request.md), [npc_action_result](05-data-model-tables/npc_action_result.md), [npc_response_cache](05-data-model-tables/npc_response_cache.md)
 - 밸런싱/파라미터: [balance_params](05-data-model-tables/balance_params.md), [economy_params](05-data-model-tables/economy_params.md), [anti_cheat_params](05-data-model-tables/anti_cheat_params.md), [llm_params](05-data-model-tables/llm_params.md), [feature_flags](05-data-model-tables/feature_flags.md), [param_change_log](05-data-model-tables/param_change_log.md), [param_guardrail](05-data-model-tables/param_guardrail.md)
-- 치트 방지/동기화: [anti_cheat_event](05-data-model-tables/anti_cheat_event.md), [movement_violation](05-data-model-tables/movement_violation.md), [player_movement_feedback_view](05-data-model-tables/player_movement_feedback_view.md), [action_rate_violation](05-data-model-tables/action_rate_violation.md)
+- 치트 방지/동기화: [anti_cheat_event](05-data-model-tables/anti_cheat_event.md), `client_frame`, `motion_intent`, `physics_state`, `server_correction`, [movement_violation](05-data-model-tables/movement_violation.md), [action_rate_violation](05-data-model-tables/action_rate_violation.md)
 - 메트릭/관측: [metric_daily](05-data-model-tables/metric_daily.md), [economy_metric](05-data-model-tables/economy_metric.md), [combat_metric](05-data-model-tables/combat_metric.md)
 
 

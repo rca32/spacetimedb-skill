@@ -249,6 +249,12 @@ assert_int_ge "$npc_count" 1 "npc_state count"
 assert_int_ge "$resource_count" 1 "resource_node count"
 
 call_reducer sign_in "$REGION_ID"
+player_identity="$(trim_quotes "$(scalar_sql "SELECT identity FROM player_session_view LIMIT 1")")"
+if [[ -z "$player_identity" ]]; then
+  echo "[smoke] player_session_view missing after sign_in" >&2
+  exit 1
+fi
+player_identity_sql="0x${player_identity#0x}"
 call_reducer prune_expired_paths 0
 call_reducer request_path "$REGION_ID" "$PATH_START_HEX_X" "$PATH_START_HEX_Z" "$PATH_GOAL_HEX_X" "$PATH_GOAL_HEX_Z" "$PATH_NODE_LIMIT"
 
@@ -307,36 +313,55 @@ fi
 echo "[smoke] set_active_dimension invalid dimension rejection: ok"
 
 run_id="$(date +%s%3N)"
-req_ok="req_ok_${run_id}"
-req_far="req_far_${run_id}"
+motion_ok="motion_ok_${run_id}"
+motion_bad="motion_bad_${run_id}"
 ts="$(date +%s%3N)"
+correction_id="${motion_bad}:2:terrain_missing"
 
-call_reducer move_to "$req_ok" "$REGION_ID" "$ts" 0 0 0
-call_reducer move_to "$req_far" "$REGION_ID" "$((ts + 1))" 9999 0 9999
+call_reducer sync_client_frame 1 "$REGION_ID" "$DIMENSION_ID" "$ts"
+call_reducer submit_motion_intent "\"${motion_ok}\"" "$REGION_ID" "$DIMENSION_ID" 1 1.0 0.0 10.0 false
 
-check_feedback() {
-  local request_id="$1"
-  local expected_accepted="$2"
-  local expected_reason="$3"
+motion_row="$(canon_sql "SELECT intent_id, frame_no FROM motion_intent WHERE intent_id = '${motion_ok}'")"
+if [[ -z "$motion_row" ]]; then
+  echo "[smoke] motion_intent missing for ${motion_ok}" >&2
+  exit 1
+fi
+motion_frame="$(printf '%s\n' "$motion_row" | head -n1 | cut -d'|' -f2)"
+assert_eq "$motion_frame" "1" "motion_intent frame_no (${motion_ok})"
 
-  local row
-  row="$(canon_sql "SELECT request_id, accepted, reason_code, server_x, server_z FROM player_movement_feedback_view WHERE request_id = '${request_id}'")"
-  if [[ -z "$row" ]]; then
-    echo "[smoke] movement feedback missing for ${request_id}" >&2
-    exit 1
-  fi
+physics_row="$(canon_sql "SELECT last_intent_id, dimension_id FROM physics_state WHERE entity_id = ${player_identity_sql}")"
+if [[ -z "$physics_row" ]]; then
+  echo "[smoke] physics_state missing for ${player_identity_sql}" >&2
+  exit 1
+fi
+physics_intent="$(trim_quotes "$(printf '%s\n' "$physics_row" | head -n1 | cut -d'|' -f1)")"
+physics_dimension="$(printf '%s\n' "$physics_row" | head -n1 | cut -d'|' -f2)"
+assert_eq "$physics_intent" "$motion_ok" "physics_state last_intent_id"
+assert_eq "$physics_dimension" "$DIMENSION_ID" "physics_state dimension_id"
 
-  local actual_request actual_accepted actual_reason
-  actual_request="$(trim_quotes "$(printf '%s\n' "$row" | head -n1 | cut -d'|' -f1)")"
-  actual_accepted="$(printf '%s\n' "$row" | head -n1 | cut -d'|' -f2)"
-  actual_reason="$(trim_quotes "$(printf '%s\n' "$row" | head -n1 | cut -d'|' -f3)")"
+call_reducer sync_client_frame 2 "$REGION_ID" 999999 "$((ts + 16))"
+call_reducer submit_motion_intent "\"${motion_bad}\"" "$REGION_ID" 999999 2 1.0 0.0 10.0 false
 
-  assert_eq "$actual_request" "$request_id" "feedback request_id (${request_id})"
-  assert_eq "$actual_accepted" "$expected_accepted" "feedback accepted (${request_id})"
-  assert_eq "$actual_reason" "$expected_reason" "feedback reason (${request_id})"
-}
+correction_row="$(canon_sql "SELECT correction_id, reason, acknowledged FROM server_correction WHERE correction_id = '${correction_id}'")"
+if [[ -z "$correction_row" ]]; then
+  echo "[smoke] server_correction missing for ${correction_id}" >&2
+  exit 1
+fi
+correction_reason="$(trim_quotes "$(printf '%s\n' "$correction_row" | head -n1 | cut -d'|' -f2)")"
+correction_acked="$(printf '%s\n' "$correction_row" | head -n1 | cut -d'|' -f3)"
+assert_eq "$correction_reason" "terrain_missing" "server_correction reason"
+assert_eq "$correction_acked" "false" "server_correction initial ack"
 
-check_feedback "$req_ok" "true" "ok"
-check_feedback "$req_far" "false" "distance_exceeded"
+call_reducer ack_server_correction "\"${correction_id}\"" 2
+
+ack_row="$(canon_sql "SELECT acknowledged, acked_client_frame_no FROM server_correction WHERE correction_id = '${correction_id}'")"
+if [[ -z "$ack_row" ]]; then
+  echo "[smoke] server_correction ack row missing for ${correction_id}" >&2
+  exit 1
+fi
+acked="$(printf '%s\n' "$ack_row" | head -n1 | cut -d'|' -f1)"
+acked_frame="$(printf '%s\n' "$ack_row" | head -n1 | cut -d'|' -f2)"
+assert_eq "$acked" "true" "server_correction acknowledged"
+assert_eq "$acked_frame" "2" "server_correction acked frame"
 
 echo "[smoke] PASS"

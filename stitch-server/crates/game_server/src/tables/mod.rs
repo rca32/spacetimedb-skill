@@ -17,7 +17,6 @@ pub mod item_def;
 pub mod item_instance;
 pub mod item_stack;
 pub mod live_ops;
-pub mod movement;
 pub mod npc_quest;
 pub mod ops_moderation;
 pub mod pathfinding;
@@ -66,7 +65,6 @@ pub use live_ops::{
     ActionRateViolation, AntiCheatEvent, AntiCheatParams, BalanceParams, EconomyMetric,
     EconomyParams, FeatureFlags, MetricDaily, ParamChangeLog, ParamGuardrail,
 };
-pub use movement::MovementViolation;
 pub use npc_quest::{
     AgentRequest, AgentResult, NpcAiStatusView, NpcAnchorState, NpcInteractionLog,
     NpcPopulationDef, NpcState, NpcStateStream, NpcTradeOrderDef, NpcTradeOrderState,

@@ -1,26 +1,16 @@
-# player_movement_feedback_view
+# Movement Feedback Legacy Note
 
-- Access: public
-- Primary Key: request_key (`{identity}:{request_id}`)
+- 상태: 삭제됨
+- 현재 서버 스키마의 일부가 아니다.
+- 현재 이동 계약은 `sync_client_frame` + `submit_motion_intent` + `physics_state` + `server_correction` + `ack_server_correction` 조합만 사용한다.
 
-## RLS 규칙
-- 본 테이블은 `movement_request_log`, `movement_violation`, `transform_state`를 기반으로 서버가 동기화하는 projection이다.
-- 클라이언트는 이동 승인/거절 결과를 본 view로만 소비한다.
+## 대체 기준
 
-## 스키마 (서버 구현 기준)
-```rust
-#[spacetimedb::table(name = player_movement_feedback_view, public)]
-pub struct PlayerMovementFeedbackView {
-  #[primary_key]
-  pub request_key: String,
-  pub identity: Identity,
-  pub request_id: String,
-  pub accepted: bool,
-  pub reason_code: String,
-  pub server_pos: Vec<f32>,
-  pub processed_at: Timestamp,
-}
-```
+- 권위 위치/속도 baseline: `physics_state`
+- 이동 거절 및 보정 사유: `server_correction.reason`
+- 클릭 이동 waypoint 결과: `path_result`, `path_step`
 
-## 비고
-- 동기화 시점: `move_to`, `anti_cheat::log_movement_violation`.
+## 문서 유지 이유
+
+- 기존 설계 문서에서 사용하던 레거시 projection 이름을 정리하기 위한 tombstone 문서다.
+- 새 구현이나 새 문서에서는 이 항목을 참조하지 않는다.

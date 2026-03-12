@@ -52,8 +52,8 @@
 ### 목표
 
 - local movement controller
-- `move_to` dispatcher
-- `player_movement_feedback_view` 기반 correction
+- `sync_client_frame` + `submit_motion_intent` dispatcher
+- `physics_state` + `server_correction` 기반 reconciliation
 
 ### 산출물
 

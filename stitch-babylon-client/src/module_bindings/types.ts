@@ -689,36 +689,6 @@ export const MotionIntentV2 = __t.object("MotionIntentV2", {
 });
 export type MotionIntentV2 = __Infer<typeof MotionIntentV2>;
 
-export const MovementActorState = __t.object("MovementActorState", {
-  identity: __t.identity(),
-  regionId: __t.u64(),
-  lastClientTsMs: __t.u64(),
-  lastRequestId: __t.string(),
-  lastPosition: __t.array(__t.f32()),
-  updatedAt: __t.timestamp(),
-});
-export type MovementActorState = __Infer<typeof MovementActorState>;
-
-export const MovementRequestLog = __t.object("MovementRequestLog", {
-  requestKey: __t.string(),
-  identity: __t.identity(),
-  requestId: __t.string(),
-  regionId: __t.u64(),
-  clientTsMs: __t.u64(),
-  accepted: __t.bool(),
-  processedAt: __t.timestamp(),
-});
-export type MovementRequestLog = __Infer<typeof MovementRequestLog>;
-
-export const MovementViolation = __t.object("MovementViolation", {
-  violationId: __t.string(),
-  identity: __t.identity(),
-  reason: __t.string(),
-  ts: __t.timestamp(),
-  attemptedPosition: __t.array(__t.f32()),
-});
-export type MovementViolation = __Infer<typeof MovementViolation>;
-
 export const NpcActionRequest = __t.object("NpcActionRequest", {
   requestId: __t.string(),
   npcId: __t.u64(),
@@ -1073,19 +1043,6 @@ export const PlayerInventorySlotView = __t.object("PlayerInventorySlotView", {
   volume: __t.i32(),
 });
 export type PlayerInventorySlotView = __Infer<typeof PlayerInventorySlotView>;
-
-export const PlayerMovementFeedbackView = __t.object("PlayerMovementFeedbackView", {
-  requestKey: __t.string(),
-  identity: __t.identity(),
-  requestId: __t.string(),
-  accepted: __t.bool(),
-  reasonCode: __t.string(),
-  serverX: __t.f32(),
-  serverY: __t.f32(),
-  serverZ: __t.f32(),
-  processedAt: __t.timestamp(),
-});
-export type PlayerMovementFeedbackView = __Infer<typeof PlayerMovementFeedbackView>;
 
 export const PlayerRegenLoopTimer = __t.object("PlayerRegenLoopTimer", {
   scheduledId: __t.u64(),

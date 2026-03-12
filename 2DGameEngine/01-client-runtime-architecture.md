@@ -314,7 +314,10 @@ AssetPack 쪽에서 관리해야 하는 항목은 아래와 같다.
 1. authoritative state
 - `player_session_view`
 - `player_wallet_view`
-- `player_movement_feedback_view`
+- `physics_state`
+- `server_correction`
+- `path_result`
+- `path_step`
 - `player_inventory_*_view`
 - `transform_state`
 - `terrain_chunk_stream`

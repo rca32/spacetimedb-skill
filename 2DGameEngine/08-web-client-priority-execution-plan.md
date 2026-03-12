@@ -21,7 +21,7 @@
 | 3 | AssetPack config와 seed asset 스테이징 | asset version gate, bundle taxonomy | `assetpack.config.ts`, seed atlas/audio staging |
 | 4 | Spacetime 연결과 authoritative store | `player_session_view`, `terrain_chunk`, `player_inventory_*_view` | connection runtime, subscription coordinator, row store |
 | 5 | terrain payload decode와 chunk renderer | `terrain_chunk`, `transform_state`, `resource_node`, `building_state`, `npc_state` | chunk decoder, world layers, entity presenter |
-| 6 | movement prediction/reconciliation | `move_to`, `player_movement_feedback_view`, `sync_client_frame`, `submit_motion_intent`, `physics_state`, `server_correction` | input frame buffer, reconciliation engine, correction HUD |
+| 6 | movement prediction/reconciliation | `sync_client_frame`, `submit_motion_intent`, `request_path_in_dimension`, `path_result`, `path_step`, `physics_state`, `server_correction`, `ack_server_correction` | input frame buffer, reconciliation engine, correction HUD |
 | 7 | Pixi HUD/action bar/sound vertical slice | `audio_event`, `fx_event`, `combat_state`, `status_effect` | canvas HUD, action bar, sound bus |
 | 8 | inventory/building preview | `player_inventory_*_view`, `item_stack_move`, `building_validate_preview`, `building_preview_feedback_view`, `building_place_from_preview` | inventory panel, drag ghost, placement preview |
 | 9 | combat/NPC/social | `attack_start`, `attack_outcome`, `submit_combat_intent`, `npc_talk`, `chat_message`, `party_member`, `guild_member`, `social_feed` | combat presentation, dialogue UI, social panels |
@@ -177,23 +177,32 @@ web-client/
 ### 목표
 
 - 입력 즉시성은 살리되, 최종 위치는 항상 서버 위치에 수렴하게 한다.
-- 레거시 이동과 `v2` 입력 경로를 모두 수용하는 추상화를 둔다.
+- 이동 입력 계약을 `v2` 하나로 고정하고, click-to-move도 같은 reconciliation 경로로 수렴시킨다.
 
 ### 서버 기준
 
-- fallback: `move_to`, `player_movement_feedback_view`
-- 목표 경로: `sync_client_frame`, `submit_motion_intent`, `physics_state`, `server_correction`, `ack_server_correction`
+- `sync_client_frame`
+- `submit_motion_intent`
+- `physics_state`
+- `server_correction`
+- `ack_server_correction`
+- `request_path_in_dimension`
+- `path_result`
+- `path_step`
 
 ### 구현 포인트
 
 - 입력은 `InputFrame`과 `intent_id` 단위로 저장한다.
+- 네트워크 이동 전송은 `sync_client_frame` 다음 `submit_motion_intent` 순서를 유지한다.
+- click-to-move는 `path_result`/`path_step`를 waypoint 계획으로만 사용하고, 절대 좌표 reducer로 변환하지 않는다.
 - 작은 오차는 smoothing, 큰 오차는 snap + flash로 처리한다.
-- `reason_code`는 `terrain_blocked`, `slope_blocked`, `invalid_position` 같은 HUD 배지로 바로 연결한다.
+- `server_correction.reason`은 `terrain_blocked`, `slope_blocked`, `invalid_position` 같은 HUD 배지로 바로 연결한다.
 
 ### 완료 기준
 
 - 이동 입력 직후 로컬 캐릭터가 즉시 반응한다.
 - authoritative correction 후에도 장면 붕괴 없이 재수렴한다.
+- runtime에서 legacy absolute-target movement 의존성이 남지 않는다.
 - reconnect 또는 dimension resync 뒤에도 pending intent 정리가 가능하다.
 
 ## 7. Pixi HUD/action bar/sound vertical slice

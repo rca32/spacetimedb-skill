@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "pixi.js": "^8",
-    "spacetimedb": "^1"
+    "spacetimedb": "2.0.4"
   },
   "devDependencies": {
     "typescript": "^5",
