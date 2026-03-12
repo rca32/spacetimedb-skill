@@ -19,14 +19,32 @@ export class EventLogStore {
   }
 
   push(level: EventLogEntry["level"], message: string): void {
+    const timestamp = Date.now();
     this.entries.unshift({
-      timestamp: Date.now(),
+      timestamp,
       level,
       message
     });
+    this.writeConsole(level, timestamp, message);
 
     this.entries.length = Math.min(this.entries.length, this.limit);
     this.emit();
+  }
+
+  private writeConsole(level: EventLogEntry["level"], timestamp: number, message: string): void {
+    const time = new Date(timestamp).toLocaleTimeString();
+    const line = `[runtime:${level}] ${time} ${message}`;
+    switch (level) {
+      case "error":
+        console.error(line);
+        break;
+      case "warn":
+        console.warn(line);
+        break;
+      default:
+        console.info(line);
+        break;
+    }
   }
 
   private emit(): void {

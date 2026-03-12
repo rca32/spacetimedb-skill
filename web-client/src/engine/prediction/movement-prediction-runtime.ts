@@ -21,11 +21,11 @@ interface SessionContext {
   dimensionId: number;
 }
 
-const WALK_SPEED = 7.5;
-const SPRINT_SPEED = 12;
+const WALK_SPEED = 30;
+const SPRINT_SPEED = 48;
 const FIXED_SIM_STEP_MS = 1000 / 60;
 const MAX_SIM_STEPS_PER_TICK = 8;
-const MOVE_SEGMENT_MS = 200;
+const MOVE_SEGMENT_MS = 150;
 
 function isMovementKey(event: KeyboardEvent): boolean {
   switch (event.code) {
@@ -455,7 +455,7 @@ export class MovementPredictionRuntime {
         {
           requestId: intentId,
           regionId: BigInt(session.regionId),
-          clientTsMs: BigInt(Math.floor(now)),
+          clientTsMs: BigInt(Date.now()),
           x: this.predictedPosition.x,
           y: this.authoritativeY,
           z: this.predictedPosition.z

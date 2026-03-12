@@ -1,7 +1,6 @@
 import type { EnvConfig } from "../../bootstrap/env-config";
 import type { VersionGateResult } from "../../bootstrap/version-gate";
 import type { TableSnapshot } from "../../engine/state/authoritative-store";
-import type { EventLogEntry } from "../../engine/state/event-log-store";
 
 export interface RuntimeStatus {
   label: string;
@@ -19,14 +18,10 @@ export class DebugHud {
   private readonly versionSummary: HTMLDivElement;
   private readonly envList: HTMLDListElement;
   private readonly tableList: HTMLOListElement;
-  private readonly eventList: HTMLOListElement;
 
   constructor(host: HTMLElement, env: EnvConfig, versionGate: VersionGateResult) {
     const leftColumn = document.createElement("div");
     leftColumn.className = "hud-column";
-
-    const rightColumn = document.createElement("div");
-    rightColumn.className = "hud-column";
 
     const overviewCard = document.createElement("section");
     overviewCard.className = "debug-card";
@@ -56,20 +51,8 @@ export class DebugHud {
 
     tableCard.append(tableTitle, this.tableList);
 
-    const eventCard = document.createElement("section");
-    eventCard.className = "debug-card";
-
-    const eventTitle = document.createElement("h2");
-    eventTitle.textContent = "Event Log";
-
-    this.eventList = document.createElement("ol");
-    this.eventList.className = "debug-list";
-
-    eventCard.append(eventTitle, this.eventList);
-
     leftColumn.append(overviewCard, tableCard);
-    rightColumn.append(eventCard);
-    host.append(leftColumn, rightColumn);
+    host.append(leftColumn);
 
     this.setRuntimeStatus({
       label: "booting",
@@ -78,7 +61,6 @@ export class DebugHud {
     this.setVersionGate(versionGate);
     this.setEnv(env);
     this.setTableSnapshot([]);
-    this.setEventLog([]);
   }
 
   setRuntimeStatus(status: RuntimeStatus): void {
@@ -113,17 +95,8 @@ export class DebugHud {
     );
   }
 
-  setEventLog(entries: readonly EventLogEntry[]): void {
-    this.eventList.replaceChildren(
-      ...(
-        entries.length > 0
-          ? entries.map((entry) => {
-              const timestamp = new Date(entry.timestamp).toLocaleTimeString();
-              return this.createListItem(`[${entry.level}] ${timestamp} ${entry.message}`);
-            })
-          : [this.createListItem("Waiting for runtime events.")]
-      )
-    );
+  setEventLog(_entries?: readonly unknown[]): void {
+    // Event logs now live in the browser console instead of the HUD.
   }
 
   private createMetaLine(label: string, value: string): HTMLDivElement {
