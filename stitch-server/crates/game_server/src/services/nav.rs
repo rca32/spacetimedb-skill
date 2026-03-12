@@ -270,7 +270,7 @@ impl NavGrid {
             return None;
         }
 
-        let flags_offset = stride / 2 - 1;
+        let flags_offset = terrain_payload_flags_offset(row.cell_payload_version)?;
         if byte_index + (flags_offset * 2) + 1 >= row.cell_payload_bytes.len() {
             return None;
         }
@@ -351,13 +351,23 @@ fn terrain_payload_stride_bytes(version: u16) -> Option<usize> {
     }
 }
 
+fn terrain_payload_flags_offset(version: u16) -> Option<usize> {
+    match version {
+        TERRAIN_PAYLOAD_VERSION_V1 | TERRAIN_PAYLOAD_VERSION_V2 => Some(3),
+        _ => None,
+    }
+}
+
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{read_i16_le, read_u16_le, TERRAIN_WATER_FLAG};
+    use super::{
+        read_i16_le, read_u16_le, terrain_payload_flags_offset, TERRAIN_PAYLOAD_VERSION_V1,
+        TERRAIN_PAYLOAD_VERSION_V2, TERRAIN_WATER_FLAG,
+    };
 
     #[test]
     fn read_i16_matches_little_endian_encoding() {
@@ -371,5 +381,11 @@ mod tests {
         let bytes = [0x01_u8, 0x00_u8, 0xFF_u8, 0x00_u8];
         assert_eq!(read_u16_le(&bytes, 0), TERRAIN_WATER_FLAG);
         assert_eq!(read_u16_le(&bytes, 2), 255_u16);
+    }
+
+    #[test]
+    fn terrain_payload_flags_offset_matches_v1_and_v2_layout() {
+        assert_eq!(terrain_payload_flags_offset(TERRAIN_PAYLOAD_VERSION_V1), Some(3));
+        assert_eq!(terrain_payload_flags_offset(TERRAIN_PAYLOAD_VERSION_V2), Some(3));
     }
 }

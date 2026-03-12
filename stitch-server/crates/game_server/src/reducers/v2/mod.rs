@@ -1,6 +1,7 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::services::nav::build_nav_grid;
+use crate::tables::transform_state::transform_state;
 use crate::tables::v2::{
     aoi_stream, audio_event, client_frame, collision_proxy, combat_hit, combat_hit_event,
     combat_intent, fx_event, motion_intent, physics_state, server_correction,
@@ -8,7 +9,7 @@ use crate::tables::v2::{
 };
 use crate::tables::{
     AoiStreamV2, AudioEventV2, ClientFrameV2, CollisionProxyV2, CombatHitEventV2, CombatHitV2,
-    CombatIntentV2, FxEventV2, MotionIntentV2, PhysicsStateV2, ServerCorrectionV2,
+    CombatIntentV2, FxEventV2, MotionIntentV2, PhysicsStateV2, ServerCorrectionV2, TransformState,
     UiNotificationEventV2,
 };
 
@@ -114,7 +115,14 @@ pub fn submit_motion_intent(
         .entity_id()
         .find(ctx.sender())
         .unwrap_or_else(|| {
-            default_physics_state(ctx.sender(), region_id, dimension_id, frame_no, ctx.timestamp)
+            default_physics_state(
+                ctx,
+                ctx.sender(),
+                region_id,
+                dimension_id,
+                frame_no,
+                ctx.timestamp,
+            )
         });
 
     let current_position = vec3_or_zero(&current.position);
@@ -183,6 +191,7 @@ pub fn submit_motion_intent(
         ctx.db.physics_state().insert(next_state);
     }
 
+    sync_transform_state(ctx, ctx.sender(), region_id, dimension_id, next_position);
     upsert_player_proxy(
         ctx,
         ctx.sender(),
@@ -416,6 +425,7 @@ fn ensure_physics_state(
     }
 
     ctx.db.physics_state().insert(default_physics_state(
+        ctx,
         entity_id,
         region_id,
         dimension_id,
@@ -425,22 +435,60 @@ fn ensure_physics_state(
 }
 
 fn default_physics_state(
+    ctx: &ReducerContext,
     entity_id: Identity,
     region_id: u64,
     dimension_id: u32,
     frame_no: u64,
     updated_at: spacetimedb::Timestamp,
 ) -> PhysicsStateV2 {
+    let position = ctx
+        .db
+        .transform_state()
+        .entity_id()
+        .find(entity_id)
+        .map(|row| vec3_or_zero(&row.position))
+        .unwrap_or([0.0, 0.0, 0.0]);
+
     PhysicsStateV2 {
         entity_id,
         region_id,
         dimension_id,
-        position: vec![0.0, 0.0, 0.0],
+        position: position.to_vec(),
         velocity: vec![0.0, 0.0, 0.0],
         grounded: true,
         last_intent_id: String::new(),
         last_frame_no: frame_no,
         updated_at,
+    }
+}
+
+fn sync_transform_state(
+    ctx: &ReducerContext,
+    entity_id: Identity,
+    region_id: u64,
+    dimension_id: u32,
+    position: [f32; 3],
+) {
+    let next = TransformState {
+        entity_id,
+        region_id,
+        dimension_id,
+        position: position.to_vec(),
+        rotation: ctx
+            .db
+            .transform_state()
+            .entity_id()
+            .find(entity_id)
+            .map(|row| row.rotation)
+            .unwrap_or_else(|| vec![0.0, 0.0, 0.0, 1.0]),
+        updated_at: ctx.timestamp,
+    };
+
+    if ctx.db.transform_state().entity_id().find(entity_id).is_some() {
+        ctx.db.transform_state().entity_id().update(next);
+    } else {
+        ctx.db.transform_state().insert(next);
     }
 }
 
