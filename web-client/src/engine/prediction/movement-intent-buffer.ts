@@ -43,4 +43,8 @@ export class MovementIntentBuffer {
   getPending(): readonly MovementIntent[] {
     return this.intents;
   }
+
+  clear(): void {
+    this.intents.length = 0;
+  }
 }

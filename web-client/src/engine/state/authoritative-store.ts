@@ -26,6 +26,8 @@ const PRIMARY_KEY_CANDIDATES = [
   ["channelId", "channel_id"],
   ["slotKey", "slot_key"],
   ["viewKey", "view_key"]
+  ,["pathId", "path_id"]
+  ,["stepKey", "step_key"]
 ] as const;
 
 function inferRowKey(row: Record<string, unknown>): string {
@@ -98,6 +100,10 @@ export class AuthoritativeStore {
   getRows(table: string): Record<string, unknown>[] {
     const bucket = this.tables.get(table);
     return bucket ? [...bucket.values()] : [];
+  }
+
+  getTableSnapshot(): TableSnapshot[] {
+    return this.snapshot();
   }
 
   private emit(): void {

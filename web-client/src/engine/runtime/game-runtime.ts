@@ -8,14 +8,10 @@ import { AuthoritativeStore } from "../state/authoritative-store";
 import { EventLogStore } from "../state/event-log-store";
 import { InteractionStore } from "../state/interaction-store";
 import { FrameClock } from "./frame-clock";
-import { DebugHud } from "../../ui/hud/debug-hud";
-import { InventoryHud } from "../../ui/hud/inventory-hud";
-import { BuildingPreviewHud } from "../../ui/hud/building-preview-hud";
-import { ReducerDispatchHud } from "../../ui/hud/reducer-dispatch-hud";
 import { WorldRenderer } from "../render/world-renderer";
 import { MovementPredictionRuntime } from "../prediction/movement-prediction-runtime";
-import { MovementHud } from "../../ui/hud/movement-hud";
 import { SeedAssetRuntime } from "../assets/seed-asset-runtime";
+import { ConsoleDiagnostics } from "./console-diagnostics";
 
 const HEX_RENDER_SCALE = 12;
 const STARTER_REGION_ID = 1n;
@@ -48,43 +44,19 @@ export class GameRuntime {
     this.reducerGateway
   );
   private readonly seedAssetRuntime = new SeedAssetRuntime(this.eventLog);
-  private readonly debugHud: DebugHud;
-  private readonly inventoryHud: InventoryHud;
-  private readonly movementHud: MovementHud;
-  private readonly buildingPreviewHud: BuildingPreviewHud;
-  private readonly reducerDispatchHud: ReducerDispatchHud;
+  private readonly consoleDiagnostics: ConsoleDiagnostics;
   private lastViewportWidth = 0;
   private lastViewportHeight = 0;
 
   constructor(private readonly options: GameRuntimeOptions) {
-    this.debugHud = new DebugHud(
-      options.hudHost,
+    options.hudHost.replaceChildren();
+    options.hudHost.hidden = true;
+    this.consoleDiagnostics = new ConsoleDiagnostics(
       options.env,
-      options.versionGate
-    );
-    this.inventoryHud = new InventoryHud(
-      options.hudHost,
+      options.versionGate,
       this.authoritativeStore,
-      this.reducerGateway,
-      this.eventLog
-    );
-    this.movementHud = new MovementHud(
-      options.hudHost,
-      this.movementPrediction
-    );
-    this.buildingPreviewHud = new BuildingPreviewHud(
-      options.hudHost,
-      this.authoritativeStore,
-      this.interactionStore,
-      this.reducerGateway,
-      this.eventLog
-    );
-    this.reducerDispatchHud = new ReducerDispatchHud(
-      options.hudHost,
-      this.authoritativeStore,
-      this.interactionStore,
-      this.reducerGateway,
-      this.eventLog
+      this.movementPrediction,
+      this.interactionStore
     );
   }
 
@@ -101,15 +73,16 @@ export class GameRuntime {
     );
     this.syncViewportSubscriptions();
     this.movementPrediction.attachInputListeners(window);
-    this.attachWorldPointerControls(pixi.app.canvas);
+    this.attachWorldPointerControls(pixi.app.canvas, worldRenderer);
     const seedAssets = await this.seedAssetRuntime.preload();
     worldRenderer.setSeedAssets(seedAssets);
 
     pixi.app.ticker.add((ticker) => {
       this.syncViewportSubscriptions();
-      this.movementPrediction.tick(performance.now());
+      const now = performance.now();
+      this.movementPrediction.tick(now);
       worldRenderer.tick();
-      this.movementHud.render();
+      this.consoleDiagnostics.sampleMovement(now);
       this.frameClock.step(ticker.deltaMS);
     });
 
@@ -119,16 +92,8 @@ export class GameRuntime {
       }
     });
 
-    this.authoritativeStore.subscribe((tables) => {
-      this.debugHud.setTableSnapshot(tables);
-    });
-
-    this.eventLog.subscribe((entries) => {
-      this.debugHud.setEventLog(entries);
-    });
-
     if (!this.options.versionGate.ok) {
-      this.debugHud.setRuntimeStatus({
+      this.consoleDiagnostics.setRuntimeStatus({
         label: "protocol mismatch",
         tone: "warn"
       });
@@ -136,7 +101,7 @@ export class GameRuntime {
       return;
     }
 
-    this.debugHud.setRuntimeStatus({
+    this.consoleDiagnostics.setRuntimeStatus({
       label: "runtime ready",
       tone: "info"
     });
@@ -150,7 +115,7 @@ export class GameRuntime {
     try {
       let localIdentityHex: string | null = null;
 
-      this.debugHud.setRuntimeStatus({
+      this.consoleDiagnostics.setRuntimeStatus({
         label: "connecting",
         tone: "info"
       });
@@ -172,7 +137,7 @@ export class GameRuntime {
             this.eventLog.push("error", `connect failed: ${error.message}`);
           },
           onDisconnect: (error) => {
-            this.debugHud.setRuntimeStatus({
+            this.consoleDiagnostics.setRuntimeStatus({
               label: "disconnected",
               tone: error ? "error" : "warn"
             });
@@ -195,7 +160,7 @@ export class GameRuntime {
         this.eventLog.push("warn", message);
       }
 
-      this.debugHud.setRuntimeStatus({
+      this.consoleDiagnostics.setRuntimeStatus({
         label: "connected",
         tone: "info"
       });
@@ -205,7 +170,7 @@ export class GameRuntime {
           ? error.message
           : "Unknown connection error";
 
-      this.debugHud.setRuntimeStatus({
+      this.consoleDiagnostics.setRuntimeStatus({
         label: "bootstrap only",
         tone: "warn"
       });
@@ -233,22 +198,10 @@ export class GameRuntime {
     return this.reducerGateway;
   }
 
-  private attachWorldPointerControls(canvas: HTMLCanvasElement): void {
-    const resolveHexFromPointer = (event: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const localX = event.clientX - rect.left;
-      const localY = event.clientY - rect.top;
-
-      if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) {
-        return null;
-      }
-
-      return {
-        hexX: Math.round(localX / HEX_RENDER_SCALE),
-        hexZ: Math.round(localY / HEX_RENDER_SCALE)
-      };
-    };
-
+  private attachWorldPointerControls(
+    canvas: HTMLCanvasElement,
+    worldRenderer: WorldRenderer
+  ): void {
     const syncCursor = () => {
       const preview = this.interactionStore.getBuildingPreview();
       canvas.style.cursor = preview.enabled && preview.targeting ? "crosshair" : "default";
@@ -260,7 +213,11 @@ export class GameRuntime {
         return;
       }
 
-      const next = resolveHexFromPointer(event);
+      const next = worldRenderer.screenToWorld(
+        event.clientX,
+        event.clientY,
+        canvas.getBoundingClientRect()
+      );
       if (!next || (next.hexX === preview.hexX && next.hexZ === preview.hexZ)) {
         return;
       }
@@ -279,22 +236,27 @@ export class GameRuntime {
       }
 
       const preview = this.interactionStore.getBuildingPreview();
-      if (!preview.enabled) {
-        return;
-      }
-
-      const next = resolveHexFromPointer(event);
+      const next = worldRenderer.screenToWorld(
+        event.clientX,
+        event.clientY,
+        canvas.getBoundingClientRect()
+      );
       if (!next) {
         return;
       }
 
-      this.interactionStore.updateBuildingPreview({
-        hexX: next.hexX,
-        hexZ: next.hexZ,
-        targeting: false,
-        isValid: null,
-        reasonCode: "pointer_picked"
-      });
+      if (preview.enabled) {
+        this.interactionStore.updateBuildingPreview({
+          hexX: next.hexX,
+          hexZ: next.hexZ,
+          targeting: false,
+          isValid: null,
+          reasonCode: "pointer_picked"
+        });
+        return;
+      }
+
+      this.movementPrediction.requestClickMove(next.hexX, next.hexZ);
     });
 
     this.interactionStore.subscribe(() => {

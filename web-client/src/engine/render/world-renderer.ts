@@ -514,6 +514,34 @@ export class WorldRenderer {
     }
   }
 
+  screenToWorld(
+    clientX: number,
+    clientY: number,
+    canvasRect: DOMRect
+  ): { worldX: number; worldZ: number; hexX: number; hexZ: number } | null {
+    const localX = clientX - canvasRect.left;
+    const localY = clientY - canvasRect.top;
+
+    if (
+      localX < 0 ||
+      localY < 0 ||
+      localX > canvasRect.width ||
+      localY > canvasRect.height
+    ) {
+      return null;
+    }
+
+    const worldX = (localX - this.worldRoot.position.x) / HEX_SIZE;
+    const worldZ = (localY - this.worldRoot.position.y) / HEX_SIZE;
+
+    return {
+      worldX,
+      worldZ,
+      hexX: Math.round(worldX),
+      hexZ: Math.round(worldZ)
+    };
+  }
+
   private requestRender(): void {
     this.dirty = true;
   }
