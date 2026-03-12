@@ -24,6 +24,32 @@ interface SessionContext {
 const WALK_SPEED = 7.5;
 const SPRINT_SPEED = 12;
 
+function isMovementKey(event: KeyboardEvent): boolean {
+  switch (event.code) {
+    case "KeyW":
+    case "KeyA":
+    case "KeyS":
+    case "KeyD":
+    case "ArrowUp":
+    case "ArrowDown":
+    case "ArrowLeft":
+    case "ArrowRight":
+    case "ShiftLeft":
+    case "ShiftRight":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return target.closest('input, textarea, select, [contenteditable], [role="textbox"]') != null;
+}
+
 function normalize(x: number, z: number): { x: number; z: number } {
   const length = Math.hypot(x, z);
   if (length <= 0.0001) {
@@ -73,12 +99,37 @@ export class MovementPredictionRuntime {
   }
 
   attachInputListeners(target: Window): void {
-    target.addEventListener("keydown", (event) => {
-      this.keyState.add(event.code);
-    });
+    const clearInputState = () => {
+      this.keyState.clear();
+    };
 
-    target.addEventListener("keyup", (event) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+
+      if (isMovementKey(event)) {
+        event.preventDefault();
+      }
+
+      this.keyState.add(event.code);
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (isMovementKey(event)) {
+        event.preventDefault();
+      }
+
       this.keyState.delete(event.code);
+    };
+
+    target.document.addEventListener("keydown", handleKeyDown, true);
+    target.document.addEventListener("keyup", handleKeyUp, true);
+    target.addEventListener("blur", clearInputState);
+    target.document.addEventListener("visibilitychange", () => {
+      if (target.document.visibilityState !== "visible") {
+        clearInputState();
+      }
     });
   }
 

@@ -99,6 +99,13 @@ function toVector3(value: unknown): [number, number, number] {
   return [0, 0, 0];
 }
 
+function toRenderPoint(x: number, z: number): { x: number; y: number } {
+  return {
+    x: x * HEX_SIZE,
+    y: z * HEX_SIZE
+  };
+}
+
 function toChunkLabel(row: Record<string, unknown>, payloadBytes: number | null): string {
   const chunkX = readNumber(row, 0, "chunkX", "chunk_x");
   const chunkY = readNumber(row, 0, "chunkY", "chunk_y");
@@ -427,15 +434,12 @@ export class WorldRenderer {
       Number.isFinite(movementState.predicted.x) &&
       Number.isFinite(movementState.predicted.z)
     ) {
-      return {
-        x: movementState.predicted.x,
-        y: movementState.predicted.z
-      };
+      return toRenderPoint(movementState.predicted.x, movementState.predicted.z);
     }
 
     const transform = this.authoritativeStore.getRows("transform_state")[0];
     const [x, , z] = toVector3(transform?.position);
-    return { x, y: z };
+    return toRenderPoint(x, z);
   }
 
   private render(): void {
@@ -710,10 +714,11 @@ export class WorldRenderer {
 
     for (const row of transformRows) {
       const [x, , z] = toVector3(row.position);
+      const renderPoint = toRenderPoint(x, z);
       const actor = createSeedSprite(
         this.seedAssets.actorTextures.player,
-        x,
-        z,
+        renderPoint.x,
+        renderPoint.y,
         26,
         34
       );
@@ -722,7 +727,7 @@ export class WorldRenderer {
       } else {
         this.overlayRoot.addChild(
           new Graphics()
-            .circle(x, z, 7)
+            .circle(renderPoint.x, renderPoint.y, 7)
             .fill({ color: 0x8bd8ff, alpha: 0.95 })
             .stroke({ width: 2, color: 0xeaf9ff, alpha: 0.45 })
         );
@@ -772,16 +777,20 @@ export class WorldRenderer {
     }
 
     const movementState = this.movementRuntime.getDebugState();
+    const predictedPoint = toRenderPoint(
+      movementState.predicted.x,
+      movementState.predicted.z
+    );
     const predictedMarker = new Graphics()
-      .circle(movementState.predicted.x, movementState.predicted.z, 5)
+      .circle(predictedPoint.x, predictedPoint.y, 5)
       .fill({ color: 0xffe677, alpha: 0.95 })
       .stroke({ width: 2, color: 0xffa200, alpha: 0.45 });
     this.overlayRoot.addChild(predictedMarker);
 
     const prompt = createSeedSprite(
       this.seedAssets.promptTexture,
-      movementState.predicted.x + 24,
-      movementState.predicted.z - 18,
+      predictedPoint.x + 24,
+      predictedPoint.y - 18,
       42,
       42
     );
