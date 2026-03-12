@@ -482,6 +482,7 @@ export class WorldRenderer {
   };
   private dirty = true;
   private lastRenderSummary: string | null = null;
+  private lastMovementRenderKey: string | null = null;
 
   constructor(
     private readonly app: Application,
@@ -506,6 +507,7 @@ export class WorldRenderer {
   }
 
   tick(): void {
+    this.syncMovementDrivenRenderState();
     this.updateCamera();
     if (this.dirty) {
       this.render();
@@ -514,6 +516,25 @@ export class WorldRenderer {
 
   private requestRender(): void {
     this.dirty = true;
+  }
+
+  private syncMovementDrivenRenderState(): void {
+    const movementState = this.movementRuntime.getDebugState();
+    const nextKey = [
+      movementState.predicted.x.toFixed(2),
+      movementState.predicted.z.toFixed(2),
+      movementState.authoritative.x.toFixed(2),
+      movementState.authoritative.z.toFixed(2),
+      movementState.pendingIntents,
+      movementState.correctionReason
+    ].join(":");
+
+    if (nextKey === this.lastMovementRenderKey) {
+      return;
+    }
+
+    this.lastMovementRenderKey = nextKey;
+    this.requestRender();
   }
 
   private updateCamera(): void {
@@ -843,8 +864,14 @@ export class WorldRenderer {
       }
     }
 
+    const movementState = this.movementRuntime.getDebugState();
+
     for (const row of transformRows) {
-      const [x, , z] = toVector3(row.position);
+      const entityId = normalizeIdentityHex(readField(row, "entityId", "entity_id"));
+      const isLocalPlayer = entityId != null && entityId === localIdentityHex;
+      const [rowX, , rowZ] = toVector3(row.position);
+      const x = isLocalPlayer ? movementState.predicted.x : rowX;
+      const z = isLocalPlayer ? movementState.predicted.z : rowZ;
       const renderPoint = toRenderPoint(x, z);
       const actor = createSeedSprite(
         this.seedAssets.actorTextures.player,
@@ -907,7 +934,6 @@ export class WorldRenderer {
       this.overlayRoot.addChild(previewOutline, previewLabel);
     }
 
-    const movementState = this.movementRuntime.getDebugState();
     const predictedPoint = toRenderPoint(
       movementState.predicted.x,
       movementState.predicted.z

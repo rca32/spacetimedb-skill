@@ -99,14 +99,14 @@ export class GameRuntime {
       this.movementPrediction,
       this.interactionStore
     );
-    this.syncViewportSubscriptions(pixi.app.screen.width, pixi.app.screen.height);
+    this.syncViewportSubscriptions();
     this.movementPrediction.attachInputListeners(window);
     this.attachWorldPointerControls(pixi.app.canvas);
     const seedAssets = await this.seedAssetRuntime.preload();
     worldRenderer.setSeedAssets(seedAssets);
 
     pixi.app.ticker.add((ticker) => {
-      this.syncViewportSubscriptions(pixi.app.screen.width, pixi.app.screen.height);
+      this.syncViewportSubscriptions();
       this.movementPrediction.tick(performance.now());
       worldRenderer.tick();
       this.movementHud.render();
@@ -181,6 +181,8 @@ export class GameRuntime {
         }
       );
 
+      this.subscriptionCoordinator.attachBootstrapSubscriptions(connection, localIdentityHex);
+
       try {
         this.reducerGateway.invoke("sign_in", { regionId: STARTER_REGION_ID });
         this.eventLog.push(
@@ -193,7 +195,6 @@ export class GameRuntime {
         this.eventLog.push("warn", message);
       }
 
-      this.subscriptionCoordinator.attachBootstrapSubscriptions(connection, localIdentityHex);
       this.debugHud.setRuntimeStatus({
         label: "connected",
         tone: "info"
@@ -212,9 +213,10 @@ export class GameRuntime {
     }
   }
 
-  private syncViewportSubscriptions(width: number, height: number): void {
-    const nextWidth = Math.round(width);
-    const nextHeight = Math.round(height);
+  private syncViewportSubscriptions(): void {
+    const rect = this.options.canvasHost.getBoundingClientRect();
+    const nextWidth = Math.max(1, Math.round(rect.width));
+    const nextHeight = Math.max(1, Math.round(rect.height));
     if (
       nextWidth === this.lastViewportWidth &&
       nextHeight === this.lastViewportHeight

@@ -23,6 +23,9 @@ interface SessionContext {
 
 const WALK_SPEED = 7.5;
 const SPRINT_SPEED = 12;
+const FIXED_SIM_STEP_MS = 1000 / 60;
+const MAX_SIM_STEPS_PER_TICK = 8;
+const MOVE_SEGMENT_MS = 200;
 
 function isMovementKey(event: KeyboardEvent): boolean {
   switch (event.code) {
@@ -74,6 +77,22 @@ function toVector3(value: unknown): [number, number, number] {
   return [0, 0, 0];
 }
 
+function parseCorrectionFrameNo(correctionId: string): number | null {
+  const lastColon = correctionId.lastIndexOf(":");
+  if (lastColon <= 0) {
+    return null;
+  }
+
+  const previousColon = correctionId.lastIndexOf(":", lastColon - 1);
+  if (previousColon < 0 || previousColon + 1 >= lastColon) {
+    return null;
+  }
+
+  const frameText = correctionId.slice(previousColon + 1, lastColon);
+  const frameNo = Number(frameText);
+  return Number.isFinite(frameNo) && frameNo > 0 ? frameNo : null;
+}
+
 export class MovementPredictionRuntime {
   private readonly keyState = new Set<string>();
   private readonly inputFrames = new InputFrameBuffer();
@@ -82,9 +101,17 @@ export class MovementPredictionRuntime {
   private readonly processedCorrections = new Set<string>();
   private predictedPosition: PredictedPosition = { x: 120, z: 120 };
   private authoritativePosition: PredictedPosition = { x: 120, z: 120 };
+  private authoritativeY = 0;
   private localIdentityHex: string | null = null;
   private lastPublishedFrameNo = 0;
+  private lastAuthoritativeFrameNo = 0;
   private lastStepAt = 0;
+  private accumulatedSimMs = 0;
+  private segmentElapsedMs = 0;
+  private segmentDirty = false;
+  private lastSegmentInputKey = "";
+  private lastSegmentDirection = { x: 0, z: 0 };
+  private lastSegmentSprint = false;
   private correctionReason = "bootstrap";
   private initializedFromServer = false;
 
@@ -136,6 +163,10 @@ export class MovementPredictionRuntime {
   tick(now: number): void {
     const dtMs = this.lastStepAt === 0 ? 16 : now - this.lastStepAt;
     this.lastStepAt = now;
+    this.accumulatedSimMs = Math.min(
+      this.accumulatedSimMs + Math.max(0, dtMs),
+      FIXED_SIM_STEP_MS * MAX_SIM_STEPS_PER_TICK
+    );
 
     this.pullAuthoritativePosition();
     this.applyMovementFeedback();
@@ -143,42 +174,59 @@ export class MovementPredictionRuntime {
 
     const input = this.readMovementInput();
     if (input.moveX === 0 && input.moveZ === 0) {
+      if (this.segmentDirty) {
+        this.publishMoveSegment(now, this.readSessionContext());
+      }
+      this.accumulatedSimMs = 0;
+      this.segmentElapsedMs = 0;
+      this.segmentDirty = false;
+      this.lastSegmentInputKey = "";
       this.reconcilePredictedPosition();
       return;
     }
 
-    const frame = this.inputFrames.push(input.moveX, input.moveZ, input.sprint);
     const speed = input.sprint ? SPRINT_SPEED : WALK_SPEED;
     const normalized = normalize(input.moveX, input.moveZ);
     const session = this.readSessionContext();
-    const intentId = `move:${frame.frameNo}`;
+    const inputKey = `${input.moveX}:${input.moveZ}:${input.sprint ? 1 : 0}`;
+    if (inputKey !== this.lastSegmentInputKey) {
+      if (this.segmentDirty) {
+        this.publishMoveSegment(now, session);
+      }
+      this.segmentElapsedMs = MOVE_SEGMENT_MS;
+      this.lastSegmentInputKey = inputKey;
+    }
+    this.lastSegmentDirection = normalized;
+    this.lastSegmentSprint = input.sprint;
+    let processedStep = false;
+    let steps = 0;
 
-    this.lastPublishedFrameNo = frame.frameNo;
-    this.intents.enqueue({
-      intentId,
-      frameNo: frame.frameNo,
-      directionX: normalized.x,
-      directionZ: normalized.z,
-      speed,
-      createdAt: frame.timestamp
-    });
+    while (
+      this.accumulatedSimMs >= FIXED_SIM_STEP_MS &&
+      steps < MAX_SIM_STEPS_PER_TICK
+    ) {
+      this.accumulatedSimMs -= FIXED_SIM_STEP_MS;
+      steps += 1;
+      processedStep = true;
 
-    this.publishClientFrame(frame.frameNo, now, session);
-    this.publishMotionIntent(intentId, frame.frameNo, normalized, speed, session);
+      this.predictedPosition = {
+        x: this.predictedPosition.x + normalized.x * speed * (FIXED_SIM_STEP_MS / 1000),
+        z: this.predictedPosition.z + normalized.z * speed * (FIXED_SIM_STEP_MS / 1000)
+      };
+      this.segmentDirty = true;
+      this.segmentElapsedMs += FIXED_SIM_STEP_MS;
 
-    this.predictedPosition = {
-      x: this.predictedPosition.x + normalized.x * speed * (dtMs / 1000),
-      z: this.predictedPosition.z + normalized.z * speed * (dtMs / 1000)
-    };
+      if (this.segmentElapsedMs >= MOVE_SEGMENT_MS) {
+        this.publishMoveSegment(now, session);
+      }
+
+    }
+
+    if (!processedStep) {
+      return;
+    }
 
     this.reconcilePredictedPosition();
-
-    if (frame.frameNo % 60 === 0) {
-      this.eventLog.push(
-        "info",
-        `movement predicted frame=${frame.frameNo} pending=${this.intents.getPending().length} correction=${this.correctionReason}`
-      );
-    }
   }
 
   getDebugState(): {
@@ -230,8 +278,9 @@ export class MovementPredictionRuntime {
       this.findSelfRow(physicsRows, "entityId", "entity_id") ?? physicsRows[0];
 
     if (physicsRow) {
-      const [x, , z] = toVector3(physicsRow.position);
+      const [x, y, z] = toVector3(physicsRow.position);
       this.authoritativePosition = { x, z };
+      this.authoritativeY = y;
 
       const lastIntentId = readString(
         physicsRow,
@@ -245,6 +294,10 @@ export class MovementPredictionRuntime {
         "lastFrameNo",
         "last_frame_no"
       );
+      this.lastAuthoritativeFrameNo = Math.max(this.lastAuthoritativeFrameNo, lastFrameNo);
+      if (lastFrameNo > 0) {
+        this.inputFrames.seedNextFrameNo(lastFrameNo + 1);
+      }
       if (lastIntentId) {
         this.intents.acknowledgeIntent(lastIntentId);
       }
@@ -267,8 +320,9 @@ export class MovementPredictionRuntime {
       return;
     }
 
-    const [x, , z] = toVector3(selfRow.position);
+    const [x, y, z] = toVector3(selfRow.position);
     this.authoritativePosition = { x, z };
+    this.authoritativeY = y;
 
     if (!this.initializedFromServer) {
       this.predictedPosition = { x, z };
@@ -298,6 +352,7 @@ export class MovementPredictionRuntime {
         x: readNumber(row, this.authoritativePosition.x, "serverX", "server_x"),
         z: readNumber(row, this.authoritativePosition.z, "serverZ", "server_z")
       };
+      this.authoritativeY = readNumber(row, this.authoritativeY, "serverY", "server_y");
 
       this.authoritativePosition = nextPosition;
       if (requestId) {
@@ -329,6 +384,16 @@ export class MovementPredictionRuntime {
         continue;
       }
 
+      const correctionFrameNo = parseCorrectionFrameNo(correctionId);
+      if (
+        correctionFrameNo != null &&
+        this.lastAuthoritativeFrameNo > 0 &&
+        correctionFrameNo <= this.lastAuthoritativeFrameNo
+      ) {
+        this.processedCorrections.add(correctionId);
+        continue;
+      }
+
       this.processedCorrections.add(correctionId);
 
       const reason = readString(row, "server_correction", "reason");
@@ -337,6 +402,7 @@ export class MovementPredictionRuntime {
         x: readNumber(row, this.authoritativePosition.x, "serverX", "server_x"),
         z: readNumber(row, this.authoritativePosition.z, "serverZ", "server_z")
       };
+      this.authoritativeY = readNumber(row, this.authoritativeY, "serverY", "server_y");
 
       this.authoritativePosition = nextPosition;
       this.predictedPosition = { ...nextPosition };
@@ -362,60 +428,50 @@ export class MovementPredictionRuntime {
     }
   }
 
-  private publishClientFrame(
-    frameNo: number,
-    now: number,
-    session: SessionContext | null
-  ): void {
-    if (!session || !this.reducerGateway?.isConnected()) {
+  private publishMoveSegment(now: number, session: SessionContext | null): void {
+    if (!this.segmentDirty || !session || !this.reducerGateway?.isConnected()) {
       return;
     }
 
-    try {
-      this.reducerGateway.invoke(
-        "sync_client_frame",
-        {
-          frameNo: BigInt(frameNo),
-          regionId: BigInt(session.regionId),
-          dimensionId: session.dimensionId,
-          clientTimeMs: BigInt(Math.floor(now))
-        }
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "sync_client_frame failed";
-      this.eventLog.push("warn", message);
-    }
-  }
-
-  private publishMotionIntent(
-    intentId: string,
-    frameNo: number,
-    direction: { x: number; z: number },
-    speed: number,
-    session: SessionContext | null
-  ): void {
-    if (!session || !this.reducerGateway?.isConnected()) {
-      return;
-    }
+    const frame = this.inputFrames.push(
+      this.lastSegmentDirection.x,
+      this.lastSegmentDirection.z,
+      this.lastSegmentSprint
+    );
+    const intentId = `move:${frame.frameNo}`;
+    this.lastPublishedFrameNo = frame.frameNo;
+    this.intents.enqueue({
+      intentId,
+      frameNo: frame.frameNo,
+      directionX: this.lastSegmentDirection.x,
+      directionZ: this.lastSegmentDirection.z,
+      speed: this.lastSegmentSprint ? SPRINT_SPEED : WALK_SPEED,
+      createdAt: frame.timestamp
+    });
 
     try {
       this.reducerGateway.invoke(
-        "submit_motion_intent",
+        "move_to",
         {
-          intentId,
+          requestId: intentId,
           regionId: BigInt(session.regionId),
-          dimensionId: session.dimensionId,
-          frameNo: BigInt(frameNo),
-          inputX: direction.x,
-          inputZ: direction.z,
-          requestedSpeed: speed,
-          jump: false
+          clientTsMs: BigInt(Math.floor(now)),
+          x: this.predictedPosition.x,
+          y: this.authoritativeY,
+          z: this.predictedPosition.z
         }
       );
+      this.segmentElapsedMs = 0;
+      this.segmentDirty = false;
+      if (frame.frameNo % 10 === 0) {
+        this.eventLog.push(
+          "info",
+          `movement segment frame=${frame.frameNo} pending=${this.intents.getPending().length} correction=${this.correctionReason}`
+        );
+      }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "submit_motion_intent failed";
+        error instanceof Error ? error.message : "move_to failed";
       this.eventLog.push("warn", message);
     }
   }

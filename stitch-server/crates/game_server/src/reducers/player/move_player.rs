@@ -6,7 +6,8 @@ use crate::tables::movement::movement_actor_state;
 use crate::tables::movement::movement_request_log;
 use crate::tables::session_state::session_state;
 use crate::tables::transform_state::transform_state;
-use crate::tables::{MovementActorState, MovementRequestLog, SessionState, TransformState};
+use crate::tables::v2::physics_state;
+use crate::tables::{MovementActorState, MovementRequestLog, PhysicsStateV2, SessionState, TransformState};
 use crate::validation::anti_cheat;
 
 #[spacetimedb::reducer]
@@ -187,6 +188,59 @@ pub fn move_to(
         ctx.db.transform_state().insert(next_transform);
     }
 
+    let previous_physics = ctx.db.physics_state().entity_id().find(ctx.sender());
+    let previous_position = previous_physics
+        .as_ref()
+        .map(|row| vec3_or_zero(&row.position))
+        .unwrap_or_else(|| vec3_or_zero(&current_position));
+    let previous_client_ts_ms = actor_state
+        .as_ref()
+        .map(|row| row.last_client_ts_ms)
+        .unwrap_or(client_ts_ms.saturating_sub(200));
+    let dt_seconds = ((client_ts_ms.saturating_sub(previous_client_ts_ms)) as f32 / 1000.0).max(0.001);
+    let velocity = [
+        (x - previous_position[0]) / dt_seconds,
+        (y - previous_position[1]) / dt_seconds,
+        (z - previous_position[2]) / dt_seconds,
+    ];
+    let next_frame_no = parse_request_sequence(&request_id)
+        .map(|seq| {
+            previous_physics
+                .as_ref()
+                .map(|row| seq.max(row.last_frame_no.saturating_add(1)))
+                .unwrap_or(seq)
+        })
+        .unwrap_or_else(|| {
+            previous_physics
+                .as_ref()
+                .map(|row| row.last_frame_no.saturating_add(1))
+                .unwrap_or(1)
+        });
+
+    let next_physics = PhysicsStateV2 {
+        entity_id: ctx.sender(),
+        region_id,
+        dimension_id: session.dimension_id,
+        position: next_position.clone(),
+        velocity: velocity.to_vec(),
+        grounded: true,
+        last_intent_id: request_id.clone(),
+        last_frame_no: next_frame_no,
+        updated_at: ctx.timestamp,
+    };
+
+    if ctx
+        .db
+        .physics_state()
+        .entity_id()
+        .find(ctx.sender())
+        .is_some()
+    {
+        ctx.db.physics_state().entity_id().update(next_physics);
+    } else {
+        ctx.db.physics_state().insert(next_physics);
+    }
+
     ctx.db.movement_request_log().insert(MovementRequestLog {
         request_key: anti_cheat::request_key(ctx.sender(), &request_id),
         identity: ctx.sender(),
@@ -240,4 +294,19 @@ pub fn move_to(
     );
 
     Ok(())
+}
+
+fn vec3_or_zero(values: &[f32]) -> [f32; 3] {
+    [
+        values.first().copied().unwrap_or(0.0),
+        values.get(1).copied().unwrap_or(0.0),
+        values.get(2).copied().unwrap_or(0.0),
+    ]
+}
+
+fn parse_request_sequence(request_id: &str) -> Option<u64> {
+    request_id
+        .rsplit(':')
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
 }

@@ -126,10 +126,17 @@ function computeChunkRadii(viewportWidth: number, viewportHeight: number): {
 function buildWorldGroup(
   session: SessionContext,
   anchor: WorldAnchor | null,
-  radii: { activeChunkRadius: number; preloadChunkRadius: number }
+  radii: { activeChunkRadius: number; preloadChunkRadius: number },
+  identityHex: string | null
 ): SubscriptionGroup {
   const regionDimensionClause = (alias: string) =>
     `${alias}.region_id = ${session.regionId} AND ${alias}.dimension_id = ${session.dimensionId}`;
+  const emptyRegionDimensionClause = (alias: string) =>
+    `${alias}.region_id = ${session.regionId} AND ${alias}.region_id = ${session.regionId + 1} AND ${alias}.dimension_id = ${session.dimensionId}`;
+  const selfTransformClause =
+    identityHex != null
+      ? `${regionDimensionClause("ts")} AND ts.entity_id = 0x${identityHex}`
+      : regionDimensionClause("ts");
 
   if (anchor == null) {
     return {
@@ -150,13 +157,13 @@ function buildWorldGroup(
         "SELECT * FROM biome_gen_def",
         "SELECT * FROM resource_gen_def",
         "SELECT * FROM building_def",
-        `SELECT * FROM terrain_chunk_stream tc WHERE ${regionDimensionClause("tc")}`,
-        `SELECT * FROM terrain_chunk_payload tcp WHERE ${regionDimensionClause("tcp")}`,
-        `SELECT * FROM transform_state ts WHERE ${regionDimensionClause("ts")}`,
-        `SELECT * FROM resource_node rn WHERE ${regionDimensionClause("rn")}`,
-        `SELECT * FROM building_state b WHERE ${regionDimensionClause("b")}`,
-        `SELECT * FROM claim_state c WHERE ${regionDimensionClause("c")}`,
-        `SELECT * FROM npc_state_stream ns WHERE ${regionDimensionClause("ns")}`
+        `SELECT * FROM terrain_chunk_stream tc WHERE ${emptyRegionDimensionClause("tc")}`,
+        `SELECT * FROM terrain_chunk_payload tcp WHERE ${emptyRegionDimensionClause("tcp")}`,
+        `SELECT * FROM transform_state ts WHERE ${selfTransformClause}`,
+        `SELECT * FROM resource_node rn WHERE ${emptyRegionDimensionClause("rn")}`,
+        `SELECT * FROM building_state b WHERE ${emptyRegionDimensionClause("b")}`,
+        `SELECT * FROM claim_state c WHERE ${emptyRegionDimensionClause("c")}`,
+        `SELECT * FROM npc_state_stream ns WHERE ${emptyRegionDimensionClause("ns")}`
       ]
     };
   }
@@ -287,7 +294,7 @@ export class SubscriptionCoordinator {
 
     const anchor = currentAnchor ?? this.lastKnownAnchor;
     const radii = computeChunkRadii(this.viewportWidth, this.viewportHeight);
-    const group = buildWorldGroup(session, anchor, radii);
+    const group = buildWorldGroup(session, anchor, radii, this.identityHex);
     const queryKey = group.queries.join("\n");
 
     if (this.lastWorldQueryKey === queryKey) {

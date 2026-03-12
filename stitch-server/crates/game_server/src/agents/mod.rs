@@ -59,6 +59,7 @@ const NPC_ANCHOR_KIND_RUIN: u8 = 1;
 const AUTO_ANCHOR_MAX: usize = 32;
 const AUTO_ANCHOR_RADIUS_CHUNKS: i32 = 4;
 const NPC_AI_FEATURE_FLAG_KEY: &str = "npc_ai_enabled";
+const DEFAULT_NPC_AI_ENABLED: bool = false;
 const NPC_ORDER_REFRESH_INTERVAL_SECS: u64 = 45;
 const NPC_ORDER_RANDOM_TRAVELING: usize = 2;
 const NPC_ORDER_RANDOM_STATIONARY: usize = 1;
@@ -109,9 +110,13 @@ fn ensure_default_npc_ai_feature_flag(ctx: &ReducerContext) {
         .flag_key()
         .find(NPC_AI_FEATURE_FLAG_KEY.to_string())
     {
-        projection_views::sync_npc_ai_status_view(ctx, row.enabled);
+        if row.enabled != DEFAULT_NPC_AI_ENABLED {
+            upsert_feature_flag(ctx, NPC_AI_FEATURE_FLAG_KEY, DEFAULT_NPC_AI_ENABLED);
+        } else {
+            projection_views::sync_npc_ai_status_view(ctx, row.enabled);
+        }
     } else {
-        upsert_feature_flag(ctx, NPC_AI_FEATURE_FLAG_KEY, true);
+        upsert_feature_flag(ctx, NPC_AI_FEATURE_FLAG_KEY, DEFAULT_NPC_AI_ENABLED);
     }
 }
 
@@ -121,7 +126,7 @@ fn is_npc_ai_enabled(ctx: &ReducerContext) -> bool {
         .flag_key()
         .find(NPC_AI_FEATURE_FLAG_KEY.to_string())
         .map(|row| row.enabled)
-        .unwrap_or(true)
+        .unwrap_or(DEFAULT_NPC_AI_ENABLED)
 }
 
 pub(crate) fn ensure_default_agent_timers(ctx: &ReducerContext) {
@@ -201,9 +206,10 @@ pub(crate) fn ensure_default_agent_timers(ctx: &ReducerContext) {
 
     let npc_ai_schedule = ScheduleAt::Interval(Duration::from_secs(NPC_AI_INTERVAL_SECS).into());
     if let Some(mut timer) = ctx.db.npc_ai_loop_timer().scheduled_id().find(1) {
-        timer.scheduled_at = npc_ai_schedule;
-        timer.last_run_at = ctx.timestamp;
-        ctx.db.npc_ai_loop_timer().scheduled_id().update(timer);
+        if timer.scheduled_at != npc_ai_schedule {
+            timer.scheduled_at = npc_ai_schedule;
+            ctx.db.npc_ai_loop_timer().scheduled_id().update(timer);
+        }
     } else {
         ctx.db.npc_ai_loop_timer().insert(NpcAiLoopTimer {
             scheduled_id: 1,
@@ -213,10 +219,11 @@ pub(crate) fn ensure_default_agent_timers(ctx: &ReducerContext) {
     }
 
     if let Some(mut timer) = ctx.db.worldgen_lazy_loop_timer().scheduled_id().find(1) {
-        timer.scheduled_at =
-            ScheduleAt::Interval(Duration::from_secs(WORLDGEN_LAZY_INTERVAL_SECS).into());
-        timer.last_run_at = ctx.timestamp;
-        ctx.db.worldgen_lazy_loop_timer().scheduled_id().update(timer);
+        let next_schedule = ScheduleAt::Interval(Duration::from_secs(WORLDGEN_LAZY_INTERVAL_SECS).into());
+        if timer.scheduled_at != next_schedule {
+            timer.scheduled_at = next_schedule;
+            ctx.db.worldgen_lazy_loop_timer().scheduled_id().update(timer);
+        }
     } else {
         ctx.db
             .worldgen_lazy_loop_timer()
@@ -1275,7 +1282,7 @@ fn synthetic_anchor_id(region_id: u64, chunk_x: i32, chunk_y: i32) -> u64 {
 }
 
 #[spacetimedb::reducer]
-pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
+pub fn npc_ai_agent_loop(ctx: &ReducerContext, _arg: NpcAiLoopTimer) {
     let sender_has_session = ctx.db.session_state().identity().find(ctx.sender()).is_some();
     if sender_has_session
         && ctx.sender() != Identity::ZERO
@@ -1287,15 +1294,6 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
 
     ensure_default_npc_ai_feature_flag(ctx);
     if !is_npc_ai_enabled(ctx) {
-        if let Some(mut timer) = ctx
-            .db
-            .npc_ai_loop_timer()
-            .scheduled_id()
-            .find(arg.scheduled_id)
-        {
-            timer.last_run_at = ctx.timestamp;
-            ctx.db.npc_ai_loop_timer().scheduled_id().update(timer);
-        }
         projection_views::reconcile_npc_state_stream(ctx);
         return;
     }
@@ -1474,16 +1472,6 @@ pub fn npc_ai_agent_loop(ctx: &ReducerContext, arg: NpcAiLoopTimer) {
     }
 
     projection_views::reconcile_npc_state_stream(ctx);
-
-    if let Some(mut timer) = ctx
-        .db
-        .npc_ai_loop_timer()
-        .scheduled_id()
-        .find(arg.scheduled_id)
-    {
-        timer.last_run_at = ctx.timestamp;
-        ctx.db.npc_ai_loop_timer().scheduled_id().update(timer);
-    }
 }
 
 fn npc_next_delay(ctx: &ReducerContext, npc_id: u64, npc_type: u8, schedule_kind: u8) -> u64 {
@@ -1647,18 +1635,7 @@ pub fn player_regen_agent_loop(ctx: &ReducerContext, arg: PlayerRegenLoopTimer) 
         }
     }
 
-    if let Some(mut timer) = ctx
-        .db
-        .player_regen_loop_timer()
-        .scheduled_id()
-        .find(arg.scheduled_id)
-    {
-        timer.last_run_at = ctx.timestamp;
-        ctx.db
-            .player_regen_loop_timer()
-            .scheduled_id()
-            .update(timer);
-    }
+    let _ = arg;
 }
 
 #[spacetimedb::reducer]
@@ -1694,18 +1671,7 @@ pub fn resource_regen_agent_loop(ctx: &ReducerContext, arg: ResourceRegenLoopTim
         ctx.db.resource_node().entity_id().update(node);
     }
 
-    if let Some(mut timer) = ctx
-        .db
-        .resource_regen_loop_timer()
-        .scheduled_id()
-        .find(arg.scheduled_id)
-    {
-        timer.last_run_at = ctx.timestamp;
-        ctx.db
-            .resource_regen_loop_timer()
-            .scheduled_id()
-            .update(timer);
-    }
+    let _ = arg;
 }
 
 #[spacetimedb::reducer]
@@ -1714,15 +1680,7 @@ pub fn worldgen_lazy_agent_loop(ctx: &ReducerContext, arg: WorldgenLazyLoopTimer
         log::warn!("worldgen_lazy_agent_loop failed: {}", error);
     }
 
-    if let Some(mut timer) = ctx
-        .db
-        .worldgen_lazy_loop_timer()
-        .scheduled_id()
-        .find(arg.scheduled_id)
-    {
-        timer.last_run_at = ctx.timestamp;
-        ctx.db.worldgen_lazy_loop_timer().scheduled_id().update(timer);
-    }
+    let _ = arg;
 }
 
 #[spacetimedb::reducer]
@@ -1750,18 +1708,7 @@ pub fn session_cleanup_agent_loop(ctx: &ReducerContext, arg: SessionCleanupLoopT
         projection_views::sync_player_session_view(ctx, identity);
     }
 
-    if let Some(mut timer) = ctx
-        .db
-        .session_cleanup_loop_timer()
-        .scheduled_id()
-        .find(arg.scheduled_id)
-    {
-        timer.last_run_at = ctx.timestamp;
-        ctx.db
-            .session_cleanup_loop_timer()
-            .scheduled_id()
-            .update(timer);
-    }
+    let _ = arg;
 }
 
 #[spacetimedb::reducer]
@@ -1867,18 +1814,7 @@ pub fn environment_effect_agent_loop(ctx: &ReducerContext, arg: EnvironmentEffec
         expire_status_effects(ctx, entity_id, status_expire_grace_seconds);
     }
 
-    if let Some(mut timer) = ctx
-        .db
-        .environment_effect_loop_timer()
-        .scheduled_id()
-        .find(arg.scheduled_id)
-    {
-        timer.last_run_at = ctx.timestamp;
-        ctx.db
-            .environment_effect_loop_timer()
-            .scheduled_id()
-            .update(timer);
-    }
+    let _ = arg;
 }
 
 fn upsert_environment_state(ctx: &ReducerContext, entity_id: u64, biome_id: u16) {

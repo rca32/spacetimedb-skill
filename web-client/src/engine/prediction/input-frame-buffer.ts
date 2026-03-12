@@ -10,6 +10,17 @@ export class InputFrameBuffer {
   private nextFrameNo = 1;
   private readonly frames: InputFrame[] = [];
 
+  seedNextFrameNo(nextFrameNo: number): void {
+    if (!Number.isFinite(nextFrameNo)) {
+      return;
+    }
+
+    const rounded = Math.max(1, Math.floor(nextFrameNo));
+    if (rounded > this.nextFrameNo) {
+      this.nextFrameNo = rounded;
+    }
+  }
+
   push(moveX: number, moveZ: number, sprint: boolean): InputFrame {
     const frame: InputFrame = {
       frameNo: this.nextFrameNo,
