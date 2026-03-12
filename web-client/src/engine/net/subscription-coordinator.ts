@@ -34,8 +34,13 @@ interface AoiRequestBounds {
 }
 
 const CHUNK_WORLD_SIZE = 32;
-const ACTIVE_CHUNK_RADIUS = 1;
-const PRELOAD_CHUNK_RADIUS = 2;
+const HEX_PIXEL_SIZE = 12;
+const CHUNK_PIXEL_SIZE = CHUNK_WORLD_SIZE * HEX_PIXEL_SIZE;
+const DEFAULT_VIEWPORT_WIDTH = 1280;
+const DEFAULT_VIEWPORT_HEIGHT = 720;
+const MIN_ACTIVE_CHUNK_RADIUS = 1;
+const MAX_ACTIVE_CHUNK_RADIUS = 12;
+const PRELOAD_CHUNK_MARGIN = 1;
 
 const SESSION_GROUP_NAME = "session";
 const PERSONAL_GROUP_NAME = "personal";
@@ -101,9 +106,27 @@ function toRecord(row: unknown): Record<string, unknown> {
   return row as Record<string, unknown>;
 }
 
+function computeChunkRadii(viewportWidth: number, viewportHeight: number): {
+  activeChunkRadius: number;
+  preloadChunkRadius: number;
+} {
+  const maxViewportDimension = Math.max(viewportWidth, viewportHeight, CHUNK_PIXEL_SIZE);
+  const visibleRadius = Math.ceil(maxViewportDimension / (CHUNK_PIXEL_SIZE * 2));
+  const activeChunkRadius = Math.max(
+    MIN_ACTIVE_CHUNK_RADIUS,
+    Math.min(MAX_ACTIVE_CHUNK_RADIUS, visibleRadius)
+  );
+
+  return {
+    activeChunkRadius,
+    preloadChunkRadius: activeChunkRadius + PRELOAD_CHUNK_MARGIN
+  };
+}
+
 function buildWorldGroup(
   session: SessionContext,
-  anchor: WorldAnchor | null
+  anchor: WorldAnchor | null,
+  radii: { activeChunkRadius: number; preloadChunkRadius: number }
 ): SubscriptionGroup {
   const regionDimensionClause = (alias: string) =>
     `${alias}.region_id = ${session.regionId} AND ${alias}.dimension_id = ${session.dimensionId}`;
@@ -138,18 +161,21 @@ function buildWorldGroup(
     };
   }
 
-  const chunkMinX = anchor.chunkX - PRELOAD_CHUNK_RADIUS;
-  const chunkMaxX = anchor.chunkX + PRELOAD_CHUNK_RADIUS;
-  const chunkMinY = anchor.chunkY - PRELOAD_CHUNK_RADIUS;
-  const chunkMaxY = anchor.chunkY + PRELOAD_CHUNK_RADIUS;
+  const chunkMinX = anchor.chunkX - radii.preloadChunkRadius;
+  const chunkMaxX = anchor.chunkX + radii.preloadChunkRadius;
+  const chunkMinY = anchor.chunkY - radii.preloadChunkRadius;
+  const chunkMaxY = anchor.chunkY + radii.preloadChunkRadius;
 
-  const hexMinX = (anchor.chunkX - ACTIVE_CHUNK_RADIUS) * CHUNK_WORLD_SIZE;
-  const hexMaxX = (anchor.chunkX + ACTIVE_CHUNK_RADIUS + 1) * CHUNK_WORLD_SIZE - 1;
-  const hexMinZ = (anchor.chunkY - ACTIVE_CHUNK_RADIUS) * CHUNK_WORLD_SIZE;
-  const hexMaxZ = (anchor.chunkY + ACTIVE_CHUNK_RADIUS + 1) * CHUNK_WORLD_SIZE - 1;
+  const hexMinX = (anchor.chunkX - radii.activeChunkRadius) * CHUNK_WORLD_SIZE;
+  const hexMaxX =
+    (anchor.chunkX + radii.activeChunkRadius + 1) * CHUNK_WORLD_SIZE - 1;
+  const hexMinZ = (anchor.chunkY - radii.activeChunkRadius) * CHUNK_WORLD_SIZE;
+  const hexMaxZ =
+    (anchor.chunkY + radii.activeChunkRadius + 1) * CHUNK_WORLD_SIZE - 1;
 
   const chunkBoundsClause = (alias: string) =>
     `${alias}.chunk_x >= ${chunkMinX} AND ${alias}.chunk_x <= ${chunkMaxX} AND ${alias}.chunk_y >= ${chunkMinY} AND ${alias}.chunk_y <= ${chunkMaxY}`;
+
   const hexBoundsClause = (alias: string) =>
     `${alias}.hex_x >= ${hexMinX} AND ${alias}.hex_x <= ${hexMaxX} AND ${alias}.hex_z >= ${hexMinZ} AND ${alias}.hex_z <= ${hexMaxZ}`;
 
@@ -188,15 +214,16 @@ function canReplaceQueryWithBounds(anchor: WorldAnchor | null): boolean {
 
 function buildAoiRequestBounds(
   session: SessionContext,
-  anchor: WorldAnchor
+  anchor: WorldAnchor,
+  radii: { preloadChunkRadius: number }
 ): AoiRequestBounds {
   return {
     regionId: session.regionId,
     dimensionId: session.dimensionId,
-    minChunkX: anchor.chunkX - PRELOAD_CHUNK_RADIUS,
-    maxChunkX: anchor.chunkX + PRELOAD_CHUNK_RADIUS,
-    minChunkY: anchor.chunkY - PRELOAD_CHUNK_RADIUS,
-    maxChunkY: anchor.chunkY + PRELOAD_CHUNK_RADIUS
+    minChunkX: anchor.chunkX - radii.preloadChunkRadius,
+    maxChunkX: anchor.chunkX + radii.preloadChunkRadius,
+    minChunkY: anchor.chunkY - radii.preloadChunkRadius,
+    maxChunkY: anchor.chunkY + radii.preloadChunkRadius
   };
 }
 
@@ -208,6 +235,8 @@ export class SubscriptionCoordinator {
   private lastKnownAnchor: WorldAnchor | null = null;
   private lastWorldQueryKey: string | null = null;
   private lastAoiRequestKey: string | null = null;
+  private viewportWidth = DEFAULT_VIEWPORT_WIDTH;
+  private viewportHeight = DEFAULT_VIEWPORT_HEIGHT;
 
   constructor(
     private readonly authoritativeStore: AuthoritativeStore,
@@ -229,6 +258,18 @@ export class SubscriptionCoordinator {
     this.maybeRefreshWorldSubscription();
   }
 
+  setViewportSize(width: number, height: number): void {
+    const nextWidth = Math.max(1, Math.round(width));
+    const nextHeight = Math.max(1, Math.round(height));
+    if (nextWidth === this.viewportWidth && nextHeight === this.viewportHeight) {
+      return;
+    }
+
+    this.viewportWidth = nextWidth;
+    this.viewportHeight = nextHeight;
+    this.maybeRefreshWorldSubscription();
+  }
+
   private maybeRefreshWorldSubscription(): void {
     if (!this.connection) {
       return;
@@ -245,7 +286,8 @@ export class SubscriptionCoordinator {
     }
 
     const anchor = currentAnchor ?? this.lastKnownAnchor;
-    const group = buildWorldGroup(session, anchor);
+    const radii = computeChunkRadii(this.viewportWidth, this.viewportHeight);
+    const group = buildWorldGroup(session, anchor, radii);
     const queryKey = group.queries.join("\n");
 
     if (this.lastWorldQueryKey === queryKey) {
@@ -254,10 +296,10 @@ export class SubscriptionCoordinator {
 
     this.lastWorldQueryKey = queryKey;
     this.subscribeGroup(group);
-    this.maybeRequestAoiChunks(session, anchor);
+    this.maybeRequestAoiChunks(session, anchor, radii);
 
     const scope = canReplaceQueryWithBounds(anchor)
-      ? `chunk=${anchor!.chunkX},${anchor!.chunkY} active=${ACTIVE_CHUNK_RADIUS} preload=${PRELOAD_CHUNK_RADIUS}`
+      ? `chunk=${anchor!.chunkX},${anchor!.chunkY} active=${radii.activeChunkRadius} preload=${radii.preloadChunkRadius} viewport=${this.viewportWidth}x${this.viewportHeight}`
       : "waiting-for-anchor";
     this.eventLog.push(
       "info",
@@ -267,13 +309,14 @@ export class SubscriptionCoordinator {
 
   private maybeRequestAoiChunks(
     session: SessionContext,
-    anchor: WorldAnchor | null
+    anchor: WorldAnchor | null,
+    radii: { preloadChunkRadius: number }
   ): void {
     if (!anchor || !this.reducerGateway?.isConnected()) {
       return;
     }
 
-    const bounds = buildAoiRequestBounds(session, anchor);
+    const bounds = buildAoiRequestBounds(session, anchor, radii);
     const requestKey = JSON.stringify(bounds);
     if (this.lastAoiRequestKey === requestKey) {
       return;

@@ -18,11 +18,10 @@ import {
 import type { InteractionStore } from "../state/interaction-store";
 import type { AuthoritativeStore } from "../state/authoritative-store";
 import type { EventLogStore } from "../state/event-log-store";
-import { decodeTerrainPayload } from "./terrain-payload-decoder";
+import { decodeTerrainPayload, type DecodedTerrainCell } from "./terrain-payload-decoder";
 
-const CHUNK_SIZE = 96;
+const DEFAULT_CHUNK_WORLD_SIZE = 32;
 const HEX_SIZE = 12;
-const PAYLOAD_GRID_COLUMNS = 8;
 const PREVIEW_REASON_NO_BUILD_PERMISSION = "no_build_permission_in_claim";
 const SHOW_CHUNK_DEBUG_OVERLAY = false;
 const SHOW_ENTITY_LABELS = false;
@@ -114,24 +113,84 @@ function toChunkLabel(row: Record<string, unknown>, payloadBytes: number | null)
   return `${chunkX},${chunkY} b${biomeId}${payload}`;
 }
 
-function payloadCellColor(height: number, water: boolean): number {
-  if (water) {
-    return 0x4ca4d9;
+function inferChunkWorldSize(cellCount: number): number {
+  const inferred = Math.round(Math.sqrt(cellCount));
+  if (inferred > 0 && inferred * inferred === cellCount) {
+    return inferred;
   }
 
-  if (height <= -2) {
-    return 0x35546a;
+  return DEFAULT_CHUNK_WORLD_SIZE;
+}
+
+function toChunkPixelMetrics(
+  chunkX: number,
+  chunkY: number,
+  cellCount: number
+): { x: number; y: number; worldSize: number; pixelSize: number; cellPixelSize: number } {
+  const worldSize = inferChunkWorldSize(cellCount);
+  const pixelSize = worldSize * HEX_SIZE;
+
+  return {
+    x: chunkX * pixelSize,
+    y: chunkY * pixelSize,
+    worldSize,
+    pixelSize,
+    cellPixelSize: pixelSize / worldSize
+  };
+}
+
+function tintColor(color: number, amount: number): number {
+  const normalized = Math.max(-1, Math.min(1, amount));
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+
+  const adjust = (channel: number) =>
+    normalized >= 0
+      ? Math.round(channel + (255 - channel) * normalized)
+      : Math.round(channel * (1 + normalized));
+
+  return (adjust(r) << 16) | (adjust(g) << 8) | adjust(b);
+}
+
+function payloadCellColor(cell: DecodedTerrainCell): number {
+  let base = 0x78ad69;
+
+  switch (cell.waterBodyType) {
+    case 1:
+      base = 0x4f96d8;
+      break;
+    case 2:
+      base = 0x63b4de;
+      break;
+    case 3:
+      base = 0x7ad8ef;
+      break;
+    default:
+      switch (cell.biomeId) {
+        case 1:
+          base = 0x659c5e;
+          break;
+        case 2:
+          base = 0xcbb67a;
+          break;
+        case 3:
+          base = 0xd9e4e8;
+          break;
+        case 4:
+          base = 0x72bfdc;
+          break;
+        case 5:
+          base = 0x4a8dce;
+          break;
+        default:
+          base = 0x7fb06c;
+          break;
+      }
   }
 
-  if (height <= 2) {
-    return 0x6aa56f;
-  }
-
-  if (height <= 6) {
-    return 0x8fba64;
-  }
-
-  return 0xc5bf8f;
+  const relief = Math.max(-0.28, Math.min(0.28, cell.elevation / 32));
+  return tintColor(base, relief);
 }
 
 function findGroupByName<T extends string>(
@@ -217,6 +276,46 @@ function pickTerrainTexture(
   const textureSeed = hashNumbers(chunkX, chunkY, biomeId, seed);
   const terrainGroup =
     metadata.terrainGroups.get(biomeId) ?? pickTerrainGroupFallback(row);
+
+  return pickFromPool(seedAssets.terrainTextures[terrainGroup], textureSeed);
+}
+
+function pickTerrainGroupForCell(
+  row: Record<string, unknown>,
+  cell: DecodedTerrainCell,
+  metadata: WorldVisualMetadata
+): TerrainTextureGroup {
+  if (cell.waterBodyType === 1) {
+    return "ocean";
+  }
+
+  if (cell.waterBodyType === 2 || cell.waterBodyType === 3 || cell.isWater) {
+    return "lake";
+  }
+
+  return metadata.terrainGroups.get(cell.biomeId) ?? pickTerrainGroupFallback(row);
+}
+
+function pickTerrainCellTexture(
+  seedAssets: SeedAssetHandles,
+  row: Record<string, unknown>,
+  cell: DecodedTerrainCell,
+  metadata: WorldVisualMetadata,
+  chunkX: number,
+  chunkY: number,
+  localX: number,
+  localY: number
+): Texture | undefined {
+  const terrainGroup = pickTerrainGroupForCell(row, cell, metadata);
+  const textureSeed = hashNumbers(
+    chunkX,
+    chunkY,
+    localX,
+    localY,
+    cell.biomeId,
+    cell.waterBodyType,
+    cell.elevation
+  );
 
   return pickFromPool(seedAssets.terrainTextures[terrainGroup], textureSeed);
 }
@@ -492,20 +591,27 @@ export class WorldRenderer {
     for (const row of chunkFallbackRows) {
       const chunkX = readNumber(row, 0, "chunkX", "chunk_x");
       const chunkY = readNumber(row, 0, "chunkY", "chunk_y");
-      const x = chunkX * CHUNK_SIZE;
-      const y = chunkY * CHUNK_SIZE;
       const chunkKey = String(readField(row, "chunkKey", "chunk_key") ?? "");
       const payloadBytes = payloadByChunk.get(chunkKey) ?? null;
       const decodedPayload = decodedPayloadByChunk.get(chunkKey) ?? null;
-
-      const texturedTile = createSeedSprite(
-        pickTerrainTexture(this.seedAssets, row, visualMetadata),
-        x,
-        y,
-        CHUNK_SIZE - 4,
-        CHUNK_SIZE - 4,
-        0
+      const chunkMetrics = toChunkPixelMetrics(
+        chunkX,
+        chunkY,
+        decodedPayload?.cellCount ?? 0
       );
+      const { x, y, worldSize, pixelSize, cellPixelSize } = chunkMetrics;
+
+      const texturedTile =
+        decodedPayload == null
+          ? createSeedSprite(
+              pickTerrainTexture(this.seedAssets, row, visualMetadata),
+              x,
+              y,
+              pixelSize,
+              pixelSize,
+              0
+            )
+          : null;
       if (texturedTile) {
         texturedTile.alpha = 0.92;
         this.worldRoot.addChild(texturedTile);
@@ -513,7 +619,7 @@ export class WorldRenderer {
 
       const tile = new Graphics();
       tile
-        .rect(x, y, CHUNK_SIZE - 4, CHUNK_SIZE - 4)
+        .rect(x, y, pixelSize, pixelSize)
         .stroke({ width: 2, color: 0xb2d9f7, alpha: 0.18 });
       if (!texturedTile) {
         tile.fill({ color: 0x385a80, alpha: 0.75 });
@@ -521,29 +627,54 @@ export class WorldRenderer {
 
       this.worldRoot.addChild(tile);
 
-      if (SHOW_CHUNK_DEBUG_OVERLAY && decodedPayload && decodedPayload.cells.length > 0) {
-        const miniCellSize = 8;
-        const payloadPreview = new Graphics();
-        const previewLimit = Math.min(decodedPayload.cells.length, 64);
+      if (decodedPayload && decodedPayload.cells.length > 0) {
+        const payloadOverlay = new Graphics();
+        const terrainCellLayer = new Container();
 
-        for (let cellIndex = 0; cellIndex < previewLimit; cellIndex += 1) {
+        for (let cellIndex = 0; cellIndex < decodedPayload.cells.length; cellIndex += 1) {
           const cell = decodedPayload.cells[cellIndex];
-          const col = cellIndex % PAYLOAD_GRID_COLUMNS;
-          const rowIndex = Math.floor(cellIndex / PAYLOAD_GRID_COLUMNS);
-          payloadPreview
-            .rect(
-              x + 8 + col * miniCellSize,
-              y + 28 + rowIndex * miniCellSize,
-              miniCellSize - 1,
-              miniCellSize - 1
-            )
-            .fill({
-              color: payloadCellColor(cell.height, cell.water),
-              alpha: 0.95
-            });
+          const col = cellIndex % worldSize;
+          const rowIndex = Math.floor(cellIndex / worldSize);
+          const cellX = x + col * cellPixelSize;
+          const cellY = y + rowIndex * cellPixelSize;
+          const cellTexture = pickTerrainCellTexture(
+            this.seedAssets,
+            row,
+            cell,
+            visualMetadata,
+            chunkX,
+            chunkY,
+            col,
+            rowIndex
+          );
+
+          const cellSprite = createSeedSprite(
+            cellTexture,
+            cellX,
+            cellY,
+            cellPixelSize,
+            cellPixelSize,
+            0
+          );
+
+          if (cellSprite) {
+            cellSprite.tint = payloadCellColor(cell);
+            cellSprite.alpha = 0.98;
+            terrainCellLayer.addChild(cellSprite);
+          } else {
+            payloadOverlay
+              .rect(cellX, cellY, cellPixelSize, cellPixelSize)
+              .fill({
+                color: payloadCellColor(cell),
+                alpha: 0.96
+              });
+          }
         }
 
-        this.worldRoot.addChild(payloadPreview);
+        if (terrainCellLayer.children.length > 0) {
+          this.worldRoot.addChild(terrainCellLayer);
+        }
+        this.worldRoot.addChild(payloadOverlay);
       }
 
       if (SHOW_CHUNK_DEBUG_OVERLAY) {

@@ -29,8 +29,10 @@ const DEFAULT_NOISE_OCTAVES: u8 = 5;
 const DEFAULT_NOISE_PERSISTENCE: f32 = 0.5;
 const DEFAULT_NOISE_LACUNARITY: f32 = 2.0;
 const DEFAULT_LAZY_SEED_RADIUS_CHUNKS: i16 = 1;
-const DEFAULT_LAZY_CHUNKS_PER_TICK: u16 = 4;
+const DEFAULT_LAZY_CHUNKS_PER_TICK: u16 = 8;
 const DEFAULT_LAZY_PREFETCH_RING: i16 = 1;
+const DEFAULT_STREAMING_WORLD_SIZE_CHUNKS: i32 = 65;
+const LEGACY_STATIC_WORLD_SIZE_CHUNKS: i32 = 7;
 
 const MIN_LAKE_SIZE_CELLS: usize = 6;
 const LAKE_DEPTH_MAX: i16 = 5;
@@ -133,6 +135,8 @@ pub fn ensure_default_worldgen_config(ctx: &ReducerContext) {
             .insert(default_worldgen_params(ctx));
     }
 
+    upgrade_legacy_worldgen_params(ctx);
+
     if ctx.db.biome_gen_def().iter().next().is_none() {
         seed_default_biome_defs(ctx);
     }
@@ -142,6 +146,32 @@ pub fn ensure_default_worldgen_config(ctx: &ReducerContext) {
     if ctx.db.resource_clump_def().iter().next().is_none() {
         seed_default_resource_clumps(ctx);
     }
+}
+
+fn upgrade_legacy_worldgen_params(ctx: &ReducerContext) {
+    let Some(mut params) = ctx.db.world_gen_params().id().find(WORLD_GEN_PARAMS_ID) else {
+        return;
+    };
+
+    let looks_like_legacy_default = params.size_x_chunks == LEGACY_STATIC_WORLD_SIZE_CHUNKS
+        && params.size_y_chunks == LEGACY_STATIC_WORLD_SIZE_CHUNKS
+        && !params.lazy_generation_enabled
+        && params.lazy_seed_radius_chunks == DEFAULT_LAZY_SEED_RADIUS_CHUNKS
+        && params.lazy_chunks_per_tick == 4
+        && params.lazy_prefetch_ring == DEFAULT_LAZY_PREFETCH_RING;
+
+    if !looks_like_legacy_default {
+        return;
+    }
+
+    params.size_x_chunks = DEFAULT_STREAMING_WORLD_SIZE_CHUNKS;
+    params.size_y_chunks = DEFAULT_STREAMING_WORLD_SIZE_CHUNKS;
+    params.lazy_generation_enabled = true;
+    params.lazy_seed_radius_chunks = 2;
+    params.lazy_chunks_per_tick = DEFAULT_LAZY_CHUNKS_PER_TICK;
+    params.lazy_prefetch_ring = DEFAULT_LAZY_PREFETCH_RING;
+    params.updated_at = ctx.timestamp;
+    upsert_worldgen_params(ctx, params);
 }
 
 pub fn load_worldgen_params(ctx: &ReducerContext) -> WorldGenParams {
@@ -426,8 +456,8 @@ fn default_worldgen_params(ctx: &ReducerContext) -> WorldGenParams {
         enabled: true,
         version: WORLD_GEN_VERSION_V1,
         seed: 1_337,
-        size_x_chunks: 7,
-        size_y_chunks: 7,
+        size_x_chunks: DEFAULT_STREAMING_WORLD_SIZE_CHUNKS,
+        size_y_chunks: DEFAULT_STREAMING_WORLD_SIZE_CHUNKS,
         sea_level: 12,
         noise_scale: DEFAULT_NOISE_SCALE,
         noise_octaves: DEFAULT_NOISE_OCTAVES,
@@ -435,8 +465,8 @@ fn default_worldgen_params(ctx: &ReducerContext) -> WorldGenParams {
         noise_lacunarity: DEFAULT_NOISE_LACUNARITY,
         terrain_chunk_size: DEFAULT_WORLD_CHUNK_SIZE,
         regenerate_on_start: false,
-        lazy_generation_enabled: false,
-        lazy_seed_radius_chunks: DEFAULT_LAZY_SEED_RADIUS_CHUNKS,
+        lazy_generation_enabled: true,
+        lazy_seed_radius_chunks: 2,
         lazy_chunks_per_tick: DEFAULT_LAZY_CHUNKS_PER_TICK,
         lazy_prefetch_ring: DEFAULT_LAZY_PREFETCH_RING,
         updated_at: ctx.timestamp,

@@ -23,40 +23,40 @@ export interface SeedAssetHandles {
 const SEED_ASSET_PATHS = {
   terrainTextures: {
     plains: [
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0000.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0001.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0002.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0003.png"
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_01.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_02.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_03.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_04.png"
     ],
     forest: [
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0004.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0005.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0006.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0007.png"
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_01.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_02.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_03.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_04.png"
     ],
     desert: [
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0008.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0009.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0010.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0011.png"
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_05.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_06.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_15.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_16.png"
     ],
     tundra: [
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0024.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0025.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0026.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0027.png"
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_07.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_08.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_09.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_10.png"
     ],
     lake: [
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0016.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0017.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0018.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0019.png"
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_300.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_301.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_302.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_303.png"
     ],
     ocean: [
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0020.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0021.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0022.png",
-      "/assets/seed/kenney/tiny-town/Tiles/tile_0023.png"
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_303.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_304.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_305.png",
+      "/assets/seed/kenney/top-down-shooter/package/PNG/Tiles/tile_306.png"
     ]
   },
   buildingTextures: {

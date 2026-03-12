@@ -18,6 +18,7 @@ import { MovementHud } from "../../ui/hud/movement-hud";
 import { SeedAssetRuntime } from "../assets/seed-asset-runtime";
 
 const HEX_RENDER_SCALE = 12;
+const STARTER_REGION_ID = 1n;
 
 interface GameRuntimeOptions {
   env: EnvConfig;
@@ -52,6 +53,8 @@ export class GameRuntime {
   private readonly movementHud: MovementHud;
   private readonly buildingPreviewHud: BuildingPreviewHud;
   private readonly reducerDispatchHud: ReducerDispatchHud;
+  private lastViewportWidth = 0;
+  private lastViewportHeight = 0;
 
   constructor(private readonly options: GameRuntimeOptions) {
     this.debugHud = new DebugHud(
@@ -96,12 +99,14 @@ export class GameRuntime {
       this.movementPrediction,
       this.interactionStore
     );
+    this.syncViewportSubscriptions(pixi.app.screen.width, pixi.app.screen.height);
     this.movementPrediction.attachInputListeners(window);
     this.attachWorldPointerControls(pixi.app.canvas);
     const seedAssets = await this.seedAssetRuntime.preload();
     worldRenderer.setSeedAssets(seedAssets);
 
     pixi.app.ticker.add((ticker) => {
+      this.syncViewportSubscriptions(pixi.app.screen.width, pixi.app.screen.height);
       this.movementPrediction.tick(performance.now());
       worldRenderer.tick();
       this.movementHud.render();
@@ -176,6 +181,18 @@ export class GameRuntime {
         }
       );
 
+      try {
+        this.reducerGateway.invoke("sign_in", { regionId: STARTER_REGION_ID });
+        this.eventLog.push(
+          "info",
+          `auto sign-in requested: region=${STARTER_REGION_ID.toString()}`
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "auto sign-in failed";
+        this.eventLog.push("warn", message);
+      }
+
       this.subscriptionCoordinator.attachBootstrapSubscriptions(connection, localIdentityHex);
       this.debugHud.setRuntimeStatus({
         label: "connected",
@@ -193,6 +210,21 @@ export class GameRuntime {
       });
       this.eventLog.push("warn", message);
     }
+  }
+
+  private syncViewportSubscriptions(width: number, height: number): void {
+    const nextWidth = Math.round(width);
+    const nextHeight = Math.round(height);
+    if (
+      nextWidth === this.lastViewportWidth &&
+      nextHeight === this.lastViewportHeight
+    ) {
+      return;
+    }
+
+    this.lastViewportWidth = nextWidth;
+    this.lastViewportHeight = nextHeight;
+    this.subscriptionCoordinator.setViewportSize(nextWidth, nextHeight);
   }
 
   getReducerGateway(): ReducerGateway {

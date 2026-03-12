@@ -38,5 +38,11 @@
 
 
 
-## SpacetimeDB 작업 규칙
+## SpacetimeDB(stitch-server) 작업 규칙
+- stitch-server/README.md
 - SpacetimeDB 관련 작업은 반드시 `.opencode/skills/spacetimedb/SKILL.md` 스킬을 참조한다.
+
+## Stitch MMO RPG SpacetimeDB server module 수정 후에는 
+  cd /home/rca32/workspaces/spacetimedb-skill/stitch-server/crates/game_server
+  spacetime build
+  spacetime publish --server 127.0.0.1:3000 stitch-server
